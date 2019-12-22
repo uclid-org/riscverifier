@@ -27,7 +27,7 @@ fn main() {
         .get_matches();
     if let Some(binary) = matches.value_of("binary") {
         let binary_paths = vec![String::from(binary)];
-        let _dr = dwarfreader::DwarfReader::create(binary_paths);
+        let dr = dwarfreader::DwarfReader::create(binary_paths);
+        println!("function addr: {:?}", dr.get_function_formal_argument_names("pmp_detect_region_overlap_atomic"));
     }
-
 }
