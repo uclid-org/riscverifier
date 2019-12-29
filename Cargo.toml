@@ -13,3 +13,5 @@ object = "0.15"
 memmap = "0.7"
 log = { version = "0.4", features = ["std", "serde"] }
 env_logger = "0.7.1"
+pest = "2.0"
+pest_derive = "2.0"
