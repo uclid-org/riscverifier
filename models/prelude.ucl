@@ -1,0 +1,477 @@
+  define loadByte_macro (addr: bv64): bv8 = (mem)[addr];
+  define loadHalf_macro (addr: bv64): bv16 = (loadByte_macro((addr + 1bv64)) ++ loadByte_macro(addr));
+  define loadWord_macro (addr: bv64): bv32 = (loadHalf_macro((addr + 2bv64)) ++ loadHalf_macro(addr));
+  define loadDouble_macro (addr: bv64): bv64 = (loadWord_macro((addr + 4bv64)) ++ loadWord_macro(addr));
+  procedure [inline] add_proc(rs1: bv64, rs2: bv64) returns (ret: bv64)
+    modifies pc;
+    {
+      ret = (rs1 + rs2); // line 0
+      pc = (pc + 4bv64); // line 0
+    }
+  procedure [inline] sub_proc(rs1: bv64, rs2: bv64) returns (ret: bv64)
+    modifies pc;
+    {
+      ret = (rs1 - rs2); // line 0
+      pc = (pc + 4bv64); // line 0
+    }
+  procedure [inline] sll_proc(rs1: bv64, rs2: bv64) returns (ret: bv64)
+    modifies pc;
+    {
+      ret = bv_left_shift((rs2 & 63bv64), rs1); // line 0
+      pc = (pc + 4bv64); // line 0
+    }
+  procedure [inline] slt_proc(rs1: bv64, rs2: bv64) returns (ret: bv64)
+    modifies pc;
+    {
+      if((rs1 < rs2))
+        {
+          ret = 1bv64; // line 0
+        }
+      else
+        {
+          ret = 0bv64; // line 0
+        }
+      pc = (pc + 4bv64); // line 0
+    }
+  procedure [inline] sltu_proc(rs1: bv64, rs2: bv64) returns (ret: bv64)
+    modifies pc;
+    {
+      if((rs1 <_u rs2))
+        {
+          ret = 1bv64; // line 0
+        }
+      else
+        {
+          ret = 0bv64; // line 0
+        }
+      pc = (pc + 4bv64); // line 0
+    }
+  procedure [inline] xor_proc(rs1: bv64, rs2: bv64) returns (ret: bv64)
+    modifies pc;
+    {
+      ret = (rs1 ^ rs2); // line 0
+      pc = (pc + 4bv64); // line 0
+    }
+  procedure [inline] srl_proc(rs1: bv64, rs2: bv64) returns (ret: bv64)
+    modifies pc;
+    {
+      ret = bv_l_right_shift((rs2 & 63bv64), rs1); // line 0
+      pc = (pc + 4bv64); // line 0
+    }
+  procedure [inline] sra_proc(rs1: bv64, rs2: bv64) returns (ret: bv64)
+    modifies pc;
+    {
+      ret = bv_a_right_shift((rs2 & 63bv64), rs1); // line 0
+      pc = (pc + 4bv64); // line 0
+    }
+  procedure [inline] or_proc(rs1: bv64, rs2: bv64) returns (ret: bv64)
+    modifies pc;
+    {
+      ret = (rs1 | rs2); // line 0
+      pc = (pc + 4bv64); // line 0
+    }
+  procedure [inline] and_proc(rs1: bv64, rs2: bv64) returns (ret: bv64)
+    modifies pc;
+    {
+      ret = (rs1 & rs2); // line 0
+      pc = (pc + 4bv64); // line 0
+    }
+  procedure [inline] addw_proc(rs1: bv64, rs2: bv64) returns (ret: bv64)
+    modifies pc;
+    {
+      ret = bv_sign_extend(32, ((rs1 + rs2))[31:0]); // line 0
+      pc = (pc + 4bv64); // line 0
+    }
+  procedure [inline] subw_proc(rs1: bv64, rs2: bv64) returns (ret: bv64)
+    modifies pc;
+    {
+      ret = bv_sign_extend(32, ((rs1 - rs2))[31:0]); // line 0
+      pc = (pc + 4bv64); // line 0
+    }
+  procedure [inline] sllw_proc(rs1: bv64, rs2: bv64) returns (ret: bv64)
+    modifies pc;
+    {
+      ret = bv_sign_extend(32, bv_left_shift(bv_zero_extend(27, (rs2)[4:0]), (rs1)[31:0])); // line 0
+      pc = (pc + 4bv64); // line 0
+    }
+  procedure [inline] srlw_proc(rs1: bv64, rs2: bv64) returns (ret: bv64)
+    modifies pc;
+    {
+      ret = bv_sign_extend(32, bv_l_right_shift(bv_zero_extend(27, (rs2)[4:0]), (rs1)[31:0])); // line 0
+      pc = (pc + 4bv64); // line 0
+    }
+  procedure [inline] sraw_proc(rs1: bv64, rs2: bv64) returns (ret: bv64)
+    modifies pc;
+    {
+      ret = bv_sign_extend(32, bv_a_right_shift(bv_zero_extend(27, (rs2)[4:0]), (rs1)[31:0])); // line 0
+      pc = (pc + 4bv64); // line 0
+    }
+  procedure [inline] jalr_proc(rs1: bv64, imm: bv64) returns (ret: bv64)
+    modifies pc;
+    {
+      ret = (pc + 4bv64); // line 0
+      pc = (((rs1 + imm))[63:1] ++ 0bv1); // line 0
+    }
+  procedure [inline] lb_proc(rs1: bv64, imm: bv64) returns (ret: bv64)
+    modifies pc;
+    {
+      ret = bv_sign_extend(56, loadByte_macro((rs1 + imm))); // line 0
+      pc = (pc + 4bv64); // line 0
+    }
+  procedure [inline] lh_proc(rs1: bv64, imm: bv64) returns (ret: bv64)
+    modifies pc;
+    {
+      ret = bv_sign_extend(48, loadHalf_macro((rs1 + imm))); // line 0
+      pc = (pc + 4bv64); // line 0
+    }
+  procedure [inline] lw_proc(rs1: bv64, imm: bv64) returns (ret: bv64)
+    modifies pc;
+    {
+      ret = bv_sign_extend(32, loadWord_macro((rs1 + imm))); // line 0
+      pc = (pc + 4bv64); // line 0
+    }
+  procedure [inline] lbu_proc(rs1: bv64, imm: bv64) returns (ret: bv64)
+    modifies pc;
+    {
+      ret = bv_zero_extend(56, loadByte_macro((rs1 + imm))); // line 0
+      pc = (pc + 4bv64); // line 0
+    }
+  procedure [inline] lhu_proc(rs1: bv64, imm: bv64) returns (ret: bv64)
+    modifies pc;
+    {
+      ret = bv_zero_extend(48, loadHalf_macro((rs1 + imm))); // line 0
+      pc = (pc + 4bv64); // line 0
+    }
+  procedure [inline] addi_proc(rs1: bv64, imm: bv64) returns (ret: bv64)
+    modifies pc;
+    {
+      ret = (rs1 + imm); // line 0
+      pc = (pc + 4bv64); // line 0
+    }
+  procedure [inline] slti_proc(rs1: bv64, imm: bv64) returns (ret: bv64)
+    modifies pc;
+    {
+      if((rs1 < imm))
+        {
+          ret = 1bv64; // line 0
+        }
+      else
+        {
+          ret = 0bv64; // line 0
+        }
+      pc = (pc + 4bv64); // line 0
+    }
+  procedure [inline] sltiu_proc(rs1: bv64, imm: bv64) returns (ret: bv64)
+    modifies pc;
+    {
+      if((rs1 <_u imm))
+        {
+          ret = 1bv64; // line 0
+        }
+      else
+        {
+          ret = 0bv64; // line 0
+        }
+      pc = (pc + 4bv64); // line 0
+    }
+  procedure [inline] xori_proc(rs1: bv64, imm: bv64) returns (ret: bv64)
+    modifies pc;
+    {
+      ret = (rs1 ^ imm); // line 0
+      pc = (pc + 4bv64); // line 0
+    }
+  procedure [inline] ori_proc(rs1: bv64, imm: bv64) returns (ret: bv64)
+    modifies pc;
+    {
+      ret = (rs1 | imm); // line 0
+      pc = (pc + 4bv64); // line 0
+    }
+  procedure [inline] andi_proc(rs1: bv64, imm: bv64) returns (ret: bv64)
+    modifies pc;
+    {
+      ret = (rs1 & imm); // line 0
+      pc = (pc + 4bv64); // line 0
+    }
+  procedure [inline] slli_proc(rs1: bv64, imm: bv64) returns (ret: bv64)
+    modifies pc, exception;
+    {
+      if(!((imm <_u 64bv64)))
+        {
+          exception = 2bv64; // line 0
+        }
+      else
+        {
+          ret = bv_left_shift(imm, rs1); // line 0
+        }
+      pc = (pc + 4bv64); // line 0
+    }
+  procedure [inline] srli_proc(rs1: bv64, imm: bv64) returns (ret: bv64)
+    modifies pc, exception;
+    {
+      if(!((imm <_u 64bv64)))
+        {
+          exception = 2bv64; // line 0
+        }
+      else
+        {
+          ret = bv_l_right_shift(imm, rs1); // line 0
+        }
+      pc = (pc + 4bv64); // line 0
+    }
+  procedure [inline] srai_proc(rs1: bv64, imm: bv64) returns (ret: bv64)
+    modifies pc, exception;
+    {
+      if(!((imm <_u 64bv64)))
+        {
+          exception = 2bv64; // line 0
+        }
+      else
+        {
+          ret = bv_a_right_shift(imm, rs1); // line 0
+        }
+      pc = (pc + 4bv64); // line 0
+    }
+  procedure [inline] fence_proc(rs1: bv64, imm: bv64) returns (ret: bv64)
+    modifies pc;
+    {
+      ret = 0bv64; // line 0
+      pc = (pc + 4bv64); // line 0
+    }
+  procedure [inline] sfence_vma_proc(rs1: bv64, imm: bv64) returns (ret: bv64)
+    modifies pc;
+    {
+      ret = 0bv64; // line 0
+      pc = (pc + 4bv64); // line 0
+    }
+  procedure [inline] lwu_proc(rs1: bv64, imm: bv64) returns (ret: bv64)
+    modifies pc;
+    {
+      ret = bv_zero_extend(32, loadWord_macro((rs1 + imm))); // line 0
+      pc = (pc + 4bv64); // line 0
+    }
+  procedure [inline] ld_proc(rs1: bv64, imm: bv64) returns (ret: bv64)
+    modifies pc;
+    {
+      ret = loadDouble_macro((rs1 + imm)); // line 0
+      pc = (pc + 4bv64); // line 0
+    }
+  procedure [inline] addiw_proc(rs1: bv64, imm: bv64) returns (ret: bv64)
+    modifies pc;
+    {
+      ret = bv_sign_extend(32, ((rs1 + imm))[31:0]); // line 0
+      pc = (pc + 4bv64); // line 0
+    }
+  procedure [inline] slliw_proc(rs1: bv64, imm: bv64) returns (ret: bv64)
+    modifies pc;
+    {
+      ret = bv_sign_extend(32, bv_left_shift((imm)[31:0], (rs1)[31:0])); // line 0
+      pc = (pc + 4bv64); // line 0
+    }
+  procedure [inline] srliw_proc(rs1: bv64, imm: bv64) returns (ret: bv64)
+    modifies pc;
+    {
+      ret = bv_sign_extend(32, bv_l_right_shift((imm)[31:0], (rs1)[31:0])); // line 0
+      pc = (pc + 4bv64); // line 0
+    }
+  procedure [inline] sraiw_proc(rs1: bv64, imm: bv64) returns (ret: bv64)
+    modifies pc;
+    {
+      ret = bv_sign_extend(32, bv_a_right_shift((imm)[31:0], (rs1)[31:0])); // line 0
+      pc = (pc + 4bv64); // line 0
+    }
+  procedure [inline] sb_proc(rs1: bv64, rs2: bv8, imm: bv64) returns ()
+    modifies pc, mem;
+    {
+      pc = (pc + 4bv64); // line 0
+      mem[(rs1 + imm)] = rs2; // line 0
+    }
+  procedure [inline] sh_proc(rs1: bv64, rs2: bv16, imm: bv64) returns ()
+    modifies pc, mem;
+    {
+      pc = (pc - 4bv64); // line 0
+      call () = sb_proc(rs1, (rs2)[7:0], imm); // line 0
+      call () = sb_proc(rs1, (rs2)[15:8], (imm + 1bv64)); // line 0
+    }
+  procedure [inline] sw_proc(rs1: bv64, rs2: bv32, imm: bv64) returns ()
+    modifies pc, mem;
+    {
+      pc = (pc - 4bv64); // line 0
+      call () = sh_proc(rs1, (rs2)[15:0], imm); // line 0
+      call () = sh_proc(rs1, (rs2)[31:16], (imm + 2bv64)); // line 0
+    }
+  procedure [inline] sd_proc(rs1: bv64, rs2: bv64, imm: bv64) returns ()
+    modifies pc, mem;
+    {
+      pc = (pc - 4bv64); // line 0
+      call () = sw_proc(rs1, (rs2)[31:0], imm); // line 0
+      call () = sw_proc(rs1, (rs2)[63:32], (imm + 4bv64)); // line 0
+    }
+  procedure [inline] beq_proc(rs1: bv64, rs2: bv64, imm: bv64) returns ()
+    modifies pc;
+    {
+      if((rs1 == rs2))
+        {
+          pc = imm; // line 0
+        }
+      else
+        {
+          pc = (pc + 4bv64); // line 0
+        }
+    }
+  procedure [inline] bne_proc(rs1: bv64, rs2: bv64, imm: bv64) returns ()
+    modifies pc;
+    {
+      if(!((rs1 == rs2)))
+        {
+          pc = imm; // line 0
+        }
+      else
+        {
+          pc = (pc + 4bv64); // line 0
+        }
+    }
+  procedure [inline] blt_proc(rs1: bv64, rs2: bv64, imm: bv64) returns ()
+    modifies pc;
+    {
+      if((rs1 < rs2))
+        {
+          pc = imm; // line 0
+        }
+      else
+        {
+          pc = (pc + 4bv64); // line 0
+        }
+    }
+  procedure [inline] bge_proc(rs1: bv64, rs2: bv64, imm: bv64) returns ()
+    modifies pc;
+    {
+      if(!((rs1 < rs2)))
+        {
+          pc = imm; // line 0
+        }
+      else
+        {
+          pc = (pc + 4bv64); // line 0
+        }
+    }
+  procedure [inline] bltu_proc(rs1: bv64, rs2: bv64, imm: bv64) returns ()
+    modifies pc;
+    {
+      if((rs1 <_u rs2))
+        {
+          pc = imm; // line 0
+        }
+      else
+        {
+          pc = (pc + 4bv64); // line 0
+        }
+    }
+  procedure [inline] bgeu_proc(rs1: bv64, rs2: bv64, imm: bv64) returns ()
+    modifies pc;
+    {
+      if(!((rs1 <_u rs2)))
+        {
+          pc = imm; // line 0
+        }
+      else
+        {
+          pc = (pc + 4bv64); // line 0
+        }
+    }
+  procedure [inline] lui_proc(imm: bv64) returns (ret: bv64)
+    modifies pc;
+    {
+      ret = bv_left_shift(12bv64, imm); // line 0
+      pc = (pc + 4bv64); // line 0
+    }
+  procedure [inline] auipc_proc(imm: bv64) returns (ret: bv64)
+    modifies pc;
+    {
+      ret = (pc + bv_left_shift(12bv64, imm)); // line 0
+      pc = (pc + 4bv64); // line 0
+    }
+  procedure [inline] jal_proc(imm: bv64) returns (ret: bv64)
+    modifies pc;
+    {
+      ret = (pc + 4bv64); // line 0
+      pc = imm; // line 0
+    }
+  procedure [inline] csrrw_proc(csr: bv64, rs1: bv64) returns (csr_ret: bv64, rd_ret: bv64)
+    modifies pc, exception;
+    {
+      if(((current_priv <_u (csr)[9:8]) || ((0bv64 <_u rs1) && !(((csr)[11:10] <_u 3bv2)))))
+        {
+          exception = 2bv64; // line 0
+        }
+      else
+        {
+          csr_ret, rd_ret = rs1, csr; // line 0
+        }
+      pc = (pc + 4bv64); // line 0
+    }
+  procedure [inline] csrrs_proc(csr: bv64, rs1: bv64) returns (csr_ret: bv64, rd_ret: bv64)
+    modifies pc, exception;
+    {
+      if(((current_priv <_u (csr)[9:8]) || ((0bv64 <_u rs1) && !(((csr)[11:10] <_u 3bv2)))))
+        {
+          exception = 2bv64; // line 0
+        }
+      else
+        {
+          csr_ret, rd_ret = (rs1 | csr), csr; // line 0
+        }
+      pc = (pc + 4bv64); // line 0
+    }
+  procedure [inline] csrrc_proc(csr: bv64, rs1: bv64) returns (csr_ret: bv64, rd_ret: bv64)
+    modifies pc, exception;
+    {
+      if(((current_priv <_u (csr)[9:8]) || ((0bv64 <_u rs1) && !(((csr)[11:10] <_u 3bv2)))))
+        {
+          exception = 2bv64; // line 0
+        }
+      else
+        {
+          csr_ret, rd_ret = ((rs1) & csr), csr; // line 0
+        }
+      pc = (pc + 4bv64); // line 0
+    }
+  procedure [inline] csrrwi_proc(csr: bv64, imm: bv5) returns (csr_ret: bv64, rd_ret: bv64)
+    modifies pc, exception;
+    {
+      if(((current_priv <_u (csr)[9:8]) || (true && !(((csr)[11:10] <_u 3bv2)))))
+        {
+          exception = 2bv64; // line 0
+        }
+      else
+        {
+          csr_ret, rd_ret = bv_zero_extend(59, imm), csr; // line 0
+        }
+      pc = (pc + 4bv64); // line 0
+    }
+  procedure [inline] csrrsi_proc(csr: bv64, imm: bv5) returns (csr_ret: bv64, rd_ret: bv64)
+    modifies pc, exception;
+    {
+      if(((current_priv <_u (csr)[9:8]) || (true && !(((csr)[11:10] <_u 3bv2)))))
+        {
+          exception = 2bv64; // line 0
+        }
+      else
+        {
+          csr_ret, rd_ret = (bv_zero_extend(59, imm) | csr), csr; // line 0
+        }
+      pc = (pc + 4bv64); // line 0
+    }
+  procedure [inline] csrrci_proc(csr: bv64, imm: bv5) returns (csr_ret: bv64, rd_ret: bv64)
+    modifies pc, exception;
+    {
+      if(((current_priv <_u (csr)[9:8]) || (true && !(((csr)[11:10] <_u 3bv2)))))
+        {
+          exception = 2bv64; // line 0
+        }
+      else
+        {
+          csr_ret, rd_ret = ((bv_zero_extend(59, imm)) & csr), csr; // line 0
+        }
+      pc = (pc + 4bv64); // line 0
+    }
+    

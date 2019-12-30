@@ -1,5 +1,4 @@
 use object::Object;
-use std::borrow::Borrow;
 use std::collections::BTreeMap;
 use std::convert::TryInto;
 use std::{borrow, fs};
@@ -161,9 +160,7 @@ impl DwarfReader {
             if let Some(dwarf_object) =
                 DwarfReader::entries_to_dwarf_object(&dwarf, &mut entries_cursor)?
             {
-                info!("Compilation unit: \n{:#?}", &dwarf_object);
-                // let mut entries_cursor = unit.entries();
-                // self.print_gimli_dwarf(&dwarf, &mut entries_cursor);
+                // info!("Compilation unit: \n{:#?}", &dwarf_object);
                 dwarf_objects.push(dwarf_object);
             }
         }

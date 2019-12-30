@@ -1,14 +1,17 @@
+// FIXME: Clean up this very hacky parsing grammar
 alpha = { 'a'..'z' | 'A'..'Z' }
 digit = { '0'..'9' }
 ident = { (alpha | "_") ~ (alpha | digit | "_" | ".")* }
 hex_alpha = { 'a'..'f' | 'A'..'F' }
 decimal = { (digit)+ }
 neg_decimal = { "-" ~ decimal }
+// FIMXE: Relies on the --prefix-addresses flag in objdump
+absolute_addr = { "0" ~ "0" ~ "0" ~ "0" ~ hexidecimal_without_prefix }
 hexidecimal_without_prefix = { (hex_alpha | digit)+ }
 hexidecimal = { "0" ~ "x" ~ hexidecimal_without_prefix }
 callee_offset = { "<" ~ ident ~ ("+" ~ hexidecimal)? ~ ">" }
 inst_ext = { ("." ~ ident)+ }
 instr_op = { ident ~ inst_ext? }
 offset_operand = { decimal ~ "(" ~ ident ~ ")" }
-operand = { ident | offset_operand | hexidecimal | hexidecimal_without_prefix | decimal | neg_decimal }
+operand = { ident | offset_operand | hexidecimal | absolute_addr | decimal | neg_decimal }
 assembly_line = { hexidecimal_without_prefix ~ " " ~ callee_offset ~ " " ~ instr_op ~ (" " ~ operand ~ ("," ~ operand)*)? ~ (" " | ANY)* }
