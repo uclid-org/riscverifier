@@ -94,10 +94,9 @@ impl ObjectDumpReader {
                                         }
                                     }
                                 }
-                                // debug!(
-                                //     "[get_binary_object_dump]   Addr: {:?}, Function name: {:?}, Offset: {:?}, OpCode: {:?}, Arguments: {:?}.",
-                                //     address, callee_name, callee_offset, op_code, operands
-                                // );
+                                if seen_functions.len() == 0 {
+                                    seen_functions.insert(callee_name.clone());
+                                }
                                 if seen_functions.get(&callee_name).is_none()
                                     && !&assembly_lines.is_empty()
                                 {
@@ -108,6 +107,10 @@ impl ObjectDumpReader {
                                     assembly_lines = vec![];
                                     seen_functions.insert(callee_name.clone());
                                 }
+                                // debug!(
+                                //     "[get_binary_object_dump]   Addr: {:?}, Function name: {:?}, Offset: {:?}, OpCode: {:?}, Arguments: {:?}.",
+                                //     address, callee_name, callee_offset, op_code, operands
+                                // );
                                 assembly_lines.push(AssemblyLine {
                                     address,
                                     callee_name,

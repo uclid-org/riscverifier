@@ -9,6 +9,8 @@ extern crate pest;
 #[macro_use]
 extern crate pest_derive;
 
+extern crate topological_sort;
+
 mod dwarfreader;
 use dwarfreader::DwarfReader;
 
@@ -58,7 +60,8 @@ fn main() {
                 .takes_value(true),
         )
         .get_matches();
-    let xlen = utils::dec_str_to_u64(matches.value_of("xlen").unwrap_or("64")).expect("[main] Unable to parse numberic xlen.");
+    let xlen = utils::dec_str_to_u64(matches.value_of("xlen").unwrap_or("64"))
+        .expect("[main] Unable to parse numberic xlen.");
     if let Some(binary) = matches.value_of("binary") {
         let binary_paths = vec![String::from(binary)];
         let dr = DwarfReader::create(&binary_paths);

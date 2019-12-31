@@ -12,6 +12,6 @@ hexidecimal = { "0" ~ "x" ~ hexidecimal_without_prefix }
 callee_offset = { "<" ~ ident ~ ("+" ~ hexidecimal)? ~ ">" }
 inst_ext = { ("." ~ ident)+ }
 instr_op = { ident ~ inst_ext? }
-offset_operand = { decimal ~ "(" ~ ident ~ ")" }
+offset_operand = { (decimal | neg_decimal) ~ "(" ~ ident ~ ")" }
 operand = { ident | offset_operand | hexidecimal | absolute_addr | decimal | neg_decimal }
 assembly_line = { hexidecimal_without_prefix ~ " " ~ callee_offset ~ " " ~ instr_op ~ (" " ~ operand ~ ("," ~ operand)*)? ~ (" " | ANY)* }
