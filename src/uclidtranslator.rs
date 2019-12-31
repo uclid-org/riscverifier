@@ -12,6 +12,7 @@ use std::io::prelude::*;
 pub struct UclidTranslator {
     xlen: u64,
     inst_length: u64,
+    generated_functions: HashSet<u64>,
     import_decls: Vec<String>,
     define_decls: Vec<String>,
     state_var_decls: Vec<String>,
@@ -27,6 +28,7 @@ impl UclidTranslator {
         UclidTranslator {
             xlen,
             inst_length: 4,
+            generated_functions: HashSet::new(),
             import_decls: vec![],
             define_decls: vec![],
             state_var_decls: vec![],
@@ -53,23 +55,38 @@ impl UclidTranslator {
         &mut self,
         function_name: &str,
         function_vecs: &HashMap<u64, Vec<AssemblyLine>>,
-    ) {
-        self.reset_model();
+    ) -> Result<(), NoSuchModelError> {
+        let function_entry_addr = UclidTranslator::function_addr_from_name(function_name, function_vecs);
+        self.generate_function_model_by_entry_addr(&function_entry_addr, function_vecs);
+        Ok(())
+    }
+
+    fn generate_function_model_by_entry_addr(
+        &mut self,
+        function_addr: &u64,
+        function_vecs: &HashMap<u64, Vec<AssemblyLine>>,
+    ) -> Result<(), NoSuchModelError> {
+        if self.generated_functions.get(&function_addr).is_some() {
+            debug!(
+                "[generate_function_model] Cyclic function call for function {}.",
+                UclidTranslator::function_name_from_addr(function_addr, function_vecs)
+            );
+            let recursive_function = UclidTranslator::function_name_from_addr(function_addr, function_vecs).to_string();
+            return Err(NoSuchModelError { recursive_function });
+        } else {
+            self.generated_functions.insert(*function_addr);
+        }
         // debug!(
-        //     "[generate_function_model] Generating model for function {}.",
-        //     function_name
+        //     "[generate_function_model] {:?}",
+        //     function_vec
+        //         .iter()
+        //         .map(|line| line.base_instruction_name())
+        //         .collect::<Vec<_>>()
         // );
+        // self.reset_model();
         let function_vec = function_vecs
-            .values()
-            .find(|function_vec| function_vec[0].function_name() == function_name)
-            .expect("[generate_function_model] Unable to find function.");
-        debug!(
-            "[generate_function_model] {:?}",
-            function_vec
-                .iter()
-                .map(|line| line.base_instruction_name())
-                .collect::<Vec<_>>()
-        );
+            .get(function_addr)
+            .expect("[generate_function_model_by_entry_addr] Invalid function entry address.");
         self.generate_state_variables(function_vec);
         self.generate_function_atomic_blocks(function_vec);
         let mut ts = TopologicalSort::<String>::new();
@@ -104,23 +121,30 @@ impl UclidTranslator {
         while let mut v = ts.pop_all() {
             if v.is_empty() {
                 if ts.len() != 0 {
-                    panic!("[generate_function_model] There is a cyclic dependency in the function!!!");
+                    let recursive_function = UclidTranslator::function_name_from_addr(function_addr, function_vecs).to_string();
+                    debug!(
+                        "[generate_function_model] There is a cyclic dependency in the function {}!!!",
+                        recursive_function
+                    );
+                    return Err(NoSuchModelError{ recursive_function });
                 }
                 break;
             }
             v.sort();
-            debug!(
-                "TS: {:?}",
-                v.iter()
-                    .map(|x| format!("{:#x}", dec_str_to_u64(x).unwrap_or(0xffffffff)))
-                    .collect::<Vec<_>>()
-            );
+            // debug!(
+            //     "TS: {:?}",
+            //     v.iter()
+            //         .map(|x| format!("{:#x}", dec_str_to_u64(x).unwrap_or(0xffffffff)))
+            //         .collect::<Vec<_>>()
+            // );
             for addr in v {
                 if let Ok(pc_addr) = dec_str_to_u64(&addr[..]) {
                     let call = &self.call_atomic_block(pc_addr);
                     procedure_body = format!(
                         "{}      if (pc == {}) {{\n{}\n      }}\n",
-                        procedure_body, &self.u64_to_uclid_bv_lit(pc_addr), call
+                        procedure_body,
+                        &self.u64_to_uclid_bv_lit(pc_addr),
+                        call
                     );
                 }
             }
@@ -129,6 +153,50 @@ impl UclidTranslator {
             &function_vec[0].function_name().to_string(),
             &procedure_body,
         );
+        // Generate the rest
+        let absolute_target_addrs = UclidTranslator::absolute_addrs_set(function_vec);
+        for addr in absolute_target_addrs {
+            if UclidTranslator::is_function_entry_addr(&addr, function_vecs) {
+                let function_name = UclidTranslator::function_name_from_addr(&addr, function_vecs);
+                match self.generate_function_model_by_entry_addr(&addr, function_vecs) {
+                    Ok(_) => {
+                        debug!(
+                            "[generate_function_model_by_entry_addr] Generated a function model for the callee {}.",
+                            function_name
+                        );
+                    },
+                    Err(e) => {
+                        debug!("[generate_function_model_by_entry_addr] Unable to generate function model for callee {} so a stub function was created.", function_name);
+                    },
+                }
+            }
+        }
+        Ok(())
+    }
+
+    fn function_name_from_addr<'b>(
+        address: &u64,
+        function_vecs: &'b HashMap<u64, Vec<AssemblyLine>>,
+    ) -> &'b str {
+        function_vecs.get(address).unwrap()[0].function_name()
+    }
+
+    fn function_addr_from_name(
+        function_name: &str,
+        function_vecs: & HashMap<u64, Vec<AssemblyLine>>,
+    ) -> u64 {
+        let function_vec = function_vecs
+            .values()
+            .find(|function_vec| function_vec[0].function_name() == function_name)
+            .expect("[generate_function_model] Unable to find function.");
+        function_vec[0].address()
+    }
+
+    fn is_function_entry_addr(
+        address: &u64,
+        function_vecs: &HashMap<u64, Vec<AssemblyLine>>,
+    ) -> bool {
+        function_vecs.get(address).is_some()
     }
 
     fn call_atomic_block(&self, address: u64) -> String {
@@ -204,7 +272,7 @@ impl UclidTranslator {
                 }
                 _ => {
                     let next_addr = assembly_line.address() + 4;
-                    if !absolute_addrs.get(&next_addr).is_none() {
+                    if absolute_addrs.get(&next_addr).is_some() {
                         // End of basic block if the next address is a target address
                         &self.add_uclid_procedure(
                             &UclidTranslator::atomic_block_name(block_entry_address.unwrap()),
@@ -260,7 +328,11 @@ impl UclidTranslator {
             let offset = assembly_line.offset().unwrap_or(0);
             match offset {
                 0 => args.push(format!("{}", reg.to_string())),
-                _ => args.push(format!("{} + {}", reg.to_string(), self.i64_to_uclid_bv_lit(offset))),
+                _ => args.push(format!(
+                    "{} + {}",
+                    reg.to_string(),
+                    self.i64_to_uclid_bv_lit(offset)
+                )),
             }
         }
         if let Some(reg) = assembly_line.rs2() {
@@ -299,7 +371,11 @@ impl UclidTranslator {
     }
 
     fn uclid_array_type(&self, index: u64, value: u64) -> String {
-        format!("[{}]{}", self.uclid_bv_type(index), self.uclid_bv_type(value))
+        format!(
+            "[{}]{}",
+            self.uclid_bv_type(index),
+            self.uclid_bv_type(value)
+        )
     }
 
     fn uclid_mem_type(&self) -> String {

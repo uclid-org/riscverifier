@@ -5,6 +5,11 @@ use crate::objectdumpreader::InstOperand;
 #[derive(Debug)]
 pub struct InvalidFormatError;
 
+#[derive(Debug)]
+pub struct NoSuchModelError {
+	pub recursive_function: String,
+}
+
 pub fn hex_str_to_u64(numeric: &str) -> Result<u64, std::num::ParseIntError> {
     Ok(u64::from_str_radix(numeric, 16)?)
 }

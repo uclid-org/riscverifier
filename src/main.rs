@@ -69,7 +69,8 @@ fn main() {
         let mut ut = UclidTranslator::create(xlen);
         if let Some(write_to_filepath) = matches.value_of("output") {
             if let Some(function_name) = matches.value_of("function") {
-                ut.generate_function_model(function_name, &function_blocks);
+                ut.generate_function_model(function_name, &function_blocks)
+                    .expect("[main] Unable to generate model for function");
             }
             ut.write_model(&write_to_filepath)
                 .expect("[main] Unable to write model to file.");
