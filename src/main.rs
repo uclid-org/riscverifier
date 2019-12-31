@@ -11,6 +11,8 @@ extern crate pest_derive;
 
 extern crate topological_sort;
 
+use std::collections::HashSet;
+
 mod dwarfreader;
 use dwarfreader::DwarfReader;
 
@@ -59,6 +61,13 @@ fn main() {
                 .long("xlen")
                 .takes_value(true),
         )
+        .arg(
+            Arg::with_name("ignore-funcs")
+                .help("Comma separated list of functions to ignore. E.g. \"foo,bar\"")
+                .short("i")
+                .long("ignore-funcs")
+                .takes_value(true),
+        )
         .get_matches();
     let xlen = utils::dec_str_to_u64(matches.value_of("xlen").unwrap_or("64"))
         .expect("[main] Unable to parse numberic xlen.");
@@ -66,7 +75,11 @@ fn main() {
         let binary_paths = vec![String::from(binary)];
         let dr = DwarfReader::create(&binary_paths);
         let function_blocks = ObjectDumpReader::get_binary_object_dump(&binary_paths);
-        let mut ut = UclidTranslator::create(xlen);
+        let mut ignored_functions = HashSet::new();
+        if let Some(ignore_list_str) = matches.value_of("ignore-funcs") {
+            ignored_functions = ignore_list_str.split(",").collect::<HashSet<&str>>();
+        }
+        let mut ut = UclidTranslator::create(xlen, &ignored_functions);
         if let Some(write_to_filepath) = matches.value_of("output") {
             if let Some(function_name) = matches.value_of("function") {
                 ut.generate_function_model(function_name, &function_blocks)

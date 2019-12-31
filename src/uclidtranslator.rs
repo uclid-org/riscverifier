@@ -9,30 +9,32 @@ use std::fs;
 use std::fs::File;
 use std::io::prelude::*;
 
-pub struct UclidTranslator {
+pub struct UclidTranslator<'a> {
     xlen: u64,
     inst_length: u64,
+    ignored_functions: &'a HashSet<&'a str>,
     generated_functions: HashSet<u64>,
     import_decls: Vec<String>,
     define_decls: Vec<String>,
     state_var_decls: Vec<String>,
-    state_var_ids: Vec<String>,
+    state_var_ids: HashSet<String>,
     procedures_decls: Vec<String>,
     init_stmts: Vec<String>,
     next_stmts: Vec<String>,
     control_stmts: Vec<String>,
 }
 
-impl UclidTranslator {
-    pub fn create(xlen: u64) -> UclidTranslator {
+impl<'a> UclidTranslator<'a> {
+    pub fn create(xlen: u64, ignored_functions: &'a HashSet<&'a str>) -> UclidTranslator<'a> {
         UclidTranslator {
             xlen,
             inst_length: 4,
+            ignored_functions,
             generated_functions: HashSet::new(),
             import_decls: vec![],
             define_decls: vec![],
             state_var_decls: vec![],
-            state_var_ids: vec![],
+            state_var_ids: HashSet::new(),
             procedures_decls: vec![],
             init_stmts: vec![],
             next_stmts: vec![],
@@ -41,10 +43,11 @@ impl UclidTranslator {
     }
 
     pub fn reset_model(&mut self) {
+        self.generated_functions = HashSet::new();
         self.import_decls = vec![];
         self.define_decls = vec![];
         self.state_var_decls = vec![];
-        self.state_var_ids = vec![];
+        self.state_var_ids = HashSet::new();
         self.procedures_decls = vec![];
         self.init_stmts = vec![];
         self.next_stmts = vec![];
@@ -57,7 +60,7 @@ impl UclidTranslator {
         function_vecs: &HashMap<u64, Vec<AssemblyLine>>,
     ) -> Result<(), NoSuchModelError> {
         let function_entry_addr = UclidTranslator::function_addr_from_name(function_name, function_vecs);
-        self.generate_function_model_by_entry_addr(&function_entry_addr, function_vecs);
+        self.generate_function_model_by_entry_addr(&function_entry_addr, function_vecs, 0);
         Ok(())
     }
 
@@ -65,14 +68,19 @@ impl UclidTranslator {
         &mut self,
         function_addr: &u64,
         function_vecs: &HashMap<u64, Vec<AssemblyLine>>,
+        level: usize,
     ) -> Result<(), NoSuchModelError> {
+        let function_name = UclidTranslator::function_name_from_addr(function_addr, function_vecs);
+        if self.ignored_functions.get(&function_name).is_some() {
+            debug!("[generate_function_model_by_entry_addr] Ignored function {}.", function_name);
+            return Ok(());
+        }
         if self.generated_functions.get(&function_addr).is_some() {
             debug!(
                 "[generate_function_model] Cyclic function call for function {}.",
-                UclidTranslator::function_name_from_addr(function_addr, function_vecs)
+                function_name
             );
-            let recursive_function = UclidTranslator::function_name_from_addr(function_addr, function_vecs).to_string();
-            return Err(NoSuchModelError { recursive_function });
+            return Err(NoSuchModelError { recursive_function: function_name.to_string() });
         } else {
             self.generated_functions.insert(*function_addr);
         }
@@ -83,10 +91,12 @@ impl UclidTranslator {
         //         .map(|line| line.base_instruction_name())
         //         .collect::<Vec<_>>()
         // );
-        // self.reset_model();
         let function_vec = function_vecs
             .get(function_addr)
             .expect("[generate_function_model_by_entry_addr] Invalid function entry address.");
+
+        println!("{}{}", format!("{: <1$}", "", level*2), function_vec[0].function_name());
+
         self.generate_state_variables(function_vec);
         self.generate_function_atomic_blocks(function_vec);
         let mut ts = TopologicalSort::<String>::new();
@@ -121,12 +131,11 @@ impl UclidTranslator {
         while let mut v = ts.pop_all() {
             if v.is_empty() {
                 if ts.len() != 0 {
-                    let recursive_function = UclidTranslator::function_name_from_addr(function_addr, function_vecs).to_string();
                     debug!(
                         "[generate_function_model] There is a cyclic dependency in the function {}!!!",
-                        recursive_function
+                        function_name
                     );
-                    return Err(NoSuchModelError{ recursive_function });
+                    return Err(NoSuchModelError{ recursive_function: function_name.to_string() });
                 }
                 break;
             }
@@ -153,12 +162,13 @@ impl UclidTranslator {
             &function_vec[0].function_name().to_string(),
             &procedure_body,
         );
+        // TODO: Add this at the top and do a DFS bottom up to get the modifies set
         // Generate the rest
         let absolute_target_addrs = UclidTranslator::absolute_addrs_set(function_vec);
         for addr in absolute_target_addrs {
             if UclidTranslator::is_function_entry_addr(&addr, function_vecs) {
                 let function_name = UclidTranslator::function_name_from_addr(&addr, function_vecs);
-                match self.generate_function_model_by_entry_addr(&addr, function_vecs) {
+                match self.generate_function_model_by_entry_addr(&addr, function_vecs, level + 1) {
                     Ok(_) => {
                         debug!(
                             "[generate_function_model_by_entry_addr] Generated a function model for the callee {}.",
@@ -166,6 +176,7 @@ impl UclidTranslator {
                         );
                     },
                     Err(e) => {
+                        self.add_uclid_procedure(&UclidTranslator::atomic_block_name(addr), &String::from(""));
                         debug!("[generate_function_model_by_entry_addr] Unable to generate function model for callee {} so a stub function was created.", function_name);
                     },
                 }
@@ -235,9 +246,11 @@ impl UclidTranslator {
     }
 
     fn add_uclid_state_variable(&mut self, state_variable_id: &String, type_decl: &String) {
-        self.state_var_ids.push(state_variable_id.clone());
-        self.state_var_decls
-            .push(format!("  var {}: {};\n", state_variable_id, type_decl));
+        if self.state_var_ids.get(state_variable_id).is_none() {
+            self.state_var_ids.insert(state_variable_id.clone());
+            self.state_var_decls
+                .push(format!("  var {}: {};\n", state_variable_id, type_decl));
+        }
     }
 
     fn generate_function_atomic_blocks(&mut self, function_vec: &Vec<AssemblyLine>) {
@@ -306,7 +319,7 @@ impl UclidTranslator {
     }
 
     fn add_uclid_procedure(&mut self, name: &String, body: &String) {
-        let modifies = format!("    modifies {};", self.state_var_ids.join(", "));
+        let modifies = format!("    modifies {};", self.state_var_ids.iter().map(|s| s.clone()).collect::<Vec<_>>().join(", "));
         let procedure_decl = format!(
             "  procedure {}() \n{}\n    {{\n{}\n    }}\n\n",
             name, modifies, body
