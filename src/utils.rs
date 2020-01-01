@@ -7,7 +7,7 @@ pub struct InvalidFormatError;
 
 #[derive(Debug)]
 pub struct NoSuchModelError {
-	pub recursive_function: String,
+    pub recursive_function: String,
 }
 
 pub fn hex_str_to_u64(numeric: &str) -> Result<u64, std::num::ParseIntError> {

@@ -79,10 +79,10 @@ fn main() {
         if let Some(ignore_list_str) = matches.value_of("ignore-funcs") {
             ignored_functions = ignore_list_str.split(",").collect::<HashSet<&str>>();
         }
-        let mut ut = UclidTranslator::create(xlen, &ignored_functions);
+        let mut ut = UclidTranslator::create(xlen, &ignored_functions, &function_blocks);
         if let Some(write_to_filepath) = matches.value_of("output") {
             if let Some(function_name) = matches.value_of("function") {
-                ut.generate_function_model(function_name, &function_blocks)
+                ut.generate_function_model(function_name)
                     .expect("[main] Unable to generate model for function");
             }
             ut.write_model(&write_to_filepath)

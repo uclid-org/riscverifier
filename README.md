@@ -10,3 +10,6 @@ You will need to install uclid5 and riscv-gnu-toolchain [riscv](https://github.c
 ## Generating uclid5 models
 
 WIP
+
+
+## Notes
