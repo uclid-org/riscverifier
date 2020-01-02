@@ -135,10 +135,7 @@ impl ObjectDumpReader {
                 }
             }
         }
-        function_blocks.insert(
-            assembly_lines[0].address.clone(),
-            assembly_lines.clone(),
-        );
+        function_blocks.insert(assembly_lines[0].address.clone(), assembly_lines.clone());
         function_blocks
     }
 }

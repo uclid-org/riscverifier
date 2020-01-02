@@ -1,13 +1,15 @@
-use crate::objectdumpreader::{AssemblyLine, InstOperand};
-
 use std::collections::{HashMap, HashSet};
-
-use topological_sort::TopologicalSort;
-
-use crate::utils::*;
 use std::fs;
 use std::fs::File;
 use std::io::prelude::*;
+
+use topological_sort::TopologicalSort;
+
+use crate::objectdumpreader::{AssemblyLine, InstOperand};
+
+use crate::utils::*;
+
+use crate::dwarfreader::{DwarfReader, FunctionSig};
 
 const JUMP_INSTS: &'static [&'static str] = &["jal", "jalr"];
 const BRANCH_INSTS: &'static [&'static str] = &["beq", "bne", "blt", "bge", "bltu", "bgeu"];
@@ -15,6 +17,7 @@ const BRANCH_INSTS: &'static [&'static str] = &["beq", "bne", "blt", "bge", "blt
 pub struct UclidTranslator<'a> {
     xlen: u64,
     inst_length: u64,
+    dwarf_reader: &'a DwarfReader,
     function_vecs: &'a HashMap<u64, Vec<AssemblyLine>>,
     ignored_functions: &'a HashSet<&'a str>,
     generated_functions: HashSet<String>,
@@ -24,6 +27,7 @@ pub struct UclidTranslator<'a> {
     const_var_decls: Vec<String>,
     identifiers: HashSet<String>,
     procedures_decls: Vec<String>,
+    function_signatures: HashMap<String, FunctionSig>,
     axiom_decls: Vec<String>,
     init_stmts: Vec<String>,
     next_stmts: Vec<String>,
@@ -34,12 +38,14 @@ pub struct UclidTranslator<'a> {
 impl<'a> UclidTranslator<'a> {
     pub fn create(
         xlen: u64,
+        dwarf_reader: &'a DwarfReader,
         ignored_functions: &'a HashSet<&'a str>,
         function_vecs: &'a HashMap<u64, Vec<AssemblyLine>>,
     ) -> UclidTranslator<'a> {
         UclidTranslator {
             xlen,
             inst_length: 4,
+            dwarf_reader,
             function_vecs,
             ignored_functions,
             generated_functions: HashSet::new(),
@@ -49,6 +55,7 @@ impl<'a> UclidTranslator<'a> {
             const_var_decls: vec![],
             identifiers: HashSet::new(),
             procedures_decls: vec![],
+            function_signatures: HashMap::new(),
             axiom_decls: vec![],
             init_stmts: vec![],
             next_stmts: vec![],
@@ -65,6 +72,7 @@ impl<'a> UclidTranslator<'a> {
         self.const_var_decls = vec![];
         self.identifiers = HashSet::new();
         self.procedures_decls = vec![];
+        self.function_signatures = HashMap::new();
         self.axiom_decls = vec![];
         self.init_stmts = vec![];
         self.next_stmts = vec![];
@@ -72,12 +80,8 @@ impl<'a> UclidTranslator<'a> {
         self.modifies_set_map = HashMap::new();
     }
 
-    pub fn generate_function_model(
-        &mut self,
-        function_name: &str,
-    ) -> Result<(), NoSuchModelError> {
-        let function_entry_addr =
-            self.function_addr_from_name(function_name);
+    pub fn generate_function_model(&mut self, function_name: &str) -> Result<(), NoSuchModelError> {
+        let function_entry_addr = self.function_addr_from_name(function_name);
         self.generate_function_model_by_entry_addr(&function_entry_addr, 0);
         // Generate ignored functions
         for function_name in self.ignored_functions.iter() {
@@ -117,15 +121,9 @@ impl<'a> UclidTranslator<'a> {
                 recursive_function: function_name.to_string(),
             });
         }
-        // debug!(
-        //     "[generate_function_model] {:?}",
-        //     function_vec
-        //         .iter()
-        //         .map(|line| line.base_instruction_name())
-        //         .collect::<Vec<_>>()
-        // );
         // Vector of assembly lines in the function
-        let function_vec = self.function_vecs
+        let function_vec = self
+            .function_vecs
             .get(function_addr)
             .expect("[generate_function_model_by_entry_addr] Invalid function entry address.");
         // Generate state variables
@@ -269,13 +267,7 @@ impl<'a> UclidTranslator<'a> {
                 }
             }
         }
-        self.add_uclid_procedure(
-            &function_addr,
-            &modifies_set,
-            &procedure_body,
-            false,
-            false,
-        );
+        self.add_uclid_procedure(&function_addr, &modifies_set, &procedure_body, false, false);
         // Update modifies set for this function
         self.modifies_set_map.insert(*function_addr, modifies_set);
         Ok(())
@@ -285,11 +277,9 @@ impl<'a> UclidTranslator<'a> {
         self.function_vecs.get(address).unwrap()[0].function_name()
     }
 
-    fn function_addr_from_name(
-        &self,
-        function_name: &str,
-    ) -> u64 {
-        let function_vec = self.function_vecs
+    fn function_addr_from_name(&self, function_name: &str) -> u64 {
+        let function_vec = self
+            .function_vecs
             .values()
             .find(|function_vec| function_vec[0].function_name() == function_name)
             .expect("[generate_function_model] Unable to find function.");
@@ -408,7 +398,6 @@ impl<'a> UclidTranslator<'a> {
                     .is_some()
                 || absolute_addrs.get(&next_addr).is_some()
             {
-
                 // Add the atomic block procedure
                 &self.add_uclid_procedure(
                     &block_entry_address.unwrap(),
@@ -462,8 +451,13 @@ impl<'a> UclidTranslator<'a> {
         } else {
             UclidTranslator::atomic_block_name(*entry_addr)
         };
+        if self.is_function_entry_addr(entry_addr) && !is_atomic_block && !self.ignored_functions.contains(&function_name[..]) {
+            let function_signature = self.dwarf_reader.get_function_signature   (&function_name);
+            debug!("[add_uclid_procedure] formals for {}: {:?}", function_name, function_signature);
+            self.function_signatures.insert(function_name.clone(), function_signature);
+        }
         if self.generated_functions.contains(&function_name) {
-            debug!("Already added {}.", function_name);            
+            debug!("Already added {}.", function_name);
             return;
         } else {
             self.generated_functions.insert(function_name.to_string());
@@ -522,7 +516,7 @@ impl<'a> UclidTranslator<'a> {
             })
             .collect::<Vec<_>>();
         if let Some(reg) = assembly_line.rs2() {
-            // split_size is the correct bit size of the value rs2 for calling store instructions
+            // split_size is the size of the value being stored into memory (refer to models/prelude.ucl)
             let split_size = match assembly_line.base_instruction_name() {
                 "sb" => "[7:0]",
                 "sh" => "[15:0]",

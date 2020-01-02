@@ -73,13 +73,13 @@ fn main() {
         .expect("[main] Unable to parse numberic xlen.");
     if let Some(binary) = matches.value_of("binary") {
         let binary_paths = vec![String::from(binary)];
-        let dr = DwarfReader::create(&binary_paths);
         let function_blocks = ObjectDumpReader::get_binary_object_dump(&binary_paths);
         let mut ignored_functions = HashSet::new();
         if let Some(ignore_list_str) = matches.value_of("ignore-funcs") {
             ignored_functions = ignore_list_str.split(",").collect::<HashSet<&str>>();
         }
-        let mut ut = UclidTranslator::create(xlen, &ignored_functions, &function_blocks);
+        let dwarf_reader = DwarfReader::create(&binary_paths);
+        let mut ut = UclidTranslator::create(xlen, &dwarf_reader, &ignored_functions, &function_blocks);
         if let Some(write_to_filepath) = matches.value_of("output") {
             if let Some(function_name) = matches.value_of("function") {
                 ut.generate_function_model(function_name)
