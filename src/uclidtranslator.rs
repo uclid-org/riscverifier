@@ -176,23 +176,33 @@ impl<'a> UclidTranslator<'a> {
         modifies_set = modifies_set
             .union(&atomic_blocks_modifies_set)
             .map(|s| s.clone())
-            .collect::<HashSet<String>>();;
+            .collect::<HashSet<String>>();
         // Compute the CFG and topologically sort it to construct function procedure
         let mut ts = TopologicalSort::<String>::new();
         let mut atomic_block_entry_addr: u64 = function_vec[0].address();
+        // Stores a map from basic block to callees
+        let mut call_map: HashMap<u64, (u64, u64)> = HashMap::new();
         for assembly_line in function_vec {
             let atomic_block_fallthrough_addr = assembly_line.address() + self.inst_length;
             match assembly_line.base_instruction_name() {
                 "jal" | "beq" | "bne" | "blt" | "bge" | "bltu" | "bgeu" => {
                     if let InstOperand::Immediate(atomic_block_jump_addr) = assembly_line.imm().expect("[generate_function_model] Unable to find a target address for a jump instruction") {
-                        // Add jump target absolute addresses
-                        ts.add_dependency(atomic_block_entry_addr.to_string(), atomic_block_jump_addr.to_string());
                         match assembly_line.base_instruction_name() {
                             "beq" | "bne" | "blt" | "bge" | "bltu" | "bgeu"  => {
                                 // Add default fall through dependency for branches
                                 ts.add_dependency(atomic_block_entry_addr.to_string(), atomic_block_fallthrough_addr.to_string());
                             },
-                            _ => (),
+                            "jal" => {
+                                if self.is_function_entry_addr(&(*atomic_block_jump_addr as u64)) && *atomic_block_jump_addr as u64 != *function_addr {
+                                    // Add jump to another function, which will return (unless interrupted but we aren't dealing with those yet) 
+                                    ts.add_dependency(atomic_block_entry_addr.to_string(), atomic_block_fallthrough_addr.to_string());
+                                    call_map.insert(atomic_block_entry_addr, (*atomic_block_jump_addr as u64, atomic_block_fallthrough_addr));
+                                } else {
+                                    // Jump to another block
+                                    ts.add_dependency(atomic_block_entry_addr.to_string(), atomic_block_jump_addr.to_string());
+                                }
+                            },
+                            _ => panic!("[generate_function_model_by_entry_addr] Not a jump instruction."),
                         }
                         atomic_block_entry_addr = atomic_block_fallthrough_addr;
                     } else {
@@ -229,18 +239,33 @@ impl<'a> UclidTranslator<'a> {
             //         .collect::<Vec<_>>()
             // );
             for addr in v {
-                if let Ok(callee_addr) = dec_str_to_u64(&addr[..]) {
-                    let call = if self.is_function_entry_addr(&callee_addr) && callee_addr != *function_addr {
-                        format!("        call {}();", self.function_name_from_addr(&callee_addr))
-                    } else {
-                        self.call_atomic_block(callee_addr)
-                    };
+                if let Ok(u64_addr) = dec_str_to_u64(&addr[..]) {
                     procedure_body = format!(
                         "{}      if (pc == {}) {{\n{}\n      }}\n",
                         procedure_body,
-                        &self.u64_to_uclid_bv_lit(callee_addr),
-                        call
+                        &self.u64_to_uclid_bv_lit(u64_addr),
+                        self.call_atomic_block(u64_addr)
                     );
+                    if call_map.get(&u64_addr).is_some() {
+                        let absolute_jump_addr = call_map.get(&u64_addr).unwrap().0;
+                        let callee_name = self.function_name_from_addr(&absolute_jump_addr);
+                        let fallthrough_addr = call_map.get(&u64_addr).unwrap().1;
+                        procedure_body = format!(
+                            "{}      assert(pc == {});\n{}\n      assert(pc == {});\n",
+                            procedure_body,
+                            self.u64_to_uclid_bv_lit(absolute_jump_addr),
+                            format!("      call {}();", callee_name),
+                            self.u64_to_uclid_bv_lit(fallthrough_addr),
+                        );
+                        if !self.ignored_functions.contains(callee_name) {
+                            modifies_set = modifies_set
+                                .union(&self.modifies_set_map.get(&absolute_jump_addr).unwrap_or_else(|| {
+                                        panic!("[generate_function_model_by_entry_addr] Missing modifies set for function {}.", callee_name);
+                                }))
+                                .map(|s| s.clone())
+                                .collect::<HashSet<String>>();
+                        }
+                    }
                 }
             }
         }
@@ -333,10 +358,10 @@ impl<'a> UclidTranslator<'a> {
             self.identifiers.insert(const_variable_id.clone());
             self.const_var_decls
                 .push(format!("  const {}: {};\n", const_variable_id, type_decl));
-        }
-        if let Some(value) = init_value {
-            self.axiom_decls
-                .push(format!("  axiom({} == {});\n", const_variable_id, value));
+            if let Some(value) = init_value {
+                self.axiom_decls
+                    .push(format!("  axiom({} == {});\n", const_variable_id, value));
+            }
         }
     }
 
@@ -466,39 +491,6 @@ impl<'a> UclidTranslator<'a> {
     }
 
     fn assembly_line_to_uclid(&self, assembly_line: &AssemblyLine) -> (HashSet<String>, String) {
-        // If jal jumps to another function, then add that modifies set to this one
-        if assembly_line.base_instruction_name() == "jal" {
-            if let InstOperand::Immediate(addr) = assembly_line.imm().expect("[generate_function_atomic_blocks] Jal instruction has no immediate value; object dump could be invalid.") {
-                let u64_addr = (*addr as u64);
-                if u64_addr == 2147506796 {
-                    // panic!("Function {} at addr {} is a entry addr: {}",  self.function_name_from_addr(&u64_addr), u64_addr, self.is_function_entry_addr(&u64_addr));
-                }
-                if self.is_function_entry_addr(&u64_addr) {
-                    let callee_name = self.function_name_from_addr(&u64_addr);
-                    let modifies_set =
-                        match self.modifies_set_map
-                            .get(&u64_addr) {
-                                Some(map) => map.iter().map(|s| format!("{}", s.clone())).collect::<HashSet<String>>(),
-                                None => {
-                                    if self.ignored_functions.contains(&callee_name) {
-                                        HashSet::new()
-                                    } else {
-                                        panic!("[assembly_line_to_uclid] Could not find modifies set for function {}.", callee_name)
-                                    }
-                                },
-                            };
-                    let uclid_assembly_line_call = format!(
-                        "      call () = {}();",
-                        callee_name,
-                        );
-                    if u64_addr == 2147506796 {
-                        debug!("Calling..... {}", uclid_assembly_line_call);
-                    }
-                    return (modifies_set, uclid_assembly_line_call);
-                }
-            }
-        }
-        // All other instructions
         let mut outputs = vec![];
         let mut args = vec![];
         if let Some(reg) = assembly_line.csr() {
