@@ -3,10 +3,18 @@ use std::collections::BTreeMap;
 use std::convert::TryInto;
 use std::{borrow, fs};
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct FunctionSig {
-    in_types: Vec<(String, u64)>,
-    out_type: u64,
+    // TODO: Use references instead of vecs? otherwise we need to clone this
+    pub in_types: Vec<(String, u64)>,
+    pub out_type: u64,
+}
+
+#[derive(Debug)]
+pub struct GlobalVariable {
+    name: String,
+    byte_size: u64,
+    memory_addr: u64,
 }
 
 #[derive(Debug)]
@@ -62,10 +70,7 @@ impl DwarfReader {
         }
     }
 
-    pub fn get_function_signature(
-        &self,
-        function_name: &str,
-    ) -> FunctionSig {
+    pub fn get_function_signature(&self, function_name: &str) -> FunctionSig {
         let comp_unit = self
             .dwarf_objects
             .iter()
@@ -78,9 +83,7 @@ impl DwarfReader {
                         &dwarf_object2.tag_name == "DW_TAG_subprogram"
                             && !dw_at_name.is_none()
                             && match dw_at_name.unwrap() {
-                                DwarfAttributeValue::StringAttr(name) => {
-                                    name == function_name
-                                },
+                                DwarfAttributeValue::StringAttr(name) => name == function_name,
                                 _ => panic!("Could not find function."),
                             }
                     })
@@ -105,39 +108,53 @@ impl DwarfReader {
             .child_tags
             .iter()
             .filter(|(_offset, child)| child.tag_name == "DW_TAG_formal_parameter")
-            .map(
-                |(_offset, child)| {
-                    // debug!("[get_function_signature] Found formal for {}: {:#?}", function_name, child);
-                    let formal_name = match child.attrs.get("DW_AT_name").expect("[get_function_signature] Formal does not have name.") {
-                        DwarfAttributeValue::StringAttr(name) => name.clone(),
-                        _ => panic!("[get_function_signature] Name should be a string!"),
-                    };
-                    let formal_size_index = match child.attrs.get("DW_AT_type").expect("[get_function_signature] Formal does not have size.") {
-                        DwarfAttributeValue::NumericAttr(value) => value.clone(),
-                        _ => panic!("[get_function_signature] Formal size index should be a numeric value."),
-                    };
-                    // debug!("formal_size_index: {:#?}", formal_size_index);
-                    let formal_size = self.get_type_size(&(formal_size_index as usize), comp_unit);
-                    (formal_name, formal_size)
-                }
-            )
+            .map(|(_offset, child)| {
+                // debug!("[get_function_signature] Found formal for {}: {:#?}", function_name, child);
+                let formal_name = match child
+                    .attrs
+                    .get("DW_AT_name")
+                    .expect("[get_function_signature] Formal does not have name.")
+                {
+                    DwarfAttributeValue::StringAttr(name) => name.clone(),
+                    _ => panic!("[get_function_signature] Name should be a string!"),
+                };
+                let formal_size_index = match child
+                    .attrs
+                    .get("DW_AT_type")
+                    .expect("[get_function_signature] Formal does not have size.")
+                {
+                    DwarfAttributeValue::NumericAttr(value) => value.clone(),
+                    _ => panic!(
+                        "[get_function_signature] Formal size index should be a numeric value."
+                    ),
+                };
+                // debug!("formal_size_index: {:#?}", formal_size_index);
+                let formal_size = self.get_type_size(&(formal_size_index as usize), comp_unit);
+                (formal_name, formal_size)
+            })
             .collect();
-        let out_type = match dwarf_object
-            .attrs
-            .get("DW_AT_type") {
-                Some(dwarf_attr) => {
-                    match dwarf_attr {
-                        DwarfAttributeValue::NumericAttr(value) => self.get_type_size(&(*value as usize), comp_unit),
-                        _ => panic!("[get_function_signature] Type should be numeric."),
-                    }
-                },
-                _ => 0,
-            };
+        let out_type = match dwarf_object.attrs.get("DW_AT_type") {
+            Some(dwarf_attr) => match dwarf_attr {
+                DwarfAttributeValue::NumericAttr(value) => {
+                    self.get_type_size(&(*value as usize), comp_unit)
+                }
+                _ => panic!("[get_function_signature] Type should be numeric."),
+            },
+            _ => 0,
+        };
         FunctionSig { in_types, out_type }
     }
 
     fn get_type_size(&self, dwarf_object_index: &usize, comp_unit: &DwarfObject) -> u64 {
-        let dwarf_object = comp_unit.child_tags.get(dwarf_object_index).unwrap_or_else(|| panic!("[get_type_size] No such node at address {}.", dwarf_object_index));
+        let dwarf_object = comp_unit
+            .child_tags
+            .get(dwarf_object_index)
+            .unwrap_or_else(|| {
+                panic!(
+                    "[get_type_size] No such node at address {}.",
+                    dwarf_object_index
+                )
+            });
         match &dwarf_object.tag_name[..] {
             "DW_TAG_typedef" => {
                 let next_type_index = match dwarf_object.attrs
@@ -147,28 +164,22 @@ impl DwarfReader {
                             DwarfAttributeValue::NumericAttr(value) => value.clone(),
                             _=> panic!("[get_type_size] Should be numeric index."),
                         };
-                self.get_type_size(
-                    &(next_type_index as usize),
-                    comp_unit,
-                )
-            },
+                self.get_type_size(&(next_type_index as usize), comp_unit)
+            }
             "DW_TAG_base_type" => {
                 match dwarf_object.attrs.get(&"DW_AT_byte_size".to_string())
                 .unwrap_or_else(|| panic!("[get_type_size] No DW_AT_byte_size tag inside base type at address {}.", dwarf_object.offset)) {
                     DwarfAttributeValue::NumericAttr(value) => value.clone(),
                     _ => panic!("[get_type_size] DW_AT_byte_size should be a numeric value."),
                 }
-            },
+            }
             _ => panic!("[get_type_size] Not a type dwarf object!"),
         }
     }
 
-    pub fn get_global_addr(&self, global_name: &str) -> u64 {
-        0
-    }
-
-    pub fn get_global_size(&self, global_name: &str) -> u64 {
-        0
+    // Returns a list of global variables with their names and memory locations
+    pub fn get_global_variables(&self) -> Vec<GlobalVariable> {
+        vec![]
     }
 
     fn process_dwarf_files(files: &Vec<String>) -> Result<Vec<DwarfObject>, gimli::Error> {
@@ -353,23 +364,21 @@ impl DwarfReader {
     ) -> Result<Option<DwarfAttributeValue>, gimli::Error> {
         let value = attr.value();
         let attr_value = match value {
-            gimli::AttributeValue::String(s) => {
-                Some(DwarfAttributeValue::StringAttr(format!(
-                    "{}",
-                    s.to_string_lossy()?
-                )))
-            },
+            gimli::AttributeValue::String(s) => Some(DwarfAttributeValue::StringAttr(format!(
+                "{}",
+                s.to_string_lossy()?
+            ))),
             gimli::AttributeValue::DebugStrRef(offset) => {
                 let s = dwarf.debug_str.get_str(offset)?;
                 Some(DwarfAttributeValue::StringAttr(format!(
                     "{}",
                     s.to_string_lossy()?
                 )))
-            },
+            }
             gimli::AttributeValue::Udata(data) => Some(DwarfAttributeValue::NumericAttr(data)),
             gimli::AttributeValue::UnitRef(offset) => {
                 Some(DwarfAttributeValue::NumericAttr(offset.0 as u64))
-            },
+            }
             gimli::AttributeValue::Flag(true) => Some(DwarfAttributeValue::BooleanAttr(true)),
             gimli::AttributeValue::Flag(false) => Some(DwarfAttributeValue::BooleanAttr(false)),
             _ => {
@@ -378,7 +387,7 @@ impl DwarfReader {
                 //     attr.value()
                 // );
                 None
-            },
+            }
         };
         Ok(attr_value)
     }

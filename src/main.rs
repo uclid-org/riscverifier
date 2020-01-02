@@ -79,7 +79,8 @@ fn main() {
             ignored_functions = ignore_list_str.split(",").collect::<HashSet<&str>>();
         }
         let dwarf_reader = DwarfReader::create(&binary_paths);
-        let mut ut = UclidTranslator::create(xlen, &dwarf_reader, &ignored_functions, &function_blocks);
+        let mut ut =
+            UclidTranslator::create(xlen, &dwarf_reader, &ignored_functions, &function_blocks);
         if let Some(write_to_filepath) = matches.value_of("output") {
             if let Some(function_name) = matches.value_of("function") {
                 ut.generate_function_model(function_name)

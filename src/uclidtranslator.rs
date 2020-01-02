@@ -13,6 +13,7 @@ use crate::dwarfreader::{DwarfReader, FunctionSig};
 
 const JUMP_INSTS: &'static [&'static str] = &["jal", "jalr"];
 const BRANCH_INSTS: &'static [&'static str] = &["beq", "bne", "blt", "bge", "bltu", "bgeu"];
+const BYTE_SIZE: &'static u64 = &8;
 
 pub struct UclidTranslator<'a> {
     xlen: u64,
@@ -248,11 +249,29 @@ impl<'a> UclidTranslator<'a> {
                         let absolute_jump_addr = call_map.get(&u64_addr).unwrap().0;
                         let callee_name = self.function_name_from_addr(&absolute_jump_addr);
                         let fallthrough_addr = call_map.get(&u64_addr).unwrap().1;
+                        let function_signature = if !self.ignored_functions.contains(callee_name) {
+                            self.function_signatures.get(callee_name)
+                        } else {
+                            None
+                        };
+                        let callee_arguments = if let Some(signature) = function_signature {
+                            signature.in_types
+                            .iter()
+                            .enumerate()
+                            .map(|(index, name_size_pair)| {
+                                if index > 7 {
+                                    panic!("[generate_function_model_by_entry_addr] Currently not supporting more than 8 arguments.");
+                                }
+                                format!("a{}[{}:0]", index, name_size_pair.1 * (*BYTE_SIZE) - 1)
+                            }).collect::<Vec<String>>().join(", ")
+                        } else {
+                            "".to_string()
+                        };
                         procedure_body = format!(
                             "{}      assert(pc == {});\n{}\n      assert(pc == {});\n",
                             procedure_body,
                             self.u64_to_uclid_bv_lit(absolute_jump_addr),
-                            format!("      call {}();", callee_name),
+                            format!("      call () = {}({});", callee_name, callee_arguments),
                             self.u64_to_uclid_bv_lit(fallthrough_addr),
                         );
                         if !self.ignored_functions.contains(callee_name) {
@@ -451,17 +470,62 @@ impl<'a> UclidTranslator<'a> {
         } else {
             UclidTranslator::atomic_block_name(*entry_addr)
         };
-        if self.is_function_entry_addr(entry_addr) && !is_atomic_block && !self.ignored_functions.contains(&function_name[..]) {
-            let function_signature = self.dwarf_reader.get_function_signature   (&function_name);
-            debug!("[add_uclid_procedure] formals for {}: {:?}", function_name, function_signature);
-            self.function_signatures.insert(function_name.clone(), function_signature);
-        }
         if self.generated_functions.contains(&function_name) {
             debug!("Already added {}.", function_name);
             return;
         } else {
             self.generated_functions.insert(function_name.to_string());
         }
+        let (procedure_signature, signature_constraints) = if self
+            .is_function_entry_addr(entry_addr)
+            && !is_atomic_block
+            && !self.ignored_functions.contains(&function_name[..])
+        {
+            let function_signature = self.dwarf_reader.get_function_signature(&function_name);
+            debug!(
+                "[add_uclid_procedure] Formals for function {}: {:?}",
+                function_name, function_signature
+            );
+            self.function_signatures
+                .insert(function_name.clone(), function_signature.clone());
+            (
+                format!(
+                    "{}",
+                    function_signature
+                        .in_types
+                        .iter()
+                        .map(|(formal_name, byte_size)| format!(
+                            "{}: {}",
+                            formal_name,
+                            self.uclid_bv_type((*byte_size * (*BYTE_SIZE)))
+                        ))
+                        .collect::<Vec<String>>()
+                        .join(", ")
+                ),
+                format!(
+                    "    requires {};",
+                    function_signature
+                        .in_types
+                        .iter()
+                        .enumerate()
+                        .map(|(index, name_size_pair)| {
+                            if index > 7 {
+                                panic!("[add_uclid_procedure] Currently not supporting arguments with more than 8 arguments.");
+                            }
+                            format!(
+                                "(a{}[{}:0] == {})",
+                                index,
+                                (name_size_pair.1 * (*BYTE_SIZE) - 1),
+                                name_size_pair.0
+                            )
+                        })
+                        .collect::<Vec<String>>()
+                        .join(" && ")
+                )
+            )
+        } else {
+            ("".to_string(), "".to_string())
+        };
         let modifies_string = format!(
             "    modifies {};",
             modifies_set
@@ -471,14 +535,16 @@ impl<'a> UclidTranslator<'a> {
                 .join(", ")
         );
         let procedure_decl = format!(
-            "  procedure {} {}() \n{}\n    {{\n{}\n    }}\n\n",
+            "  procedure {} {}({}) \n{}\n{}\n    {{\n{}\n    }}\n\n",
             if inline { "[inline]" } else { "" },
             function_name,
+            procedure_signature,
             if modifies_set.len() > 0 {
                 modifies_string
             } else {
                 "".to_string()
             },
+            signature_constraints,
             body
         );
         self.procedures_decls.push(procedure_decl);
@@ -573,7 +639,7 @@ impl<'a> UclidTranslator<'a> {
 
     fn uclid_mem_type(&self) -> String {
         // Byte-valued memory with XLEN addresses
-        self.uclid_array_type(self.xlen, 8)
+        self.uclid_array_type(self.xlen, *BYTE_SIZE)
     }
 
     pub fn write_model(&mut self, write_to_filepath: &str) -> std::io::Result<()> {
