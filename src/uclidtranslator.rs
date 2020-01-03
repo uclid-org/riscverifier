@@ -476,23 +476,39 @@ impl<'a> UclidTranslator<'a> {
         } else {
             self.generated_functions.insert(function_name.to_string());
         }
-        let (procedure_signature, signature_constraints) = if self
+        let (procedure_signature, signature_requires_statement) = if self
             .is_function_entry_addr(entry_addr)
             && !is_atomic_block
             && !self.ignored_functions.contains(&function_name[..])
         {
-            // FIXME: Make one pass instead of many
             let function_signature = self.dwarf_reader.get_function_signature(&function_name);
-            // let function_signature = FunctionSig {
-            //     in_types: vec![],
-            //     out_type: 0,
-            // };
             debug!(
                 "[add_uclid_procedure] Formals for function {}: {:?}",
                 function_name, function_signature
             );
             self.function_signatures
                 .insert(function_name.clone(), function_signature.clone());
+            let signature_requires_statement = if function_signature.in_types.len() > 0 {
+                format!("    requires {};", function_signature
+                            .in_types
+                            .iter()
+                            .enumerate()
+                            .map(|(index, name_size_pair)| {
+                                if index > 7 {
+                                    panic!("[add_uclid_procedure] Currently not supporting arguments with more than 8 arguments.");
+                                }
+                                format!(
+                                    "(a{}[{}:0] == {})",
+                                    index,
+                                    (name_size_pair.1 * (*BYTE_SIZE) - 1),
+                                    name_size_pair.0
+                                )
+                            })
+                            .collect::<Vec<String>>()
+                            .join(" && "))
+            } else {
+                "".to_string()
+            };
             (
                 format!(
                     "{}",
@@ -507,26 +523,7 @@ impl<'a> UclidTranslator<'a> {
                         .collect::<Vec<String>>()
                         .join(", ")
                 ),
-                format!(
-                    "    requires {};",
-                    function_signature
-                        .in_types
-                        .iter()
-                        .enumerate()
-                        .map(|(index, name_size_pair)| {
-                            if index > 7 {
-                                panic!("[add_uclid_procedure] Currently not supporting arguments with more than 8 arguments.");
-                            }
-                            format!(
-                                "(a{}[{}:0] == {})",
-                                index,
-                                (name_size_pair.1 * (*BYTE_SIZE) - 1),
-                                name_size_pair.0
-                            )
-                        })
-                        .collect::<Vec<String>>()
-                        .join(" && ")
-                )
+                signature_requires_statement,
             )
         } else {
             ("".to_string(), "".to_string())
@@ -549,7 +546,7 @@ impl<'a> UclidTranslator<'a> {
             } else {
                 "".to_string()
             },
-            signature_constraints,
+            signature_requires_statement,
             body
         );
         self.procedures_decls.push(procedure_decl);

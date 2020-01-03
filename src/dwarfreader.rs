@@ -1,9 +1,9 @@
+use crate::utils::*;
 use object::Object;
 use std::collections::BTreeMap;
 use std::collections::HashMap;
 use std::convert::TryInto;
 use std::{borrow, fs};
-use crate::utils::*;
 
 #[derive(Debug, Clone)]
 pub struct FunctionSig {
@@ -106,7 +106,7 @@ impl DwarfReader {
     fn get_function_signatures(&self, comp_unit: &DwarfObject) -> HashMap<String, FunctionSig> {
         let mut function_sigs = HashMap::new();
         for (_child_offset, dwarf_object) in &comp_unit.child_tags {
-            // Add subprogram if it has all the required fields
+            // Try to add subprogram if it has all the required fields
             if &dwarf_object.tag_name == "DW_TAG_subprogram" {
                 if let Some(dw_at_name) = &dwarf_object.attrs.get("DW_AT_name") {
                     if let DwarfAttributeValue::StringAttr(function_name) = dw_at_name {
@@ -137,7 +137,10 @@ impl DwarfReader {
                                 // debug!("formal_size_index: {:#?}", formal_size_index);
                                 let formal_size = match self.get_type_size(&(formal_size_index as usize), comp_unit) {
                                     Ok(result) => result,
-                                    Err(_) => 0,
+                                    Err(_) => {
+                                        warn!("[get_function_signatures] Formal {} in {} has no size.", formal_name, function_name);
+                                        0
+                                    },
                                 };
                                 (formal_name, formal_size)
                             })
@@ -147,7 +150,10 @@ impl DwarfReader {
                                 DwarfAttributeValue::NumericAttr(value) => {
                                     match self.get_type_size(&(*value as usize), comp_unit) {
                                         Ok(result) => result,
-                                        Err(_) => 0,
+                                        Err(_) => {
+                                            // info!("[get_function_signatures] {} has no return type.", function_name);
+                                            0
+                                        }
                                     }
                                 }
                                 _ => panic!("[get_function_signature] Type should be numeric."),
@@ -191,7 +197,7 @@ impl DwarfReader {
                             };
                     self.get_type_size(&(next_type_index as usize), comp_unit)
                 }
-                "DW_TAG_base_type" => {
+                "DW_TAG_base_type" | "DW_TAG_enumeration_type" | "DW_TAG_pointer_type" => {
                     match dwarf_object.attrs.get(&"DW_AT_byte_size".to_string())
                     .unwrap_or_else(|| panic!("[get_type_size] No DW_AT_byte_size tag inside base type at address {}.", dwarf_object.offset)) {
                         DwarfAttributeValue::NumericAttr(value) => Ok(value.clone()),
