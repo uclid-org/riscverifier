@@ -152,7 +152,7 @@ impl<'a> UclidTranslator<'a> {
                                 ),
                         ).map(|s| s.clone()).collect::<HashSet<String>>();
                     }
-                    Err(e) => (),
+                    Err(_) => (),
                 }
             } else {
                 // Check if it's a cross function basic block call
@@ -216,7 +216,8 @@ impl<'a> UclidTranslator<'a> {
         }
         // Generate the procedures for functions recursively
         let mut procedure_body = String::from("");
-        while let mut v = ts.pop_all() {
+        loop {
+            let mut v = ts.pop_all();
             if v.is_empty() {
                 // If ts.pop_all() is empty and len() != 0, then there is a cycle (from the documentation of topological sort)
                 if ts.len() != 0 {
@@ -518,7 +519,7 @@ impl<'a> UclidTranslator<'a> {
                         .map(|(formal_name, byte_size)| format!(
                             "{}: {}",
                             formal_name,
-                            self.uclid_bv_type((*byte_size * (*BYTE_SIZE)))
+                            self.uclid_bv_type(*byte_size * (*BYTE_SIZE))
                         ))
                         .collect::<Vec<String>>()
                         .join(", ")

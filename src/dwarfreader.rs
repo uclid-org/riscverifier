@@ -2,7 +2,6 @@ use crate::utils::*;
 use object::Object;
 use std::collections::BTreeMap;
 use std::collections::HashMap;
-use std::convert::TryInto;
 use std::{borrow, fs};
 
 #[derive(Debug, Clone)]
@@ -287,35 +286,35 @@ impl DwarfReader {
         Ok(dwarf_objects)
     }
 
-    fn print_gimli_dwarf<R: gimli::Reader<Offset = usize>>(
-        dwarf: &gimli::Dwarf<R>,
-        entries_cursor: &mut gimli::EntriesCursor<R>,
-    ) -> Result<(), gimli::Error> {
-        let mut depth = 0;
-        while let Some((delta_depth, entry)) = entries_cursor.next_dfs()? {
-            let tag_name = entry.tag().to_string();
-            depth += delta_depth;
-            // info!(
-            //     "[print_gimli_dwarf] Depth: {} -- Offset {:x} -- Processing {} ==============",
-            //     depth,
-            //     entry.offset().0,
-            //     tag_name
-            // );
-            // Iterate over the attributes in the DIE.
-            let mut attrs_cursor = entry.attrs();
-            while let Some(attr) = attrs_cursor.next()? {
-                let attr_name = attr.name().to_string();
-                let attr_value = DwarfReader::get_attr_value(&attr, dwarf)?;
-                info!(
-                    "[print_gimli_dwarf] {}{}: {:?}",
-                    "   ".repeat(depth.try_into().unwrap()),
-                    &attr_name,
-                    &attr_value
-                );
-            }
-        }
-        Ok(())
-    }
+    // fn print_gimli_dwarf<R: gimli::Reader<Offset = usize>>(
+    //     dwarf: &gimli::Dwarf<R>,
+    //     entries_cursor: &mut gimli::EntriesCursor<R>,
+    // ) -> Result<(), gimli::Error> {
+    //     let mut depth = 0;
+    //     while let Some((delta_depth, entry)) = entries_cursor.next_dfs()? {
+    //         let tag_name = entry.tag().to_string();
+    //         depth += delta_depth;
+    //         // info!(
+    //         //     "[print_gimli_dwarf] Depth: {} -- Offset {:x} -- Processing {} ==============",
+    //         //     depth,
+    //         //     entry.offset().0,
+    //         //     tag_name
+    //         // );
+    //         // Iterate over the attributes in the DIE.
+    //         let mut attrs_cursor = entry.attrs();
+    //         while let Some(attr) = attrs_cursor.next()? {
+    //             let attr_name = attr.name().to_string();
+    //             let attr_value = DwarfReader::get_attr_value(&attr, dwarf)?;
+    //             info!(
+    //                 "[print_gimli_dwarf] {}{}: {:?}",
+    //                 "   ".repeat(depth.try_into().unwrap()),
+    //                 &attr_name,
+    //                 &attr_value
+    //             );
+    //         }
+    //     }
+    //     Ok(())
+    // }
 
     fn entries_to_dwarf_object<R: gimli::Reader<Offset = usize>>(
         dwarf: &gimli::Dwarf<R>,

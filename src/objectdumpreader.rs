@@ -149,7 +149,7 @@ pub enum InstOperand {
 impl fmt::Display for InstOperand {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
-            InstOperand::Register(reg_id, offset) => {
+            InstOperand::Register(reg_id, _offset) => {
                 // match offset {
                 // 0 => write!(f, "{}", reg_id),
                 // _ => write!(f, "{}+{}", reg_id, offset),
@@ -186,10 +186,6 @@ impl AssemblyLine {
             "fence.vma" | "sfence.vma" | "sfence" => &"fence",
             _ => &self.op_code[..],
         }
-    }
-
-    pub fn function_offset(&self) -> u64 {
-        self.callee_offset
     }
 
     pub fn rd(&self) -> Option<&InstOperand> {
@@ -240,7 +236,7 @@ impl AssemblyLine {
             | "sd" => {
                 assert!(self.operands.len() == 2);
                 match &self.operands[1] {
-                    InstOperand::Register(register_id, offset) => Some(*offset),
+                    InstOperand::Register(_register_id, offset) => Some(*offset),
                     _ => panic!("[offset] Operand has no offset!"),
                 }
             }
