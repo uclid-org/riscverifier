@@ -174,63 +174,6 @@ impl DwarfReader {
         })
     }
 
-    // pub fn get_function_signature(&self, function_name: &str) -> FunctionSig {
-    //     let comp_unit = self.get_function_comp_unit(function_name);
-    //     // debug!("comp_unit: {:#?}", comp_unit);
-    //     let (_offset, dwarf_object) = comp_unit
-    //         .child_tags
-    //         .iter()
-    //         .find(|dwarf_object| {
-    //             let dw_at_name = &dwarf_object.1.attrs.get("DW_AT_name");
-    //             &dwarf_object.1.tag_name == "DW_TAG_subprogram"
-    //                 && !dw_at_name.is_none()
-    //                 && match dw_at_name.unwrap() {
-    //                     DwarfAttributeValue::StringAttr(name) => name == function_name,
-    //                     _ => false,
-    //                 }
-    //         })
-    //         .expect("[get_function_signature] Could not find function.");
-    //     let in_types = dwarf_object
-    //         .child_tags
-    //         .iter()
-    //         .filter(|(_offset, child)| child.tag_name == "DW_TAG_formal_parameter")
-    //         .map(|(_offset, child)| {
-    //             // debug!("[get_function_signature] Found formal for {}: {:#?}", function_name, child);
-    //             let formal_name = match child
-    //                 .attrs
-    //                 .get("DW_AT_name")
-    //                 .expect("[get_function_signature] Formal does not have name.")
-    //             {
-    //                 DwarfAttributeValue::StringAttr(name) => name.clone(),
-    //                 _ => panic!("[get_function_signature] Name should be a string!"),
-    //             };
-    //             let formal_size_index = match child
-    //                 .attrs
-    //                 .get("DW_AT_type")
-    //                 .expect("[get_function_signature] Formal does not have size.")
-    //             {
-    //                 DwarfAttributeValue::NumericAttr(value) => value.clone(),
-    //                 _ => panic!(
-    //                     "[get_function_signature] Formal size index should be a numeric value."
-    //                 ),
-    //             };
-    //             // debug!("formal_size_index: {:#?}", formal_size_index);
-    //             let formal_size = self.get_type_size(&(formal_size_index as usize), comp_unit);
-    //             (formal_name, formal_size)
-    //         })
-    //         .collect();
-    //     let out_type = match dwarf_object.attrs.get("DW_AT_type") {
-    //         Some(dwarf_attr) => match dwarf_attr {
-    //             DwarfAttributeValue::NumericAttr(value) => {
-    //                 self.get_type_size(&(*value as usize), comp_unit)
-    //             }
-    //             _ => panic!("[get_function_signature] Type should be numeric."),
-    //         },
-    //         _ => 0,
-    //     };
-    //     FunctionSig { in_types, out_type }
-    // }
-
     fn get_type_size(
         &self,
         dwarf_object_index: &usize,
