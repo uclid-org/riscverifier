@@ -199,7 +199,7 @@ impl AssemblyLine {
             | "div" | "divu" | "rem" | "remu" | "mulw" | "divw" | "divuw" | "remw" | "remuw"
             | "addi" | "slti" | "sltiu" | "xori" | "ori" | "andi" | "slli" | "srli" | "srai"
             | "addiw" | "slliw" | "srliw" | "sraiw" | "jalr" | "lb" | "lh" | "lw" | "lbu"
-            | "lhu" | "lwu" | "ld" | "lui" | "auipc" | "jal" | "csrrw" | "csrrs" | "csrrc"
+            | "lhu" | "lwu" | "ld" | "lui" | "auipc" | "jal" | "csrrwi" | "csrrsi" | "csrrci"
             | "csrrw" | "csrrs" | "csrrc" => Some(&self.operands[0]),
             _ => None,
         }
@@ -260,7 +260,7 @@ impl AssemblyLine {
 
     pub fn csr(&self) -> Option<&InstOperand> {
         match &self.op_code[..] {
-            "csrrw" | "csrrs" | "csrrc" | "csrrw" | "csrrs" | "csrrc" => Some(&self.operands[1]),
+            "csrrwi" | "csrrsi" | "csrrci" | "csrrw" | "csrrs" | "csrrc" => Some(&self.operands[1]),
             _ => None,
         }
     }

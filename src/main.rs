@@ -71,6 +71,9 @@ fn main() {
         .get_matches();
     let xlen = utils::dec_str_to_u64(matches.value_of("xlen").unwrap_or("64"))
         .expect("[main] Unable to parse numberic xlen.");
+    if xlen != 64 {
+        warn!("[main] Non-64 bit XLEN is not yet tested. Use with caution.");
+    }
     if let Some(binary) = matches.value_of("binary") {
         let binary_paths = vec![String::from(binary)];
         let function_blocks = ObjectDumpReader::get_binary_object_dump(&binary_paths);
@@ -78,16 +81,26 @@ fn main() {
         if let Some(ignore_list_str) = matches.value_of("ignore-funcs") {
             ignored_functions = ignore_list_str.split(",").collect::<HashSet<&str>>();
         }
-        let dwarf_reader = DwarfReader::create(&binary_paths);
-        let mut ut =
-            UclidTranslator::create(xlen, &dwarf_reader, &ignored_functions, &function_blocks);
+        let mut dwarf_reader = DwarfReader::create(&binary_paths);
+        debug!(
+            "Global variables: {:#?}",
+            dwarf_reader.get_global_variables()
+        );
         if let Some(write_to_filepath) = matches.value_of("output") {
             if let Some(function_name) = matches.value_of("function") {
+                dwarf_reader.process_related_function_signatures(function_name);
+                let mut ut = UclidTranslator::create(
+                    xlen,
+                    &dwarf_reader,
+                    &ignored_functions,
+                    &function_blocks,
+                );
                 ut.generate_function_model(function_name)
                     .expect("[main] Unable to generate model for function");
+                ut.write_model(&write_to_filepath)
+                    .expect("[main] Unable to write model to file.");
+                ut.reset_model();
             }
-            ut.write_model(&write_to_filepath)
-                .expect("[main] Unable to write model to file.");
         }
     }
 }

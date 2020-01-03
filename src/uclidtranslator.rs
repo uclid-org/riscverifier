@@ -83,7 +83,7 @@ impl<'a> UclidTranslator<'a> {
 
     pub fn generate_function_model(&mut self, function_name: &str) -> Result<(), NoSuchModelError> {
         let function_entry_addr = self.function_addr_from_name(function_name);
-        self.generate_function_model_by_entry_addr(&function_entry_addr, 0);
+        self.generate_function_model_by_entry_addr(&function_entry_addr, 0)?;
         // Generate ignored functions
         for function_name in self.ignored_functions.iter() {
             let function_entry_addr = self.function_addr_from_name(function_name);
@@ -481,7 +481,12 @@ impl<'a> UclidTranslator<'a> {
             && !is_atomic_block
             && !self.ignored_functions.contains(&function_name[..])
         {
+            // FIXME: Make one pass instead of many
             let function_signature = self.dwarf_reader.get_function_signature(&function_name);
+            // let function_signature = FunctionSig {
+            //     in_types: vec![],
+            //     out_type: 0,
+            // };
             debug!(
                 "[add_uclid_procedure] Formals for function {}: {:?}",
                 function_name, function_signature
@@ -604,7 +609,7 @@ impl<'a> UclidTranslator<'a> {
         );
         let mut modified_vars = match assembly_line.base_instruction_name() {
             "sb" | "sh" | "sw" | "sd" => vec!["pc".to_string(), "mem".to_string()],
-            "slli" | "srli" | "csrrw" | "csrrs" | "csrrc" | "csrrw" | "csrrs" | "csrrc" => {
+            "slli" | "srli" | "csrrwi" | "csrrsi" | "csrrci" | "csrrw" | "csrrs" | "csrrc" => {
                 vec!["pc".to_string(), "exception".to_string()]
             }
             _ => vec!["pc".to_string()],
