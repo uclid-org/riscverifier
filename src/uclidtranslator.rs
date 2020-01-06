@@ -11,8 +11,6 @@ use crate::utils::*;
 
 use crate::dwarfreader::{DwarfReader, FunctionSig, GlobalVariable};
 
-const JUMP_INSTS: &'static [&'static str] = &["jal", "jalr"];
-const BRANCH_INSTS: &'static [&'static str] = &["beq", "bne", "blt", "bge", "bltu", "bgeu"];
 const BYTE_SIZE: &'static u64 = &8;
 
 pub struct UclidTranslator<'a> {
@@ -116,14 +114,26 @@ impl<'a> UclidTranslator<'a> {
         let mut define_decls_map = vec![];
         let mut old_define_decls_map = vec![];
         for global_var in self.dwarf_reader.get_global_vars() {
-            let (_name, GlobalVariable { name, size_in_bytes, memory_addr }) = global_var;
+            let (
+                _name,
+                GlobalVariable {
+                    name,
+                    size_in_bytes,
+                    memory_addr,
+                },
+            ) = global_var;
             if *size_in_bytes == 0 {
                 warn!("[generate_global_define_decls] Not generating constant {} because we could not find the size (and by default was set to 0).", name);
                 continue;
             }
             let arguments = format!("i: {}", self.uclid_bv_type(self.xlen));
             let output_type = format!("{}", self.uclid_bv_type(size_in_bytes * (*BYTE_SIZE)));
-            fn body(ut: &UclidTranslator, prefix: &str, memory_addr: &u64, size_in_bytes: &u64) -> String {
+            fn body(
+                ut: &UclidTranslator,
+                prefix: &str,
+                memory_addr: &u64,
+                size_in_bytes: &u64,
+            ) -> String {
                 match size_in_bytes {
                     1 => format!(" {}loadByte_macro({} + i);", prefix, ut.u64_to_uclid_bv_lit(*memory_addr)),
                     2 => format!(" {}loadHalf_macro({} + i);", prefix, ut.u64_to_uclid_bv_lit(*memory_addr)),
@@ -132,17 +142,33 @@ impl<'a> UclidTranslator<'a> {
                     _ => panic!("[generate_global_define_decls] Invalid type size; should be 1,2,4,8. [Size: {}]", size_in_bytes),
                 }
             }
-            define_decls_map.push((format!("{}", name), arguments.clone(), output_type.clone(), body(self, "", memory_addr, size_in_bytes)));
-            old_define_decls_map.push((format!("old_{}", name), arguments.clone(), output_type.clone(), body(self, "old_", memory_addr, size_in_bytes)));
+            define_decls_map.push((
+                format!("{}", name),
+                arguments.clone(),
+                output_type.clone(),
+                body(self, "", memory_addr, size_in_bytes),
+            ));
+            old_define_decls_map.push((
+                format!("old_{}", name),
+                arguments.clone(),
+                output_type.clone(),
+                body(self, "old_", memory_addr, size_in_bytes),
+            ));
         }
         define_decls_map.sort();
         old_define_decls_map.sort();
         for (name, arguments, output_type, body) in define_decls_map {
-            info!("[generate_global_define_decls] Generating define for {}.", name);
+            info!(
+                "[generate_global_define_decls] Generating define for {}.",
+                name
+            );
             self.add_uclid_define(&name, Some(&arguments), &output_type, &body);
         }
         for (name, arguments, output_type, body) in old_define_decls_map {
-            info!("[generate_global_define_decls] Generating define for {}.", name);
+            info!(
+                "[generate_global_define_decls] Generating define for {}.",
+                name
+            );
             self.add_uclid_define(&name, Some(&arguments), &output_type, &body);
         }
     }
@@ -174,7 +200,10 @@ impl<'a> UclidTranslator<'a> {
             });
         }
         // ==================== Add to list of functions to verify ===================== //
-        self.control_stmts.push(format!("    // f{} = verify({});\n", function_name, function_name));
+        self.control_stmts.push(format!(
+            "    // f{} = verify({});\n",
+            function_name, function_name
+        ));
         // ==================== Vector of assembly lines in the function =============== //
         let function_vec = self
             .function_assembly_line_map
@@ -401,9 +430,19 @@ impl<'a> UclidTranslator<'a> {
         let requires_statement = format!(
             "{}\n{}\n",
             arguments_requires_statement,
-            format!("    requires pc == {};", self.u64_to_uclid_bv_lit(*function_addr)),
-            );
-        let ensures_statement = format!("    ensures (pc == {}(ra)[63:1] ++ 0bv1);\n", if modifies_set.contains("ra") { "old" } else { "" });
+            format!(
+                "    requires pc == {};",
+                self.u64_to_uclid_bv_lit(*function_addr)
+            ),
+        );
+        let ensures_statement = format!(
+            "    ensures (pc == {}(ra)[63:1] ++ 0bv1);\n",
+            if modifies_set.contains("ra") {
+                "old"
+            } else {
+                ""
+            }
+        );
         self.add_uclid_procedure(
             &function_name.to_string(),
             Some(&procedure_arguments),
@@ -540,36 +579,39 @@ impl<'a> UclidTranslator<'a> {
                 .map(|s| s.clone())
                 .collect::<HashSet<String>>();;
             procedure_body = format!("{}\n{}", procedure_body, next_uclid_assembly_line,);
-            // Add to procedure declarations if it's the end of a atomic block
+            // Add to basic block as procedure declaration if the assembly line is a jump or the next instruction is an entry point
+            // This is the end of an "atomic" block
             let next_addr = assembly_line.address() + 4;
             let base_instruction_name = assembly_line.base_instruction_name();
-            if JUMP_INSTS
-                .iter()
-                .find(|s| **s == base_instruction_name)
-                .is_some()
-                || BRANCH_INSTS
-                    .iter()
-                    .find(|s| **s == base_instruction_name)
-                    .is_some()
-                || absolute_addrs.get(&next_addr).is_some()
-            {
-                // Add the atomic block procedure
-                &self.add_uclid_procedure(
-                    &UclidTranslator::atomic_block_name(block_entry_address.unwrap()),
-                    None,
-                    &atomic_block_modifies_set,
-                    None,
-                    None,
-                    Some(&procedure_body),
-                    true,
-                );
-                function_modifies_set = function_modifies_set
-                    .union(&atomic_block_modifies_set)
-                    .map(|s| s.clone())
-                    .collect::<HashSet<String>>();
-                procedure_body = String::from("");
-                block_entry_address = None;
-                atomic_block_modifies_set = HashSet::new();
+            let is_jump_entry_guard = absolute_addrs.get(&next_addr).is_some();
+            match (base_instruction_name, is_jump_entry_guard) {
+                ("beq", _)
+                | ("bne", _)
+                | ("blt", _)
+                | ("bge", _)
+                | ("bltu", _)
+                | ("bgeu", _)
+                | ("jal", _)
+                | ("jalr", _)
+                | (_, true) => {
+                    &self.add_uclid_procedure(
+                        &UclidTranslator::atomic_block_name(block_entry_address.unwrap()),
+                        None,
+                        &atomic_block_modifies_set,
+                        None,
+                        None,
+                        Some(&procedure_body),
+                        true,
+                    );
+                    function_modifies_set = function_modifies_set
+                        .union(&atomic_block_modifies_set)
+                        .map(|s| s.clone())
+                        .collect::<HashSet<String>>();
+                    procedure_body = String::from("");
+                    block_entry_address = None;
+                    atomic_block_modifies_set = HashSet::new();
+                }
+                _ => (),
             }
         }
         debug!("function mod set: {:?}", function_modifies_set);
@@ -646,7 +688,10 @@ impl<'a> UclidTranslator<'a> {
     ) {
         self.define_decls.push(format!(
             "  define {}({}): {} = {}\n",
-            function_name, arguments.unwrap_or(&String::from("")), output_type, body
+            function_name,
+            arguments.unwrap_or(&String::from("")),
+            output_type,
+            body
         ));
     }
 
