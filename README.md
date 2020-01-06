@@ -13,6 +13,8 @@ To build the project, run:
 
 `cargo build`
 
+# RISC-V Assembly Uclid5 models
+
 ## Generating Uclid5 models
 
 To generate a model of a function in a binary, run the following command:
