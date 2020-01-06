@@ -1,11 +1,21 @@
 # RISC-Verifier
 A translator from RISC-V binary to Uclid5.
 
-#Installation
+# Installation
 
 ## Pre-requisites
 
-You will need to install [Uclid5](https://github.com/uclid-org/uclid) (note that it needs to be Pranav's branch where the old operator in ensures statements are fixed -- Jan.6.2020) and riscv-gnu-toolchain from [riscv](https://github.com/riscv). Make sure you have an alias to the riscv disassembler (riscv64-unknown-elf-objdump). To generate a model of a function in a binary, run the following command:
+You will need to install [Uclid5](https://github.com/uclid-org/uclid) (note that it needs to be Pranav's branch where the old operator in ensures statements are fixed -- Jan.6.2020) and riscv-gnu-toolchain from [riscv](https://github.com/riscv). Make sure you have an alias to the riscv disassembler (riscv64-unknown-elf-objdump).
+
+## Building the project
+
+To build the project, run:
+
+`cargo build`
+
+## Generating Uclid5 models
+
+To generate a model of a function in a binary, run the following command:
 
 `./target/debug/riscverifier /path/to/binary -f function_to_verify -o output_filename.ucl -i ignored,functions,list`
 
@@ -18,10 +28,6 @@ Remember to run with Boolector or CVC4 or else these models may take forever to 
 `uclid -s "cvc4 --incremental --lang smt2 --force-logic=ALL" model.ucl`
 
 You may replace ALL with a more restrictive logic.
-
-## Generating uclid5 models
-
-WIP
 
 ## Notes
 
