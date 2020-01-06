@@ -81,17 +81,12 @@ fn main() {
         if let Some(ignore_list_str) = matches.value_of("ignore-funcs") {
             ignored_functions = ignore_list_str.split(",").collect::<HashSet<&str>>();
         }
-        let mut dwarf_reader = DwarfReader::create(&binary_paths);
-        debug!(
-            "Global variables: {:#?}",
-            dwarf_reader.get_global_variables()
-        );
+        let mut dwarf_reader = DwarfReader::create(xlen, &binary_paths);
         if let Some(write_to_filepath) = matches.value_of("output") {
             if let Some(function_name) = matches.value_of("function") {
-                dwarf_reader.process_related_function_signatures(function_name);
                 let mut ut = UclidTranslator::create(
                     xlen,
-                    &dwarf_reader,
+                    &mut dwarf_reader,
                     &ignored_functions,
                     &function_blocks,
                 );

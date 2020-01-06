@@ -9,19 +9,23 @@ use crate::objectdumpreader::{AssemblyLine, InstOperand};
 
 use crate::utils::*;
 
-use crate::dwarfreader::{DwarfReader, FunctionSig};
+use crate::dwarfreader::{DwarfReader, FunctionSig, GlobalVariable};
 
 const JUMP_INSTS: &'static [&'static str] = &["jal", "jalr"];
 const BRANCH_INSTS: &'static [&'static str] = &["beq", "bne", "blt", "bge", "bltu", "bgeu"];
 const BYTE_SIZE: &'static u64 = &8;
 
 pub struct UclidTranslator<'a> {
+    // Architecture information
     xlen: u64,
     inst_length: u64,
-    dwarf_reader: &'a DwarfReader,
-    function_vecs: &'a HashMap<u64, Vec<AssemblyLine>>,
+    // Helpers
+    dwarf_reader: &'a mut DwarfReader,
+    // Context
+    function_assembly_line_map: &'a HashMap<u64, Vec<AssemblyLine>>,
     ignored_functions: &'a HashSet<&'a str>,
     generated_functions: HashSet<String>,
+    // Uclid model
     import_decls: Vec<String>,
     define_decls: Vec<String>,
     state_var_decls: Vec<String>,
@@ -39,15 +43,15 @@ pub struct UclidTranslator<'a> {
 impl<'a> UclidTranslator<'a> {
     pub fn create(
         xlen: u64,
-        dwarf_reader: &'a DwarfReader,
+        dwarf_reader: &'a mut DwarfReader,
         ignored_functions: &'a HashSet<&'a str>,
-        function_vecs: &'a HashMap<u64, Vec<AssemblyLine>>,
+        function_assembly_line_map: &'a HashMap<u64, Vec<AssemblyLine>>,
     ) -> UclidTranslator<'a> {
         UclidTranslator {
             xlen,
             inst_length: 4,
             dwarf_reader,
-            function_vecs,
+            function_assembly_line_map,
             ignored_functions,
             generated_functions: HashSet::new(),
             import_decls: vec![],
@@ -83,36 +87,83 @@ impl<'a> UclidTranslator<'a> {
 
     pub fn generate_function_model(&mut self, function_name: &str) -> Result<(), NoSuchModelError> {
         let function_entry_addr = self.function_addr_from_name(function_name);
-        self.generate_function_model_by_entry_addr(&function_entry_addr, 0)?;
+        self.generate_function_procedures_by_entry_addr(&function_entry_addr, 0)?;
         // Generate ignored functions
         for function_name in self.ignored_functions.iter() {
-            let function_entry_addr = self.function_addr_from_name(function_name);
             self.add_uclid_procedure(
-                &function_entry_addr,
+                &function_name.to_string(),
+                None,
                 &HashSet::new(),
-                &String::from(""),
+                None,
+                None,
+                None,
                 true,
-                false,
             )
         }
+        // Generate the define macros for global variables
+        self.generate_global_define_decls();
+        // Add default control statements
+        self.generate_control_statements();
         Ok(())
     }
 
-    fn generate_function_model_by_entry_addr(
+    fn generate_control_statements(&mut self) {
+        self.control_stmts.push("    check;\n".to_string());
+        self.control_stmts.push("    print_results;\n".to_string());
+    }
+
+    fn generate_global_define_decls(&mut self) {
+        let mut define_decls_map = vec![];
+        let mut old_define_decls_map = vec![];
+        for global_var in self.dwarf_reader.get_global_vars() {
+            let (_name, GlobalVariable { name, size_in_bytes, memory_addr }) = global_var;
+            if *size_in_bytes == 0 {
+                warn!("[generate_global_define_decls] Not generating constant {} because we could not find the size (and by default was set to 0).", name);
+                continue;
+            }
+            let arguments = format!("i: {}", self.uclid_bv_type(self.xlen));
+            let output_type = format!("{}", self.uclid_bv_type(size_in_bytes * (*BYTE_SIZE)));
+            fn body(ut: &UclidTranslator, prefix: &str, memory_addr: &u64, size_in_bytes: &u64) -> String {
+                match size_in_bytes {
+                    1 => format!(" {}loadByte_macro({} + i);", prefix, ut.u64_to_uclid_bv_lit(*memory_addr)),
+                    2 => format!(" {}loadHalf_macro({} + i);", prefix, ut.u64_to_uclid_bv_lit(*memory_addr)),
+                    4 => format!(" {}loadWord_macro({} + i);", prefix, ut.u64_to_uclid_bv_lit(*memory_addr)),
+                    8 => format!(" {}loadDouble_macro({} + i);", prefix, ut.u64_to_uclid_bv_lit(*memory_addr)),
+                    _ => panic!("[generate_global_define_decls] Invalid type size; should be 1,2,4,8. [Size: {}]", size_in_bytes),
+                }
+            }
+            define_decls_map.push((format!("{}", name), arguments.clone(), output_type.clone(), body(self, "", memory_addr, size_in_bytes)));
+            old_define_decls_map.push((format!("old_{}", name), arguments.clone(), output_type.clone(), body(self, "old_", memory_addr, size_in_bytes)));
+        }
+        define_decls_map.sort();
+        old_define_decls_map.sort();
+        for (name, arguments, output_type, body) in define_decls_map {
+            info!("[generate_global_define_decls] Generating define for {}.", name);
+            self.add_uclid_define(&name, Some(&arguments), &output_type, &body);
+        }
+        for (name, arguments, output_type, body) in old_define_decls_map {
+            info!("[generate_global_define_decls] Generating define for {}.", name);
+            self.add_uclid_define(&name, Some(&arguments), &output_type, &body);
+        }
+    }
+
+    fn generate_function_procedures_by_entry_addr(
         &mut self,
         function_addr: &u64,
         level: usize,
     ) -> Result<(), NoSuchModelError> {
         let function_name = self.function_name_from_addr(function_addr);
+        // ==================== Ignore ignored functions ================================ //
         if self.ignored_functions.get(&function_name).is_some() {
             debug!(
-                "[generate_function_model_by_entry_addr] Ignored function {}.",
+                "[generate_function_procedures_by_entry_addr] Ignored function {}.",
                 function_name
             );
             return Err(NoSuchModelError {
                 recursive_function: function_name.to_string(),
             });
         }
+        // ==================== Ignored already generated functions ==================== //
         if self.generated_functions.contains(function_name) {
             debug!(
                 "[generate_function_model] Cyclic function call for function or already generated {}.",
@@ -122,23 +173,25 @@ impl<'a> UclidTranslator<'a> {
                 recursive_function: function_name.to_string(),
             });
         }
-        // Vector of assembly lines in the function
+        // ==================== Add to list of functions to verify ===================== //
+        self.control_stmts.push(format!("    // f{} = verify({});\n", function_name, function_name));
+        // ==================== Vector of assembly lines in the function =============== //
         let function_vec = self
-            .function_vecs
+            .function_assembly_line_map
             .get(function_addr)
-            .expect("[generate_function_model_by_entry_addr] Invalid function entry address.");
-        // Generate state variables
+            .expect("[generate_function_procedures_by_entry_addr] Invalid function entry address.");
+        // Generate the state variables used by the function
         self.generate_state_variables(function_vec);
-        // Generate the callee functions DFS
+        // Generate the callee functions recursively (DFS)
         let mut modifies_set = HashSet::new();
         let absolute_target_addrs = UclidTranslator::absolute_addrs_set(function_vec);
         for addr in absolute_target_addrs {
             if self.is_function_entry_addr(&addr) {
                 let function_name = self.function_name_from_addr(&addr);
-                match self.generate_function_model_by_entry_addr(&addr, level + 1) {
+                match self.generate_function_procedures_by_entry_addr(&addr, level + 1) {
                     Ok(_) => {
                         debug!(
-                            "[generate_function_model_by_entry_addr] Generated a function model for the callee {}.",
+                            "[generate_function_procedures_by_entry_addr] Generated a function model for the callee {}.",
                             function_name
                         );
                         modifies_set = modifies_set.union(
@@ -146,7 +199,7 @@ impl<'a> UclidTranslator<'a> {
                                 .modifies_set_map
                                 .get(&addr)
                                 .unwrap_or_else(|| panic!(
-                                    "[generate_function_model_by_entry_addr] Missing modifies set for {}.",
+                                    "[generate_function_procedures_by_entry_addr] Missing modifies set for {}.",
                                     function_name
                                     )
                                 ),
@@ -161,16 +214,16 @@ impl<'a> UclidTranslator<'a> {
                     .find(|line| line.address() == addr)
                     .is_none()
                 {
-                    panic!("[generate_function_model_by_entry_addr] Cross function basic block calls not supported! Occured in function {} at address {:#x}", function_name, addr);
+                    panic!("[generate_function_procedures_by_entry_addr] Cross function basic block calls not supported! Occured in function {} at address {:#x}", function_name, addr);
                 }
             }
         }
         debug!(
-            "[generate_function_model_by_entry_addr] Trying to generate...{}{}",
+            "[generate_function_procedures_by_entry_addr] Trying to generate...{}{}",
             format!("{:.<1$}", "", level * 2),
             function_vec[0].function_name()
         );
-        // Generate the basic blocks for each function
+        // ==================== Generate the basic blocks for each function ==================== //
         let atomic_blocks_modifies_set = self.generate_function_atomic_blocks(function_vec);
         modifies_set = modifies_set
             .union(&atomic_blocks_modifies_set)
@@ -201,7 +254,7 @@ impl<'a> UclidTranslator<'a> {
                                     ts.add_dependency(atomic_block_entry_addr.to_string(), atomic_block_jump_addr.to_string());
                                 }
                             },
-                            _ => panic!("[generate_function_model_by_entry_addr] Not a jump instruction."),
+                            _ => panic!("[generate_function_procedures_by_entry_addr] Not a jump instruction."),
                         }
                         atomic_block_entry_addr = atomic_block_fallthrough_addr;
                     } else {
@@ -214,15 +267,15 @@ impl<'a> UclidTranslator<'a> {
                 _ => (),
             };
         }
-        // Generate the procedures for functions recursively
-        let mut procedure_body = String::from("");
+        // ==================== Generate the procedures for functions recursively ==================== //
+        let mut procedure_body = self.function_body_prologue();
         loop {
             let mut v = ts.pop_all();
             if v.is_empty() {
                 // If ts.pop_all() is empty and len() != 0, then there is a cycle (from the documentation of topological sort)
                 if ts.len() != 0 {
                     debug!(
-                        "[generate_function_model] There is a cyclic dependency in the function {}!!!",
+                        "[generate_function_procedures_by_entry_addr] There is a cyclic dependency in the function {}!!!",
                         function_name
                     );
                     return Err(NoSuchModelError {
@@ -241,7 +294,7 @@ impl<'a> UclidTranslator<'a> {
             for addr in v {
                 if let Ok(u64_addr) = dec_str_to_u64(&addr[..]) {
                     procedure_body = format!(
-                        "{}      if (pc == {}) {{\n{}\n      }}\n",
+                        "{}      if (pc == {}) {{\n{}\n",
                         procedure_body,
                         &self.u64_to_uclid_bv_lit(u64_addr),
                         self.call_atomic_block(u64_addr)
@@ -261,7 +314,7 @@ impl<'a> UclidTranslator<'a> {
                             .enumerate()
                             .map(|(index, name_size_pair)| {
                                 if index > 7 {
-                                    panic!("[generate_function_model_by_entry_addr] Currently not supporting more than 8 arguments.");
+                                    panic!("[generate_function_procedures_by_entry_addr] Currently not supporting more than 8 arguments.");
                                 }
                                 format!("a{}[{}:0]", index, name_size_pair.1 * (*BYTE_SIZE) - 1)
                             }).collect::<Vec<String>>().join(", ")
@@ -269,37 +322,118 @@ impl<'a> UclidTranslator<'a> {
                             "".to_string()
                         };
                         procedure_body = format!(
-                            "{}      assert(pc == {});\n{}\n      assert(pc == {});\n",
+                            "{}        assert(pc == {});\n{}\n        assert(pc == {});\n",
                             procedure_body,
                             self.u64_to_uclid_bv_lit(absolute_jump_addr),
-                            format!("      call () = {}({});", callee_name, callee_arguments),
+                            format!("        call () = {}({});", callee_name, callee_arguments),
                             self.u64_to_uclid_bv_lit(fallthrough_addr),
                         );
                         if !self.ignored_functions.contains(callee_name) {
                             modifies_set = modifies_set
                                 .union(&self.modifies_set_map.get(&absolute_jump_addr).unwrap_or_else(|| {
-                                        panic!("[generate_function_model_by_entry_addr] Missing modifies set for function {}.", callee_name);
+                                        panic!("[generate_function_procedures_by_entry_addr] Missing modifies set for function {}.", callee_name);
                                 }))
                                 .map(|s| s.clone())
                                 .collect::<HashSet<String>>();
                         }
                     }
+                    procedure_body = format!("{}      }}\n", procedure_body);
                 }
             }
         }
-        self.add_uclid_procedure(&function_addr, &modifies_set, &procedure_body, false, false);
-        // Update modifies set for this function
+        procedure_body = format!("{}{}", procedure_body, self.function_body_epilogue());
+        // ==================== Get the arugments and requires statement ==================== //
+        let (procedure_arguments, arguments_requires_statement) = if self
+            .is_function_entry_addr(function_addr)
+            && !self.ignored_functions.contains(&function_name[..])
+        {
+            let function_signature = self
+                .dwarf_reader
+                .get_function_signature(&function_name)
+                .clone();
+            debug!(
+                "[generate_function_procedures_by_entry_addr] Formals for function {}: {:?}",
+                function_name, function_signature
+            );
+            self.function_signatures
+                .insert(function_name.to_string(), function_signature.clone());
+            let signature_requires_statement = if function_signature.in_types.len() > 0 {
+                format!("    requires {};", function_signature
+                            .in_types
+                            .iter()
+                            .enumerate()
+                            .map(|(index, name_size_pair)| {
+                                if index > 7 {
+                                    panic!("[generate_function_procedures_by_entry_addr] Currently not supporting arguments with more than 8 arguments.");
+                                }
+                                format!(
+                                    "(a{}[{}:0] == {})",
+                                    index,
+                                    (name_size_pair.1 * (*BYTE_SIZE) - 1),
+                                    name_size_pair.0
+                                )
+                            })
+                            .collect::<Vec<String>>()
+                            .join(" && "))
+            } else {
+                "".to_string()
+            };
+            (
+                format!(
+                    "{}",
+                    function_signature
+                        .in_types
+                        .iter()
+                        .map(|(formal_name, byte_size)| format!(
+                            "{}: {}",
+                            formal_name,
+                            self.uclid_bv_type(*byte_size * (*BYTE_SIZE))
+                        ))
+                        .collect::<Vec<String>>()
+                        .join(", ")
+                ),
+                signature_requires_statement,
+            )
+        } else {
+            // Ignored functions or not entry
+            ("".to_string(), "".to_string())
+        };
+        let requires_statement = format!(
+            "{}\n{}\n",
+            arguments_requires_statement,
+            format!("    requires pc == {};", self.u64_to_uclid_bv_lit(*function_addr)),
+            );
+        let ensures_statement = format!("    ensures (pc == {}(ra)[63:1] ++ 0bv1);\n", if modifies_set.contains("ra") { "old" } else { "" });
+        self.add_uclid_procedure(
+            &function_name.to_string(),
+            Some(&procedure_arguments),
+            &modifies_set,
+            Some(&requires_statement),
+            Some(&ensures_statement),
+            Some(&procedure_body),
+            false,
+        );
+        // ======================= Update modifies set for this function ======================= //
         self.modifies_set_map.insert(*function_addr, modifies_set);
         Ok(())
     }
 
+    fn function_body_prologue(&self) -> String {
+        let save_old_memory = "      assume (old_mem == mem);\n";
+        format!("{}", save_old_memory)
+    }
+
+    fn function_body_epilogue(&self) -> String {
+        String::from("")
+    }
+
     fn function_name_from_addr(&self, address: &u64) -> &'a str {
-        self.function_vecs.get(address).unwrap()[0].function_name()
+        self.function_assembly_line_map.get(address).unwrap()[0].function_name()
     }
 
     fn function_addr_from_name(&self, function_name: &str) -> u64 {
         let function_vec = self
-            .function_vecs
+            .function_assembly_line_map
             .values()
             .find(|function_vec| function_vec[0].function_name() == function_name)
             .expect("[generate_function_model] Unable to find function.");
@@ -307,7 +441,7 @@ impl<'a> UclidTranslator<'a> {
     }
 
     fn is_function_entry_addr(&self, address: &u64) -> bool {
-        self.function_vecs.get(address).is_some()
+        self.function_assembly_line_map.get(address).is_some()
     }
 
     fn call_atomic_block(&self, address: u64) -> String {
@@ -341,6 +475,7 @@ impl<'a> UclidTranslator<'a> {
         // Add other system variables
         self.add_uclid_state_variable(&format!("pc"), &self.uclid_bv_type(self.xlen));
         self.add_uclid_state_variable(&format!("mem"), &self.uclid_mem_type());
+        self.add_uclid_state_variable(&format!("old_mem"), &self.uclid_mem_type());
         self.add_uclid_state_variable(&format!("current_priv"), &self.uclid_bv_type(2));
         self.add_uclid_state_variable(&format!("exception"), &self.uclid_bv_type(self.xlen));
         self.add_uclid_const_variable(
@@ -420,10 +555,12 @@ impl<'a> UclidTranslator<'a> {
             {
                 // Add the atomic block procedure
                 &self.add_uclid_procedure(
-                    &block_entry_address.unwrap(),
+                    &UclidTranslator::atomic_block_name(block_entry_address.unwrap()),
+                    None,
                     &atomic_block_modifies_set,
-                    &procedure_body,
-                    true,
+                    None,
+                    None,
+                    Some(&procedure_body),
                     true,
                 );
                 function_modifies_set = function_modifies_set
@@ -460,75 +597,20 @@ impl<'a> UclidTranslator<'a> {
 
     fn add_uclid_procedure(
         &mut self,
-        entry_addr: &u64,
+        function_name: &String,
+        procedure_arguments: Option<&String>,
         modifies_set: &HashSet<String>,
-        body: &String,
+        requires_statement: Option<&String>,
+        ensures_statement: Option<&String>,
+        body: Option<&String>,
         inline: bool,
-        is_atomic_block: bool,
     ) {
-        let function_name = if self.is_function_entry_addr(entry_addr) && !is_atomic_block {
-            self.function_name_from_addr(entry_addr).to_string()
-        } else {
-            UclidTranslator::atomic_block_name(*entry_addr)
-        };
-        if self.generated_functions.contains(&function_name) {
-            debug!("Already added {}.", function_name);
+        if self.generated_functions.contains(function_name) {
+            debug!("Already added procedure {}.", function_name);
             return;
         } else {
             self.generated_functions.insert(function_name.to_string());
         }
-        let (procedure_signature, signature_requires_statement) = if self
-            .is_function_entry_addr(entry_addr)
-            && !is_atomic_block
-            && !self.ignored_functions.contains(&function_name[..])
-        {
-            let function_signature = self.dwarf_reader.get_function_signature(&function_name);
-            debug!(
-                "[add_uclid_procedure] Formals for function {}: {:?}",
-                function_name, function_signature
-            );
-            self.function_signatures
-                .insert(function_name.clone(), function_signature.clone());
-            let signature_requires_statement = if function_signature.in_types.len() > 0 {
-                format!("    requires {};", function_signature
-                            .in_types
-                            .iter()
-                            .enumerate()
-                            .map(|(index, name_size_pair)| {
-                                if index > 7 {
-                                    panic!("[add_uclid_procedure] Currently not supporting arguments with more than 8 arguments.");
-                                }
-                                format!(
-                                    "(a{}[{}:0] == {})",
-                                    index,
-                                    (name_size_pair.1 * (*BYTE_SIZE) - 1),
-                                    name_size_pair.0
-                                )
-                            })
-                            .collect::<Vec<String>>()
-                            .join(" && "))
-            } else {
-                "".to_string()
-            };
-            (
-                format!(
-                    "{}",
-                    function_signature
-                        .in_types
-                        .iter()
-                        .map(|(formal_name, byte_size)| format!(
-                            "{}: {}",
-                            formal_name,
-                            self.uclid_bv_type(*byte_size * (*BYTE_SIZE))
-                        ))
-                        .collect::<Vec<String>>()
-                        .join(", ")
-                ),
-                signature_requires_statement,
-            )
-        } else {
-            ("".to_string(), "".to_string())
-        };
         let modifies_string = format!(
             "    modifies {};",
             modifies_set
@@ -537,20 +619,35 @@ impl<'a> UclidTranslator<'a> {
                 .collect::<Vec<_>>()
                 .join(", ")
         );
+        let empty_string = String::from("");
         let procedure_decl = format!(
-            "  procedure {} {}({}) \n{}\n{}\n    {{\n{}\n    }}\n\n",
+            "  procedure {} {}({}) \n{}\n{}{}    {{\n{}\n    }}\n\n",
             if inline { "[inline]" } else { "" },
             function_name,
-            procedure_signature,
+            procedure_arguments.unwrap_or(&empty_string),
             if modifies_set.len() > 0 {
                 modifies_string
             } else {
                 "".to_string()
             },
-            signature_requires_statement,
-            body
+            requires_statement.unwrap_or(&empty_string),
+            ensures_statement.unwrap_or(&empty_string),
+            body.unwrap_or(&empty_string)
         );
         self.procedures_decls.push(procedure_decl);
+    }
+
+    fn add_uclid_define(
+        &mut self,
+        function_name: &String,
+        arguments: Option<&String>,
+        output_type: &String,
+        body: &String,
+    ) {
+        self.define_decls.push(format!(
+            "  define {}({}): {} = {}\n",
+            function_name, arguments.unwrap_or(&String::from("")), output_type, body
+        ));
     }
 
     fn assembly_line_to_uclid(&self, assembly_line: &AssemblyLine) -> (HashSet<String>, String) {
