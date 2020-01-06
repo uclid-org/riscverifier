@@ -11,6 +11,14 @@ You will need to install [Uclid5](https://github.com/uclid-org/uclid) (note that
 
 This will generate a Uclid5 model of the function in assembly by recursively finding all the functions called by function\_to\_verify, generate a procedure for each, including its basic blocks, but ignore the functions specified by the -i flag. The ignored functions are replaced by a stub Uclid5 procedure.
 
+## Running the generated models and scalability
+
+Remember to run with Boolector or CVC4 or else these models may take forever to verify. Note that there are no quantifiers in any of these generated models; they only use bitvectors and arrays (Jan.6.2020). The option for Uclid5 to run with the external solver CVC4 is:
+
+`uclid -s "cvc4 --incremental --lang smt2 --force-logic=ALL" model.ucl`
+
+You may replace ALL with a more restrictive logic.
+
 ## Generating uclid5 models
 
 WIP
@@ -23,15 +31,14 @@ Jan 6th 2020
 
 Jan 4th 2020
 * Added condition for correct return "ensures (pc == old(ra)[63:1] ++ 0bv1);"
-* Moved old_mem == mem constraint to assumption at the beginning of functions
+* Moved old\_mem == mem constraint to assumption at the beginning of functions
 * Added verify for each procedure in control block (commented out), e.g.
-** f1 = verify(function1);
-** fn = verify(functionn);
-** check;
-** print_results;
-* Assumptions added: ensures (pc == old(ra)[63:1] ++ 0bv1) if ra is modified or (pc == ra[63:1] ++ 0bv1) if it isn't. Add into procedure body tmp_ra = ra, and then pc = tmp_ra[63:1] ++ 0bv1 so this passes. Also assign memory to old_mem at the end of the function procedure and ensure (mem == old(mem)). These assumptions are used to restore the stack frame after a call. May need to use temporary variables for other registers that need to be preserved across call frames.
+    * f1 = verify(function1);
+	* fn = verify(functionn);
+	* check;
+	* print\_results;
+* Assumptions added: ensures (pc == old(ra)[63:1] ++ 0bv1) if ra is modified or (pc == ra[63:1] ++ 0bv1) if it isn't. 
 
 ## TODO
 
 Jan 4th 2020
-* Fix the addr / rs + imm in prelude so it's consistent
