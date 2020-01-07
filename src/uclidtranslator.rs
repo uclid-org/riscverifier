@@ -600,16 +600,6 @@ impl<'a> UclidTranslator<'a> {
             &self.uclid_bv_type(self.xlen),
             Some(self.u64_to_uclid_bv_lit(0)),
         );
-        // self.add_uclid_const_variable(
-        //     &format!("stack_top"),
-        //     &self.uclid_bv_type(self.xlen),
-        //     Some(self.u64_to_uclid_bv_lit(100000)),
-        // );
-        // self.add_uclid_const_variable(
-        //     &format!("stack_bottom"),
-        //     &self.uclid_bv_type(self.xlen),
-        //     Some(self.u64_to_uclid_bv_lit(200000)),
-        // );
     }
 
     fn add_uclid_state_variable(&mut self, state_variable_id: &String, type_decl: &String) {
