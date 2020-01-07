@@ -31,6 +31,10 @@ Remember to run with Boolector or CVC4 or else these models may take forever to 
 
 You may replace ALL with a more restrictive logic.
 
+Example:
+
+`time RUST_BACKTRACE=1 RUST_LOG="debug" ./target/debug/riscverifier ~/workspace/uclid5/riscvtest/test_bin/test-struct-2.out -f main -s Foo,Bar -a Foo,int -o /Users/kcheang/workspace/riscverifier/testingoutput2 2>&1 | less`
+
 ## Notes
 
 Jan 6th 2020
