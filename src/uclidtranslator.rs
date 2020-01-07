@@ -128,7 +128,11 @@ impl<'a> UclidTranslator<'a> {
             if let Some(type_decl) = type_decls_map.get(&decl_id.to_string()) {
                 debug!("[generate_array_helper_macros]");
                 let name = format!("{}_array_index", type_decl.name.replace(" ", "_"));
-                let arguments = format!("array_base_ptr: {}, i: {}", self.uclid_bv_type(self.xlen), self.uclid_bv_type(self.xlen));
+                let arguments = format!(
+                    "array_base_ptr: {}, i: {}",
+                    self.uclid_bv_type(self.xlen),
+                    self.uclid_bv_type(self.xlen)
+                );
                 let output_type = self.uclid_bv_type(self.xlen);
                 let multiply_expr = format!("{:b}", type_decl.size_in_bytes)
                     .chars()
@@ -177,7 +181,11 @@ impl<'a> UclidTranslator<'a> {
                 for field_decl in &type_decl.field_decls {
                     // Offset macro
                     let name = format!("{}_{}", type_decl.name, field_decl.field_name);
-                    let arguments = format!("memP: {}, ptr: {}", self.uclid_mem_type(), self.uclid_bv_type(self.xlen));
+                    let arguments = format!(
+                        "memP: {}, ptr: {}",
+                        self.uclid_mem_type(),
+                        self.uclid_bv_type(self.xlen)
+                    );
                     let output_type = self.uclid_bv_type(self.xlen);
                     let body = format!(
                         "ptr + {};",
@@ -511,9 +519,9 @@ impl<'a> UclidTranslator<'a> {
             // FIXME: Change constants
             "{}\n    requires pc == {};\n    requires (1{} <= sp && sp <= 1000{});\n    requires (zero_const == 0bv64);\n",
             arguments_requires_statement,
+            self.u64_to_uclid_bv_lit(*function_addr),
             self.uclid_bv_type(self.xlen),
-            self.uclid_bv_type(self.xlen),
-            self.u64_to_uclid_bv_lit(*function_addr)
+            self.uclid_bv_type(self.xlen)
         );
         let ensures_statement = format!(
             "    ensures (pc == {}(ra)[63:1] ++ 0bv1);\n",
