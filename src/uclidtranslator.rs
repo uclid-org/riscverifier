@@ -22,6 +22,8 @@ pub struct UclidTranslator<'a> {
     // Context
     function_assembly_line_map: &'a HashMap<u64, Vec<AssemblyLine>>,
     ignored_functions: &'a HashSet<&'a str>,
+    struct_macro_ids: &'a HashSet<&'a str>,
+    array_macro_ids: &'a HashSet<&'a str>,
     generated_functions: HashSet<String>,
     // Uclid model
     import_decls: Vec<String>,
@@ -43,6 +45,8 @@ impl<'a> UclidTranslator<'a> {
         xlen: u64,
         dwarf_reader: &'a mut DwarfReader,
         ignored_functions: &'a HashSet<&'a str>,
+        struct_macro_ids: &'a HashSet<&'a str>,
+        array_macro_ids: &'a HashSet<&'a str>,
         function_assembly_line_map: &'a HashMap<u64, Vec<AssemblyLine>>,
     ) -> UclidTranslator<'a> {
         UclidTranslator {
@@ -51,6 +55,8 @@ impl<'a> UclidTranslator<'a> {
             dwarf_reader,
             function_assembly_line_map,
             ignored_functions,
+            struct_macro_ids,
+            array_macro_ids,
             generated_functions: HashSet::new(),
             import_decls: vec![],
             define_decls: vec![],
@@ -98,6 +104,10 @@ impl<'a> UclidTranslator<'a> {
                 true,
             )
         }
+        // Generate the define macros for array operations
+        self.generate_array_helper_macros();
+        // Generate the define macros for structs operations
+        self.generate_struct_define_decls();
         // Generate the define macros for global variables
         self.generate_global_define_decls();
         // Add default control statements
@@ -110,9 +120,114 @@ impl<'a> UclidTranslator<'a> {
         self.control_stmts.push("    print_results;\n".to_string());
     }
 
+    fn generate_array_helper_macros(&mut self) {
+        let type_decls_map = self.dwarf_reader.get_type_declarations();
+        // Vector of tuples (define function name, arguments, output type, body) for uclid5 define declarations
+        let mut define_decls_vec = vec![];
+        for decl_id in self.array_macro_ids {
+            if let Some(type_decl) = type_decls_map.get(&decl_id.to_string()) {
+                debug!("[generate_array_helper_macros]");
+                let name = format!("{}_array_index", type_decl.name.replace(" ", "_"));
+                let arguments = format!("array_base_ptr: {}, i: {}", self.uclid_bv_type(self.xlen), self.uclid_bv_type(self.xlen));
+                let output_type = self.uclid_bv_type(self.xlen);
+                let multiply_expr = format!("{:b}", type_decl.size_in_bytes)
+                    .chars()
+                    .rev()
+                    .fold((String::from(""), 0), |acc, x| {
+                        if x == '1' {
+                            (
+                                format!(
+                                    "bv_left_shift({}, i){}{}",
+                                    self.u64_to_uclid_bv_lit(acc.1),
+                                    if acc.0.len() == 0 { "" } else { " + " },
+                                    acc.0
+                                ),
+                                acc.1 + 1,
+                            )
+                        } else {
+                            (acc.0, acc.1 + 1)
+                        }
+                    })
+                    .0;
+                let body = format!("array_base_ptr + {};", multiply_expr);
+                define_decls_vec.push((name, arguments, output_type, body));
+            } else {
+                panic!(
+                    "[generate_array_helper_macros] No such declaration {}.",
+                    decl_id
+                );
+            }
+        }
+        for (name, arguments, output_type, body) in define_decls_vec {
+            info!("[generate_array_helper_macros] Generating define {}.", name);
+            self.add_uclid_define(&name, Some(&arguments), &output_type, &body);
+        }
+    }
+
+    fn generate_struct_define_decls(&mut self) {
+        let type_decls_map = self.dwarf_reader.get_type_declarations();
+        // Vector of tuples (define function name, arguments, output type, body) for uclid5 define declarations
+        let mut define_decls_vec = vec![];
+        for decl_id in self.struct_macro_ids {
+            if let Some(type_decl) = type_decls_map.get(&decl_id.to_string()) {
+                debug!(
+                    "[generate_struct_define_decls] Generating define macros for {:#?}.",
+                    type_decl.name
+                );
+                for field_decl in &type_decl.field_decls {
+                    // Offset macro
+                    let name = format!("{}_{}", type_decl.name, field_decl.field_name);
+                    let arguments = format!("memP: {}, ptr: {}", self.uclid_mem_type(), self.uclid_bv_type(self.xlen));
+                    let output_type = self.uclid_bv_type(self.xlen);
+                    let body = format!(
+                        "ptr + {};",
+                        self.u64_to_uclid_bv_lit(field_decl.field_member_location * (*BYTE_SIZE))
+                    );
+                    define_decls_vec.push((name.clone(), arguments.clone(), output_type, body));
+                    // Deref macro
+                    let name = format!("deref_{}", name.clone());
+                    let output_type = match field_decl.field_size_in_bytes {
+                        1 | 2 | 4 | 8 => {
+                            self.uclid_bv_type(field_decl.field_size_in_bytes * (*BYTE_SIZE))
+                        }
+                        _ => {
+                            info!("[generate_struct_define_decls] Skipped generating deref function {}.", name);
+                            continue;
+                        }
+                    };
+                    let body = match field_decl.field_size_in_bytes {
+                        1 => format!("loadByte_macroP(memP, ptr);"),
+                        2 => format!("loadHalf_macroP(memP, ptr);"),
+                        4 => format!("loadWord_macroP(memP, ptr);"),
+                        8 => format!("loadDouble_macroP(memP, ptr);"),
+                        _ => {
+                            info!("[generate_struct_define_decls] ");
+                            continue;
+                        }
+                    };
+                    define_decls_vec.push((
+                        name.clone(),
+                        arguments.clone(),
+                        output_type.clone(),
+                        body,
+                    ));
+                }
+            } else {
+                panic!(
+                    "[generate_struct_define_decls] No such declaration {}.",
+                    decl_id
+                );
+            }
+        }
+        for (name, arguments, output_type, body) in define_decls_vec {
+            info!("[generate_global_define_decls] Generating define {}.", name);
+            self.add_uclid_define(&name, Some(&arguments), &output_type, &body);
+        }
+    }
+
     fn generate_global_define_decls(&mut self) {
-        let mut define_decls_map = vec![];
-        let mut old_define_decls_map = vec![];
+        // Vector of tuples (define function name, output type, body) for uclid5 define declarations
+        let mut define_decls_vec = vec![];
         for global_var in self.dwarf_reader.get_global_vars() {
             let (
                 _name,
@@ -122,54 +237,19 @@ impl<'a> UclidTranslator<'a> {
                     memory_addr,
                 },
             ) = global_var;
+            let name = format!("global_{}", name);
             if *size_in_bytes == 0 {
                 warn!("[generate_global_define_decls] Not generating constant {} because we could not find the size (and by default was set to 0).", name);
                 continue;
             }
-            let arguments = format!("i: {}", self.uclid_bv_type(self.xlen));
-            let output_type = format!("{}", self.uclid_bv_type(size_in_bytes * (*BYTE_SIZE)));
-            fn body(
-                ut: &UclidTranslator,
-                prefix: &str,
-                memory_addr: &u64,
-                size_in_bytes: &u64,
-            ) -> String {
-                match size_in_bytes {
-                    1 => format!(" {}loadByte_macro({} + i);", prefix, ut.u64_to_uclid_bv_lit(*memory_addr)),
-                    2 => format!(" {}loadHalf_macro({} + i);", prefix, ut.u64_to_uclid_bv_lit(*memory_addr)),
-                    4 => format!(" {}loadWord_macro({} + i);", prefix, ut.u64_to_uclid_bv_lit(*memory_addr)),
-                    8 => format!(" {}loadDouble_macro({} + i);", prefix, ut.u64_to_uclid_bv_lit(*memory_addr)),
-                    _ => panic!("[generate_global_define_decls] Invalid type size; should be 1,2,4,8. [Size: {}]", size_in_bytes),
-                }
-            }
-            define_decls_map.push((
-                format!("{}", name),
-                arguments.clone(),
-                output_type.clone(),
-                body(self, "", memory_addr, size_in_bytes),
-            ));
-            old_define_decls_map.push((
-                format!("old_{}", name),
-                arguments.clone(),
-                output_type.clone(),
-                body(self, "old_", memory_addr, size_in_bytes),
-            ));
+            let output_type = format!("{}", self.uclid_bv_type(self.xlen));
+            let body = format!("{};", self.u64_to_uclid_bv_lit(*memory_addr));
+            define_decls_vec.push((name.clone(), output_type.clone(), body.clone()));
         }
-        define_decls_map.sort();
-        old_define_decls_map.sort();
-        for (name, arguments, output_type, body) in define_decls_map {
-            info!(
-                "[generate_global_define_decls] Generating define for {}.",
-                name
-            );
-            self.add_uclid_define(&name, Some(&arguments), &output_type, &body);
-        }
-        for (name, arguments, output_type, body) in old_define_decls_map {
-            info!(
-                "[generate_global_define_decls] Generating define for {}.",
-                name
-            );
-            self.add_uclid_define(&name, Some(&arguments), &output_type, &body);
+        define_decls_vec.sort();
+        for (name, output_type, body) in define_decls_vec {
+            info!("[generate_global_define_decls] Generating define {}.", name);
+            self.add_uclid_define(&name, None, &output_type, &body);
         }
     }
 
@@ -428,12 +508,12 @@ impl<'a> UclidTranslator<'a> {
             ("".to_string(), "".to_string())
         };
         let requires_statement = format!(
-            "{}\n{}\n",
+            // FIXME: Change constants
+            "{}\n    requires pc == {};\n    requires (1{} <= sp && sp <= 1000{});\n    requires (zero_const == 0bv64);\n",
             arguments_requires_statement,
-            format!(
-                "    requires pc == {};",
-                self.u64_to_uclid_bv_lit(*function_addr)
-            ),
+            self.uclid_bv_type(self.xlen),
+            self.uclid_bv_type(self.xlen),
+            self.u64_to_uclid_bv_lit(*function_addr)
         );
         let ensures_statement = format!(
             "    ensures (pc == {}(ra)[63:1] ++ 0bv1);\n",
@@ -458,8 +538,7 @@ impl<'a> UclidTranslator<'a> {
     }
 
     fn function_body_prologue(&self) -> String {
-        let save_old_memory = "      assume (old_mem == mem);\n";
-        format!("{}", save_old_memory)
+        String::from("")
     }
 
     fn function_body_epilogue(&self) -> String {
@@ -514,14 +593,23 @@ impl<'a> UclidTranslator<'a> {
         // Add other system variables
         self.add_uclid_state_variable(&format!("pc"), &self.uclid_bv_type(self.xlen));
         self.add_uclid_state_variable(&format!("mem"), &self.uclid_mem_type());
-        self.add_uclid_state_variable(&format!("old_mem"), &self.uclid_mem_type());
         self.add_uclid_state_variable(&format!("current_priv"), &self.uclid_bv_type(2));
         self.add_uclid_state_variable(&format!("exception"), &self.uclid_bv_type(self.xlen));
         self.add_uclid_const_variable(
             &format!("zero_const"),
             &self.uclid_bv_type(self.xlen),
-            Some(format!("0bv{}", self.xlen)),
+            Some(self.u64_to_uclid_bv_lit(0)),
         );
+        // self.add_uclid_const_variable(
+        //     &format!("stack_top"),
+        //     &self.uclid_bv_type(self.xlen),
+        //     Some(self.u64_to_uclid_bv_lit(100000)),
+        // );
+        // self.add_uclid_const_variable(
+        //     &format!("stack_bottom"),
+        //     &self.uclid_bv_type(self.xlen),
+        //     Some(self.u64_to_uclid_bv_lit(200000)),
+        // );
     }
 
     fn add_uclid_state_variable(&mut self, state_variable_id: &String, type_decl: &String) {

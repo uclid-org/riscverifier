@@ -25,7 +25,7 @@ This will generate a Uclid5 model of the function in assembly by recursively fin
 
 ## Running the generated models and scalability
 
-Remember to run with Boolector or CVC4 or else these models may take forever to verify. Note that there are no quantifiers in any of these generated models; they only use bitvectors and arrays (Jan.6.2020). The option for Uclid5 to run with the external solver CVC4 is:
+Remember to run with Boolector or CVC4 or else these models may take forever to verify. Note that there are no quantifiers in any of these generated models; it uses the logic QF\_AUFBV (Jan.6.2020), where UF is required for multiplication in indexing. The option for Uclid5 to run with the external solver CVC4 is:
 
 `uclid -s "cvc4 --incremental --lang smt2 --force-logic=ALL" model.ucl`
 

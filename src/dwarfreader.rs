@@ -19,6 +19,20 @@ pub struct GlobalVariable {
 }
 
 #[derive(Debug)]
+pub struct TypeDefinition {
+    pub name: String,
+    pub size_in_bytes: u64,
+    pub field_decls: Vec<StructFieldDefinition>,
+}
+
+#[derive(Debug)]
+pub struct StructFieldDefinition {
+    pub field_name: String,
+    pub field_member_location: u64,
+    pub field_size_in_bytes: u64,
+}
+
+#[derive(Debug)]
 pub enum DwarfAttributeValue {
     NumericAttr(u64),
     StringAttr(String),
@@ -64,6 +78,7 @@ pub struct DwarfReader {
     dwarf_objects: Vec<DwarfObject>,
     function_sigs: HashMap<String, FunctionSig>,
     global_vars: HashMap<String, GlobalVariable>,
+    type_declarations: HashMap<String, TypeDefinition>,
 }
 
 impl DwarfReader {
@@ -74,8 +89,10 @@ impl DwarfReader {
                 .expect("Encountered error while parsing binary files."),
             function_sigs: HashMap::new(),
             global_vars: HashMap::new(),
+            type_declarations: HashMap::new(),
         };
         dwarf_reader.process_global_variables();
+        dwarf_reader.process_type_declarations();
         dwarf_reader
     }
 
@@ -189,6 +206,113 @@ impl DwarfReader {
         }
     }
 
+    pub fn get_type_declarations(&self) -> &HashMap<String, TypeDefinition> {
+        &self.type_declarations
+    }
+
+    fn process_type_declarations(&mut self) {
+        let mut type_decls = HashMap::new();
+        for comp_unit in &self.dwarf_objects {
+            // debug!("[process_type_declarations] comp_unit: {:#?}", comp_unit);
+            type_decls.extend(self.create_type_declarations(&comp_unit));
+        }
+        self.type_declarations = type_decls;
+    }
+
+    fn create_type_declarations(&self, comp_unit: &DwarfObject) -> HashMap<String, TypeDefinition> {
+        let mut type_decls = HashMap::new();
+        for (_offset, dwarf_object) in &comp_unit.child_tags {
+            match &dwarf_object.tag_name[..] {
+                "DW_TAG_structure_type" | "DW_TAG_base_type" => {
+                    if let Some(dwarf_attr) = dwarf_object.attrs.get("DW_AT_name") {
+                        if let DwarfAttributeValue::StringAttr(name) = dwarf_attr {
+                            let name = name.clone();
+                            let size_in_bytes = match dwarf_object.attrs.get("DW_AT_byte_size") {
+                                Some(dwarf_attr) => {
+                                    if let DwarfAttributeValue::NumericAttr(value) = dwarf_attr {
+                                        *value
+                                    } else {
+                                        0
+                                    }
+                                }
+                                _ => 0,
+                            };
+                            let mut field_decls = vec![];
+                            for (_child_offset, member_object) in &dwarf_object.child_tags {
+                                if member_object.tag_name == "DW_TAG_member" {
+                                    let field_name = match member_object.attrs.get("DW_AT_name") {
+                                        Some(dwarf_attr) => {
+                                            if let DwarfAttributeValue::StringAttr(field_name) =
+                                                dwarf_attr
+                                            {
+                                                field_name.clone()
+                                            } else {
+                                                panic!("[create_type_declarations] Name of field should be a string attribute.");
+                                            }
+                                        }
+                                        _ => {
+                                            warn!("[create_type_declarations] Struct {} has a no-name field.", name);
+                                            "".to_string()
+                                        }
+                                    };
+                                    let field_member_location = match member_object
+                                        .attrs
+                                        .get("DW_AT_data_member_location")
+                                    {
+                                        Some(dwarf_attr) => {
+                                            if let DwarfAttributeValue::NumericAttr(value) =
+                                                dwarf_attr
+                                            {
+                                                *value
+                                            } else {
+                                                panic!("[create_type_declarations] Location of member should be numeric in struct {}.", name);
+                                            }
+                                        }
+                                        _ => 0,
+                                    };
+                                    let field_size_in_bytes = match member_object
+                                        .attrs
+                                        .get("DW_AT_type")
+                                    {
+                                        Some(dwarf_attr) => {
+                                            if let DwarfAttributeValue::NumericAttr(value) =
+                                                dwarf_attr
+                                            {
+                                                self.get_type_byte_size(
+                                                    &(*value as usize),
+                                                    comp_unit,
+                                                )
+                                                .unwrap_or(0)
+                                            } else {
+                                                panic!("[create_type_declarations] Size of member should be numeric in struct {}.", name);
+                                            }
+                                        }
+                                        _ => 0,
+                                    };
+                                    field_decls.push(StructFieldDefinition {
+                                        field_name,
+                                        field_member_location,
+                                        field_size_in_bytes,
+                                    });
+                                }
+                            }
+                            type_decls.insert(
+                                name.clone(),
+                                TypeDefinition {
+                                    name,
+                                    size_in_bytes,
+                                    field_decls,
+                                },
+                            );
+                        }
+                    }
+                }
+                _ => (),
+            }
+        }
+        type_decls
+    }
+
     pub fn get_global_vars(&self) -> &HashMap<String, GlobalVariable> {
         &self.global_vars
     }
@@ -196,12 +320,12 @@ impl DwarfReader {
     fn process_global_variables(&mut self) {
         let mut global_vars = HashMap::new();
         for comp_unit in &self.dwarf_objects {
-            global_vars.extend(self.get_global_vars_map(&comp_unit));
+            global_vars.extend(self.create_global_vars_map(&comp_unit));
         }
         self.global_vars = global_vars;
     }
 
-    fn get_global_vars_map(&self, comp_unit: &DwarfObject) -> HashMap<String, GlobalVariable> {
+    fn create_global_vars_map(&self, comp_unit: &DwarfObject) -> HashMap<String, GlobalVariable> {
         let mut global_vars = HashMap::new();
         // debug!("comp unit: {:#?}", comp_unit);
         for (_child_offset, dwarf_object) in &comp_unit.child_tags {

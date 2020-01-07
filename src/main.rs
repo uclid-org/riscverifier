@@ -68,6 +68,20 @@ fn main() {
                 .long("ignore-funcs")
                 .takes_value(true),
         )
+        .arg(
+            Arg::with_name("struct-macros")
+                .help("Comma separated list of struct ids to generate operator macros for. E.g. \"enclave\"")
+                .short("s")
+                .long("struct-macros")
+                .takes_value(true),
+        )
+        .arg(
+            Arg::with_name("array-macros")
+            .help("Comma separated list of type definitions to generate operator macros for.")
+            .short("a")
+            .long("array-macros")
+            .takes_value(true),
+        )
         .get_matches();
     let xlen = utils::dec_str_to_u64(matches.value_of("xlen").unwrap_or("64"))
         .expect("[main] Unable to parse numberic xlen.");
@@ -81,6 +95,14 @@ fn main() {
         if let Some(ignore_list_str) = matches.value_of("ignore-funcs") {
             ignored_functions = ignore_list_str.split(",").collect::<HashSet<&str>>();
         }
+        let mut struct_macro_ids = HashSet::new();
+        if let Some(struct_macro_list_str) = matches.value_of("struct-macros") {
+            struct_macro_ids = struct_macro_list_str.split(",").collect::<HashSet<&str>>();
+        }
+        let mut array_macro_ids = HashSet::new();
+        if let Some(array_macro_list_str) = matches.value_of("array-macros") {
+            array_macro_ids = array_macro_list_str.split(",").collect::<HashSet<&str>>();
+        }
         let mut dwarf_reader = DwarfReader::create(xlen, &binary_paths);
         if let Some(write_to_filepath) = matches.value_of("output") {
             if let Some(function_name) = matches.value_of("function") {
@@ -88,6 +110,8 @@ fn main() {
                     xlen,
                     &mut dwarf_reader,
                     &ignored_functions,
+                    &struct_macro_ids,
+                    &array_macro_ids,
                     &function_blocks,
                 );
                 ut.generate_function_model(function_name)
