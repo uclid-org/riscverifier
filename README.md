@@ -53,4 +53,5 @@ Jan 4th 2020
 
 ## TODO
 
-Jan 4th 2020
+Jan 7th 2020
+* Support for floating point registers
