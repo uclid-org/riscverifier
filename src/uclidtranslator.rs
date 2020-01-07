@@ -181,19 +181,20 @@ impl<'a> UclidTranslator<'a> {
                 for field_decl in &type_decl.field_decls {
                     // Offset macro
                     let name = format!("{}_{}", type_decl.name, field_decl.field_name);
+                    let arguments = format!("ptr: {}", self.uclid_bv_type(self.xlen));
+                    let output_type = self.uclid_bv_type(self.xlen);
+                    let body = format!(
+                        "ptr + {};",
+                        self.u64_to_uclid_bv_lit(field_decl.field_member_location)
+                    );
+                    define_decls_vec.push((name.clone(), arguments.clone(), output_type, body));
+                    // Deref macro
+                    let name = format!("deref_{}", name.clone());
                     let arguments = format!(
                         "memP: {}, ptr: {}",
                         self.uclid_mem_type(),
                         self.uclid_bv_type(self.xlen)
                     );
-                    let output_type = self.uclid_bv_type(self.xlen);
-                    let body = format!(
-                        "ptr + {};",
-                        self.u64_to_uclid_bv_lit(field_decl.field_member_location * (*BYTE_SIZE))
-                    );
-                    define_decls_vec.push((name.clone(), arguments.clone(), output_type, body));
-                    // Deref macro
-                    let name = format!("deref_{}", name.clone());
                     let output_type = match field_decl.field_size_in_bytes {
                         1 | 2 | 4 | 8 => {
                             self.uclid_bv_type(field_decl.field_size_in_bytes * (*BYTE_SIZE))
@@ -531,6 +532,7 @@ impl<'a> UclidTranslator<'a> {
                 ""
             }
         );
+        debug!("GENERATED FUNCTION: {:?}", &function_name.clone());
         self.add_uclid_procedure(
             &function_name.to_string(),
             Some(&procedure_arguments),
