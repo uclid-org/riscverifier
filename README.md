@@ -53,5 +53,8 @@ Jan 4th 2020
 
 ## TODO
 
+Jan 8th 2020
+* Need to implement "perverse" feature to automatically compute the ensures set (summary of memory).
+
 Jan 7th 2020
 * Support for floating point registers

@@ -24,7 +24,7 @@ pub struct UclidTranslator<'a> {
     ignored_functions: &'a HashSet<&'a str>,
     struct_macro_ids: &'a HashSet<&'a str>,
     array_macro_ids: &'a HashSet<&'a str>,
-    generated_functions: HashSet<String>,
+    generated_functions: HashSet<String>, // FIXME: Use refs
     // Uclid model
     import_decls: Vec<String>,
     define_decls: Vec<String>,
@@ -32,7 +32,7 @@ pub struct UclidTranslator<'a> {
     const_var_decls: Vec<String>,
     identifiers: HashSet<String>,
     procedures_decls: Vec<String>,
-    function_signatures: HashMap<String, FunctionSig>,
+    function_signatures: HashMap<String, FunctionSig>, // FIXME: FunctionSig ref
     axiom_decls: Vec<String>,
     init_stmts: Vec<String>,
     next_stmts: Vec<String>,
@@ -69,7 +69,7 @@ impl<'a> UclidTranslator<'a> {
             init_stmts: vec![],
             next_stmts: vec![],
             control_stmts: vec![],
-            modifies_set_map: HashMap::new(),
+            modifies_set_map: HashMap::new(),   // FIXME: helper to get function mod set
         }
     }
 
