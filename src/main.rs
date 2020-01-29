@@ -19,8 +19,8 @@ use dwarfreader::DwarfReader;
 mod objectdumpreader;
 use objectdumpreader::ObjectDumpReader;
 
-// mod specreader;
-// use specreader::SpecReader;
+mod specreader;
+use specreader::SpecReader;
 
 mod uclidtranslator;
 use uclidtranslator::UclidTranslator;
@@ -113,7 +113,7 @@ fn main() {
         if let Some(array_macro_list_str) = matches.value_of("array-macros") {
             array_macro_ids = array_macro_list_str.split(",").collect::<HashSet<&str>>();
         }
-        // let specs = matches.value_of("spec").map_or_else(|| None, |v| Some(SpecReader::get_specs(v)));
+        let _specs = matches.value_of("spec").map_or_else(|| None, |v| Some(SpecReader::get_specs(v)));
         let mut dwarf_reader = DwarfReader::create(xlen, &binary_paths);
         if let Some(write_to_filepath) = matches.value_of("output") {
             if let Some(function_name) = matches.value_of("function") {

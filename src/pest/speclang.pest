@@ -1,0 +1,50 @@
+WHITESPACE = _{ " " | NEWLINE }
+
+char = { ASCII_ALPHANUMERIC | "_" }
+
+integer = @{ "-"? ~ ASCII_DIGIT+ }
+identifier = @{ ASCII_ALPHA ~ char* }
+
+old = @{ "old" }
+old_identifier = { old ~ "(" ~ identifier ~ ")" }
+
+comp_op = @{ "<=_u" | ">=_u" | "<=" | ">=" | "<_u" | ">_u" | "==" | "<" | ">" }
+bool_op = @{ "||" | "&&" | "==>" | "<==>" }
+bit_op = @{ "|" | "&" }
+
+array_index = { (old_identifier | identifier) ~ "[" ~ value_expr ~ "]" }
+_if = @{ "if" }
+_then = @{ "then" }
+_else = @{ "else" }
+if_then_else = { _if ~ bool_expr ~ _then ~ bool_expr ~ _else ~ bool_expr }
+
+path_expr = { array_index
+			| old_identifier
+			| identifier
+			}
+parenthesis_value_expr = _{ "(" ~ value_expr ~ ")" }
+value_expr = { "(" ~ value_expr ~ bit_op ~ value_expr ~ ")"
+			 | path_expr ~ ("." ~ path_expr)*
+ 			 | integer
+ 			 }
+
+bool_const = @{ "true"
+			  | "false"
+			  }
+
+parenthesis_bool_expr = _{ "(" ~ bool_expr ~ ")"}
+bool_expr =  { if_then_else
+			 | "(" ~ value_expr ~ comp_op ~ value_expr ~ ")"
+		     | "(" ~ bool_expr ~ bool_op ~ bool_expr ~ ")"
+			 | bool_const
+		     | parenthesis_bool_expr
+			 }
+
+spec_type = @{ "requires" | "ensures" }
+
+spec_stmt = { spec_type ~ bool_expr }
+
+spec_end = @{ "end_spec" }
+function_spec = { identifier ~ ":" ~ (spec_stmt)+ ~ spec_end }
+
+function_specs = { function_spec+ }
