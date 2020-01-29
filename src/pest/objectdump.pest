@@ -1,14 +1,14 @@
 // FIXME: Clean up this very hacky parsing grammar
 alpha = { 'a'..'z' | 'A'..'Z' }
 digit = { '0'..'9' }
-ident = { (alpha | "_") ~ (alpha | digit | "_" | ".")* }
+ident = @{ (alpha | "_") ~ (alpha | digit | "_" | ".")* }
 hex_alpha = { 'a'..'f' | 'A'..'F' }
-decimal = { (digit)+ }
-neg_decimal = { "-" ~ decimal }
+decimal = @{ (digit)+ }
+neg_decimal = @{ "-" ~ decimal }
 // FIMXE: Relies on the --prefix-addresses flag in objdump
-absolute_addr = { "0" ~ "0" ~ "0" ~ "0" ~ hexidecimal_without_prefix }
-hexidecimal_without_prefix = { (hex_alpha | digit)+ }
-hexidecimal = { "0" ~ "x" ~ hexidecimal_without_prefix }
+absolute_addr = @{ "0000" ~ hexidecimal_without_prefix }
+hexidecimal_without_prefix = @{ (hex_alpha | digit)+ }
+hexidecimal = @{ "0x" ~ hexidecimal_without_prefix }
 callee_offset = { "<" ~ ident ~ ("+" ~ hexidecimal)? ~ ">" }
 inst_ext = { ("." ~ ident)+ }
 instr_op = { ident ~ inst_ext? }

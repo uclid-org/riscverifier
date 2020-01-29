@@ -1,8 +1,17 @@
 module main {
+  define sp_preconditions(): boolean = (stack_low_const <= sp && sp <= stack_high_const);
   define loadByte_macro (addr: bv64): bv8 = (mem)[addr];
   define loadHalf_macro (addr: bv64): bv16 = (loadByte_macro((addr + 1bv64)) ++ loadByte_macro(addr));
   define loadWord_macro (addr: bv64): bv32 = (loadHalf_macro((addr + 2bv64)) ++ loadHalf_macro(addr));
   define loadDouble_macro (addr: bv64): bv64 = (loadWord_macro((addr + 4bv64)) ++ loadWord_macro(addr));
+  define loadByte_macroP (mem: [bv64]bv8, addr: bv64): bv8 = (mem)[addr];
+  define loadHalf_macroP (mem: [bv64]bv8, addr: bv64): bv16 = (loadByte_macroP(mem, (addr + 1bv64)) ++ loadByte_macroP(mem, addr));
+  define loadWord_macroP (mem: [bv64]bv8, addr: bv64): bv32 = (loadHalf_macroP(mem, (addr + 2bv64)) ++ loadHalf_macroP(mem, addr));
+  define loadDouble_macroP (mem: [bv64]bv8, addr: bv64): bv64 = (loadWord_macroP(mem, (addr + 4bv64)) ++ loadWord_macroP(mem, addr));
+  define mem_update_byte(memP: [bv64]bv8, index: bv64, value: bv8): [bv64]bv8 = memP[index -> value];
+  define mem_update_half(memP: [bv64]bv8, index: bv64, value: bv16): [bv64]bv8 = mem_update_byte(mem_update_byte(memP, index, value[7:0]), index+1bv64, value[15:8]);
+  define mem_update_word(memP: [bv64]bv8, index: bv64, value: bv32): [bv64]bv8 = mem_update_half(mem_update_half(memP, index, value[15:0]), index+2bv64, value[31:16]);
+  define mem_update_double(memP: [bv64]bv8, index: bv64, value: bv64): [bv64]bv8 = mem_update_word(mem_update_word(memP, index, value[31:0]), index+4bv64, value[63:32]);
   procedure [inline] add_proc(rs1: bv64, rs2: bv64) returns (ret: bv64)
     modifies pc;
     {
@@ -243,10 +252,10 @@ module main {
       ret = 0bv64; // line 0
       pc = (pc + 4bv64); // line 0
     }
-  procedure [inline] lwu_proc(rs1: bv64, imm: bv64) returns (ret: bv64)
+  procedure [inline] lwu_proc(addr: bv64) returns (ret: bv64)
     modifies pc;
     {
-      ret = bv_zero_extend(32, loadWord_macro((rs1 + imm))); // line 0
+      ret = bv_zero_extend(32, loadWord_macro(addr)); // line 0
       pc = (pc + 4bv64); // line 0
     }
   procedure [inline] ld_proc(index: bv64) returns (ret: bv64)
@@ -258,7 +267,7 @@ module main {
   procedure [inline] addiw_proc(rs1: bv64, imm: bv64) returns (ret: bv64)
     modifies pc;
     {
-      ret = bv_sign_extend(32, ((rs1 + imm))[31:0]); // line 0
+      ret = bv_sign_extend(32, ((rs1[31:0] + imm[31:0]))[31:0]); // line 0
       pc = (pc + 4bv64); // line 0
     }
   procedure [inline] slliw_proc(rs1: bv64, imm: bv64) returns (ret: bv64)
@@ -477,70 +486,125 @@ module main {
     
 
 
+  define pmp_region_array_index(array_base_ptr: bv64, i: bv64): bv64 = array_base_ptr + bv_left_shift(5bv64, i);
+  define pmp_region_size(ptr: bv64): bv64 = ptr + 0bv64;
+  define deref_pmp_region_size(memP: [bv64]bv8, ptr: bv64): bv64 = loadDouble_macroP(memP, ptr);
+  define pmp_region_addrmode(ptr: bv64): bv64 = ptr + 8bv64;
+  define deref_pmp_region_addrmode(memP: [bv64]bv8, ptr: bv64): bv8 = loadByte_macroP(memP, ptr);
+  define pmp_region_addr(ptr: bv64): bv64 = ptr + 16bv64;
+  define deref_pmp_region_addr(memP: [bv64]bv8, ptr: bv64): bv64 = loadDouble_macroP(memP, ptr);
+  define pmp_region_allow_overlap(ptr: bv64): bv64 = ptr + 24bv64;
+  define deref_pmp_region_allow_overlap(memP: [bv64]bv8, ptr: bv64): bv32 = loadWord_macroP(memP, ptr);
+  define pmp_region_reg_idx(ptr: bv64): bv64 = ptr + 28bv64;
+  define deref_pmp_region_reg_idx(memP: [bv64]bv8, ptr: bv64): bv32 = loadWord_macroP(memP, ptr);
+  define global_cpus(): bv64 = 2147692856bv64;
+  define global_dev_public_key(): bv64 = 2147692800bv64;
+  define global_disabled_hart_mask(): bv64 = 2147693480bv64;
+  define global_encl_lock(): bv64 = 2147693472bv64;
+  define global_enclaves(): bv64 = 2147693696bv64;
+  define global_fds(): bv64 = 2147655680bv64;
+  define global_finisher(): bv64 = 2147693680bv64;
+  define global_first_free_paddr(): bv64 = 2147693600bv64;
+  define global_first_free_page(): bv64 = 2147656792bv64;
+  define global_free_pages(): bv64 = 2147656808bv64;
+  define global_fromhost(): bv64 = 2147647496bv64;
+  define global_hart_phandles(): bv64 = 2147692544bv64;
+  define global_htif_console_buf(): bv64 = 2147693656bv64;
+  define global_htif_lock(): bv64 = 2147656816bv64;
+  define global_ipi_mailbox(): bv64 = 2147693456bv64;
+  define global_ipi_region_idx(): bv64 = 2147655420bv64;
+  define global_ipi_type(): bv64 = 2147655424bv64;
+  define global_next_free_page(): bv64 = 2147656800bv64;
+  define global_os_region_id(): bv64 = 2147692840bv64;
+  define global_pmp_ipi_global_lock(): bv64 = 2147692920bv64;
+  define global_pmp_lock(): bv64 = 2147692928bv64;
+  define global_reg_bitmap(): bv64 = 2147693448bv64;
+  define global_region_def_bitmap(): bv64 = 2147693452bv64;
+  define global_regions(): bv64 = 2147692936bv64;
+  define global_sm_init_done(): bv64 = 2147692832bv64;
+  define global_sm_init_lock(): bv64 = 2147692848bv64;
+  define global_sm_region_id(): bv64 = 2147692836bv64;
+  define global_tohost(): bv64 = 2147647488bv64;
+  define global_vm_lock(): bv64 = 2147656776bv64;
+  define global_vmrs(): bv64 = 2147656784bv64;
+  define stack_bounds_preconditions(): boolean = ((stack_low_const > 2147693704bv64) || (stack_high_const < 2147612656bv64)) && (stack_low_const < stack_high_const);
 
   var a0: bv64;
-  var a1: bv64;
   var a4: bv64;
   var a5: bv64;
-  var mtvec: bv64;
-  var pmpaddr0: bv64;
-  var pmpcfg0: bv64;
   var ra: bv64;
   var s0: bv64;
   var sp: bv64;
-  var t0: bv64;
   var zero: bv64;
   var pc: bv64;
   var mem: [bv64]bv8;
   var current_priv: bv2;
   var exception: bv64;
 
-  procedure [inline] atomic_block_0x84c() 
-    modifies pc, t0, ra, a5, exception, sp, pmpcfg0, zero, s0, mem, mtvec, a4, a0, current_priv, pmpaddr0, a1;
+  const zero_const: bv64;
+  const stack_low_const: bv64;
+  const stack_high_const: bv64;
+
+  procedure [inline] atomic_block_0x8000c390() 
+    modifies mem, zero, exception, sp, a5, a4, a0, pc, s0;
     {
 
-      call (sp) = addi_proc(sp, -48bv64);
-      call () = sd_proc(sp + 40bv64, s0);
-      call (s0) = addi_proc(sp, 48bv64);
-      call () = sd_proc(s0 + -40bv64, a0);
-      call () = sd_proc(s0 + -48bv64, a1);
-      call (pmpcfg0, a5) = csrrs_proc(pmpcfg0, zero);
-      call () = sd_proc(s0 + -24bv64, a5);
-      call (a5) = ld_proc(s0 + -24bv64);
-      call () = sd_proc(s0 + -32bv64, a5);
-      call (a5) = ld_proc(s0 + -32bv64);
-      call (a5) = andi_proc(a5, -256bv64);
-      call (a4) = ld_proc(s0 + -48bv64);
-      call (a5) = or_proc(a4, a5);
-      call () = sd_proc(s0 + -48bv64, a5);
-      call (a5) = ld_proc(s0 + -40bv64);
-      call (a4) = ld_proc(s0 + -48bv64);
-      call (t0) = auipc_proc(0bv64);
-      call (t0) = addi_proc(t0, 24bv64);
-      call (mtvec, t0) = csrrw_proc(mtvec, t0);
-      call (pmpaddr0, zero) = csrrw_proc(pmpaddr0, a5);
-      call (pmpcfg0, zero) = csrrw_proc(pmpcfg0, a4);
-      call () = fence_proc();
-      call (mtvec, zero) = csrrw_proc(mtvec, t0);
-      call (zero) = addi_proc(zero, 0bv64);
-      call (s0) = ld_proc(sp + 40bv64);
-      call (sp) = addi_proc(sp, 48bv64);
+      call (sp) = addi_proc(sp, -32bv64);
+      call () = sd_proc(sp + 24bv64, s0);
+      call (s0) = addi_proc(sp, 32bv64);
+      call (a5) = addi_proc(a0, 0bv64);
+      call () = sw_proc(s0 + -20bv64, a5[31:0]);
+      call (a4) = auipc_proc(39bv64);
+      call (a4) = addi_proc(a4, -540bv64);
+      call (a5) = lw_proc(s0 + -20bv64);
+      call (a5) = slli_proc(a5, 5bv64);
+      call (a5) = add_proc(a4, a5);
+      call (a5) = lbu_proc(a5 + 8bv64);
+      call (a4) = addiw_proc(a5, 0bv64);
+      call (a5) = addi_proc(zero_const, 24bv64);
+      call (a5) = sub_proc(a4, a5);
+      call (a5) = sltiu_proc(a5, 1bv64);
+      call (a5) = andi_proc(a5, 255bv64);
+      call (a5) = addiw_proc(a5, 0bv64);
+      call (a0) = addi_proc(a5, 0bv64);
+      call (s0) = ld_proc(sp + 24bv64);
+      call (sp) = addi_proc(sp, 32bv64);
       call (zero) = jalr_proc(ra);
     }
 
-  procedure PMP_SET_0_func() 
-    modifies pc, t0, ra, a5, exception, sp, pmpcfg0, zero, s0, mem, mtvec, a4, a0, current_priv, pmpaddr0, a1;
-    requires (zero == 0bv64 && exception == 0bv64);
-    requires (pc == 2126bv64);
-    ensures ((exception == 0bv64) ==> (pmpaddr0 == old(a0)));
-    ensures ((exception == 0bv64) ==> (pmpcfg0 == ((old(pmpcfg0) & -256bv64) | old(a1))));
+  procedure  region_is_napot(i: bv32) 
+    modifies mem, exception, sp, pc, s0, a0, a5, a4, zero;
+    requires (a0[31:0] == i);
+    requires pc == 2147533712bv64;
+    requires sp_preconditions() && stack_bounds_preconditions();
+    requires (zero_const == 0bv64);
+    requires (0bv64 <= a0 && a0 <= 22bv64);
+    requires (exception != 0bv64);
+    ensures if (deref_pmp_region_addrmode(old(mem),
+        pmp_region_addrmode(pmp_region_array_index(global_regions(), old(a0)))) == 24bv8)
+        then (a0[63:0] == 1bv64) else (a0[63:0] == 0bv64);
+    ensures (pc == (ra)[63:1] ++ 0bv1);
     {
-      if (pc == 2126bv64) {
-        call atomic_block_0x84c();
+      if (pc == 2147533712bv64) {
+        call atomic_block_0x8000c390();
       }
 
     }
 
+  procedure [inline] poweroff() 
+
+    {
+
+    }
+
+  procedure [inline] printm() 
+
+    {
+
+    }
+
+
+  axiom(zero_const == 0bv64);
 
   init {
   }
@@ -549,7 +613,7 @@ module main {
   }
 
   control {
-    f = verify(PMP_SET_0_func);
+    fregion_is_napot = verify(region_is_napot);
     check;
     print_results;
   }

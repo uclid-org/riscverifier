@@ -1,6 +1,6 @@
 #[derive(Debug)]
 pub struct NoSuchModelError {
-    pub recursive_function: String,
+    pub error_msg: String,
 }
 
 #[derive(Debug)]

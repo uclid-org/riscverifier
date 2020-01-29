@@ -24,7 +24,7 @@ pub struct UclidTranslator<'a> {
     ignored_functions: &'a HashSet<&'a str>,
     struct_macro_ids: &'a HashSet<&'a str>,
     array_macro_ids: &'a HashSet<&'a str>,
-    generated_functions: HashSet<String>, // FIXME: Use refs
+    generated_functions: HashSet<String>,
     // Uclid model
     import_decls: Vec<String>,
     define_decls: Vec<String>,
@@ -32,7 +32,7 @@ pub struct UclidTranslator<'a> {
     const_var_decls: Vec<String>,
     identifiers: HashSet<String>,
     procedures_decls: Vec<String>,
-    function_signatures: HashMap<String, FunctionSig>, // FIXME: FunctionSig ref
+    function_signatures: HashMap<String, FunctionSig>,
     axiom_decls: Vec<String>,
     init_stmts: Vec<String>,
     next_stmts: Vec<String>,
@@ -69,7 +69,7 @@ impl<'a> UclidTranslator<'a> {
             init_stmts: vec![],
             next_stmts: vec![],
             control_stmts: vec![],
-            modifies_set_map: HashMap::new(),   // FIXME: helper to get function mod set
+            modifies_set_map: HashMap::new(), // FIXME: helper to get function mod set
         }
     }
 
@@ -134,10 +134,12 @@ impl<'a> UclidTranslator<'a> {
                     self.uclid_bv_type(self.xlen)
                 );
                 let output_type = self.uclid_bv_type(self.xlen);
-                let multiply_expr = format!("{:b}", type_decl.size_in_bytes)
+                // Compute the multiply expression using the powers of 2 as a function of i
+                let multiply_expr = format!("{:b}", type_decl.size_in_bytes) // Binary expression
                     .chars()
                     .rev()
                     .fold((String::from(""), 0), |acc, x| {
+                        // acc = (expression, i-th bit counter)
                         if x == '1' {
                             (
                                 format!(
@@ -237,6 +239,8 @@ impl<'a> UclidTranslator<'a> {
     fn generate_global_define_decls(&mut self) {
         // Vector of tuples (define function name, output type, body) for uclid5 define declarations
         let mut define_decls_vec = vec![];
+        let mut max_range = u64::min_value();
+        let mut min_range = u64::max_value();
         for global_var in self.dwarf_reader.get_global_vars() {
             let (
                 _name,
@@ -246,6 +250,14 @@ impl<'a> UclidTranslator<'a> {
                     memory_addr,
                 },
             ) = global_var;
+            // update min and max
+            if max_range < *memory_addr + *size_in_bytes {
+                max_range = *memory_addr + *size_in_bytes;
+            }
+            if min_range > *memory_addr {
+                min_range = *memory_addr;
+            }
+            assert!(min_range <= max_range);
             let name = format!("global_{}", name);
             if *size_in_bytes == 0 {
                 warn!("[generate_global_define_decls] Not generating constant {} because we could not find the size (and by default was set to 0).", name);
@@ -256,9 +268,12 @@ impl<'a> UclidTranslator<'a> {
             define_decls_vec.push((name.clone(), output_type.clone(), body.clone()));
         }
         define_decls_vec.sort();
-        for (name, output_type, body) in define_decls_vec {
+        for (name, output_type, body) in &define_decls_vec {
             info!("[generate_global_define_decls] Generating define {}.", name);
             self.add_uclid_define(&name, None, &output_type, &body);
+        }
+        if define_decls_vec.len() > 0 {
+            self.add_uclid_define(&format!("stack_bounds_preconditions"), None, &format!("boolean"), &format!("((stack_low_const > {}) || (stack_high_const < {})) && (stack_low_const < stack_high_const);", self.u64_to_uclid_bv_lit(max_range), self.u64_to_uclid_bv_lit(min_range)));
         }
     }
 
@@ -268,42 +283,42 @@ impl<'a> UclidTranslator<'a> {
         level: usize,
     ) -> Result<(), NoSuchModelError> {
         let function_name = self.function_name_from_addr(function_addr);
-        // ==================== Ignore ignored functions ================================ //
+        // ==================== Ignore ignored_functions ================================ //
         if self.ignored_functions.get(&function_name).is_some() {
             debug!(
                 "[generate_function_procedures_by_entry_addr] Ignored function {}.",
                 function_name
             );
             return Err(NoSuchModelError {
-                recursive_function: function_name.to_string(),
+                error_msg: function_name.to_string(),
             });
         }
-        // ==================== Ignored already generated functions ==================== //
+        // ==================== Ignore already generated functions ==================== //
         if self.generated_functions.contains(function_name) {
             debug!(
                 "[generate_function_model] Cyclic function call for function or already generated {}.",
                 function_name
             );
             return Err(NoSuchModelError {
-                recursive_function: function_name.to_string(),
+                error_msg: function_name.to_string(),
             });
         }
-        // ==================== Add to list of functions to verify ===================== //
+        // ==================== Add function verification control statement ===================== //
         self.control_stmts.push(format!(
             "    // f{} = verify({});\n",
             function_name, function_name
         ));
-        // ==================== Vector of assembly lines in the function =============== //
+        // ==================== Process assembly lines in the function =============== //
         let function_vec = self
             .function_assembly_line_map
             .get(function_addr)
             .expect("[generate_function_procedures_by_entry_addr] Invalid function entry address.");
         // Generate the state variables used by the function
         self.generate_state_variables(function_vec);
-        // Generate the callee functions recursively (DFS)
+        // Generate the callee functions and compute modifies set recursively (DFS)
         let mut modifies_set = HashSet::new();
         let absolute_target_addrs = UclidTranslator::absolute_addrs_set(function_vec);
-        for addr in absolute_target_addrs {
+        for addr in &absolute_target_addrs {
             if self.is_function_entry_addr(&addr) {
                 let function_name = self.function_name_from_addr(&addr);
                 match self.generate_function_procedures_by_entry_addr(&addr, level + 1) {
@@ -329,7 +344,7 @@ impl<'a> UclidTranslator<'a> {
                 // Check if it's a cross function basic block call
                 if function_vec
                     .iter()
-                    .find(|line| line.address() == addr)
+                    .find(|line| line.address() == *addr)
                     .is_none()
                 {
                     panic!("[generate_function_procedures_by_entry_addr] Cross function basic block calls not supported! Occured in function {} at address {:#x}", function_name, addr);
@@ -342,6 +357,7 @@ impl<'a> UclidTranslator<'a> {
             function_vec[0].function_name()
         );
         // ==================== Generate the basic blocks for each function ==================== //
+        // FIXME: Maybe we don't need to compute the CFG and output in order
         let atomic_blocks_modifies_set = self.generate_function_atomic_blocks(function_vec);
         modifies_set = modifies_set
             .union(&atomic_blocks_modifies_set)
@@ -350,39 +366,32 @@ impl<'a> UclidTranslator<'a> {
         // Compute the CFG and topologically sort it to construct function procedure
         let mut ts = TopologicalSort::<String>::new();
         let mut atomic_block_entry_addr: u64 = function_vec[0].address();
-        // Stores a map from basic block to callees
+        // Stores a map from basic block to callees <basic block entry address, (callee function address, callee return address)>
         let mut call_map: HashMap<u64, (u64, u64)> = HashMap::new();
         for assembly_line in function_vec {
             let atomic_block_fallthrough_addr = assembly_line.address() + self.inst_length;
             match assembly_line.base_instruction_name() {
                 "jal" | "beq" | "bne" | "blt" | "bge" | "bltu" | "bgeu" => {
                     if let InstOperand::Immediate(atomic_block_jump_addr) = assembly_line.imm().expect("[generate_function_model] Unable to find a target address for a jump instruction") {
-                        match assembly_line.base_instruction_name() {
-                            "beq" | "bne" | "blt" | "bge" | "bltu" | "bgeu"  => {
-                                // Add default fall through dependency for branches
-                                ts.add_dependency(atomic_block_entry_addr.to_string(), atomic_block_fallthrough_addr.to_string());
-                            },
-                            "jal" => {
-                                if self.is_function_entry_addr(&(*atomic_block_jump_addr as u64)) && *atomic_block_jump_addr as u64 != *function_addr {
-                                    // Add jump to another function, which will return (unless interrupted but we aren't dealing with those yet) 
-                                    ts.add_dependency(atomic_block_entry_addr.to_string(), atomic_block_fallthrough_addr.to_string());
-                                    call_map.insert(atomic_block_entry_addr, (*atomic_block_jump_addr as u64, atomic_block_fallthrough_addr));
-                                } else {
-                                    // Jump to another block
-                                    ts.add_dependency(atomic_block_entry_addr.to_string(), atomic_block_jump_addr.to_string());
-                                }
-                            },
-                            _ => panic!("[generate_function_procedures_by_entry_addr] Not a jump instruction."),
+                        ts.add_dependency(atomic_block_entry_addr.to_string(), atomic_block_fallthrough_addr.to_string());
+                        ts.add_dependency(atomic_block_entry_addr.to_string(), atomic_block_jump_addr.to_string());
+                        if assembly_line.base_instruction_name() == "jal" && self.is_function_entry_addr(&(*atomic_block_jump_addr as u64)) && *atomic_block_jump_addr as u64 != *function_addr {
+                            // Add jump to another function, which will return (unless interrupted but we aren't dealing with those yet) 
+                            call_map.insert(atomic_block_entry_addr, (*atomic_block_jump_addr as u64, atomic_block_fallthrough_addr));
                         }
                         atomic_block_entry_addr = atomic_block_fallthrough_addr;
                     } else {
-                        panic!("[generate_function_model] jal instruction does not have an immediate value; possibly an invalid objdump.");
+                        panic!("[generate_function_model] jump instruction does not have an immediate value; possibly an invalid objdump.");
                     }
-                }
+                },
                 "jalr" => {
                     ts.add_dependency(atomic_block_entry_addr.to_string(), "");
-                }
-                _ => (),
+                },
+                _ => {
+                    if absolute_target_addrs.contains(&atomic_block_fallthrough_addr) {
+                        ts.add_dependency(atomic_block_entry_addr.to_string(), atomic_block_fallthrough_addr.to_string());
+                    }
+                },
             };
         }
         // ==================== Generate the procedures for functions recursively ==================== //
@@ -397,18 +406,12 @@ impl<'a> UclidTranslator<'a> {
                         function_name
                     );
                     return Err(NoSuchModelError {
-                        recursive_function: function_name.to_string(),
+                        error_msg: function_name.to_string(),
                     });
                 }
                 break;
             }
             v.sort();
-            // debug!(
-            //     "TS: {:?}",
-            //     v.iter()
-            //         .map(|x| format!("{:#x}", dec_str_to_u64(x).unwrap_or(0xffffffff)))
-            //         .collect::<Vec<_>>()
-            // );
             for addr in v {
                 if let Ok(u64_addr) = dec_str_to_u64(&addr[..]) {
                     procedure_body = format!(
@@ -517,12 +520,9 @@ impl<'a> UclidTranslator<'a> {
             ("".to_string(), "".to_string())
         };
         let requires_statement = format!(
-            // FIXME: Change constants
-            "{}\n    requires pc == {};\n    requires (1{} <= sp && sp <= 1000{});\n    requires (zero_const == 0bv64);\n",
+            "{}\n    requires pc == {};\n    requires sp_preconditions() && stack_bounds_preconditions();\n    requires (zero_const == 0bv64);\n",
             arguments_requires_statement,
             self.u64_to_uclid_bv_lit(*function_addr),
-            self.uclid_bv_type(self.xlen),
-            self.uclid_bv_type(self.xlen)
         );
         let ensures_statement = format!(
             "    ensures (pc == {}(ra)[63:1] ++ 0bv1);\n",
@@ -608,7 +608,17 @@ impl<'a> UclidTranslator<'a> {
         self.add_uclid_const_variable(
             &format!("zero_const"),
             &self.uclid_bv_type(self.xlen),
-            Some(self.u64_to_uclid_bv_lit(0)),
+            Some(self.u64_to_uclid_bv_lit(0)),  // FIXME: Doesn't get used in function veirifcation for uclid5
+        );
+        self.add_uclid_const_variable(
+            &format!("stack_low_const"),
+            &self.uclid_bv_type(self.xlen),
+            None
+        );
+        self.add_uclid_const_variable(
+            &format!("stack_high_const"),
+            &self.uclid_bv_type(self.xlen),
+            None
         );
     }
 
@@ -641,13 +651,6 @@ impl<'a> UclidTranslator<'a> {
         &mut self,
         function_vec: &Vec<AssemblyLine>,
     ) -> HashSet<String> {
-        // debug!(
-        //     "{:#?}",
-        //     function_vec
-        //         .iter()
-        //         .map(|line| self.assembly_line_to_uclid(&line))
-        //         .collect::<Vec<_>>()
-        // );
         // Split function into basic blocks and add them as procedure declaration
         let absolute_addrs = UclidTranslator::absolute_addrs_set(function_vec);
         let mut procedure_body = String::from("");
@@ -739,7 +742,7 @@ impl<'a> UclidTranslator<'a> {
             debug!("Already added procedure {}.", function_name);
             return;
         } else {
-            self.generated_functions.insert(function_name.to_string());
+            self.generated_functions.insert(function_name.clone());
         }
         let modifies_string = format!(
             "    modifies {};",
@@ -804,16 +807,6 @@ impl<'a> UclidTranslator<'a> {
                 )),
             }
         }
-        args = args
-            .iter()
-            .map(|arg| {
-                if arg == "zero" {
-                    "zero_const".to_string()
-                } else {
-                    arg.clone()
-                }
-            })
-            .collect::<Vec<_>>();
         if let Some(reg) = assembly_line.rs2() {
             // split_size is the size of the value being stored into memory (refer to models/prelude.ucl)
             let split_size = match assembly_line.base_instruction_name() {
@@ -829,6 +822,17 @@ impl<'a> UclidTranslator<'a> {
                 args.push(format!("{}", self.i64_to_uclid_bv_lit(*value as i64)));
             }
         }
+        args = args
+            .iter()
+            .map(|arg| {
+                if arg == "zero" {
+                    // FIXME: Should allows for statefull axioms to be used in function verification?
+                    "zero_const".to_string()
+                } else {
+                    arg.clone()
+                }
+            })
+            .collect::<Vec<_>>();
         let uclid_assembly_line_call = format!(
             "      call ({}) = {}_proc({});",
             outputs.join(", "),
@@ -862,11 +866,11 @@ impl<'a> UclidTranslator<'a> {
         format!("bv{}", len)
     }
 
-    fn uclid_array_type(&self, index: u64, value: u64) -> String {
+    fn uclid_array_type(&self, index_width: u64, value_width: u64) -> String {
         format!(
             "[{}]{}",
-            self.uclid_bv_type(index),
-            self.uclid_bv_type(value)
+            self.uclid_bv_type(index_width),
+            self.uclid_bv_type(value_width)
         )
     }
 

@@ -1,3 +1,4 @@
+  define sp_preconditions(): boolean = (stack_low_const <= sp && sp <= stack_high_const);
   define loadByte_macro (addr: bv64): bv8 = (mem)[addr];
   define loadHalf_macro (addr: bv64): bv16 = (loadByte_macro((addr + 1bv64)) ++ loadByte_macro(addr));
   define loadWord_macro (addr: bv64): bv32 = (loadHalf_macro((addr + 2bv64)) ++ loadHalf_macro(addr));

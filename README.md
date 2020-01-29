@@ -1,4 +1,5 @@
-# RISC-Verifier
+# BRAVE (Berkeley RISC-V Assembly Verifier for Enclaves)
+
 A translator from RISC-V binary to Uclid5.
 
 # Installation

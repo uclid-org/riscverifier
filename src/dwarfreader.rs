@@ -434,7 +434,7 @@ impl DwarfReader {
             } else {
                 gimli::RunTimeEndian::Big
             };
-            let mut file_objects = DwarfReader::process_dwarf_file(&object, endian)?;
+            let mut file_objects = DwarfReader::process_dwarf_file_object(&object, endian)?;
             // debug!("file_objects: {:#?}", file_objects);
             dwarf_objects.append(&mut file_objects);
         }
@@ -442,7 +442,7 @@ impl DwarfReader {
         Ok(dwarf_objects)
     }
 
-    fn process_dwarf_file(
+    fn process_dwarf_file_object(
         object: &object::File,
         endian: gimli::RunTimeEndian,
     ) -> Result<Vec<DwarfObject>, gimli::Error> {
@@ -485,36 +485,6 @@ impl DwarfReader {
         }
         Ok(dwarf_objects)
     }
-
-    // fn print_gimli_dwarf<R: gimli::Reader<Offset = usize>>(
-    //     dwarf: &gimli::Dwarf<R>,
-    //     entries_cursor: &mut gimli::EntriesCursor<R>,
-    // ) -> Result<(), gimli::Error> {
-    //     let mut depth = 0;
-    //     while let Some((delta_depth, entry)) = entries_cursor.next_dfs()? {
-    //         let tag_name = entry.tag().to_string();
-    //         depth += delta_depth;
-    //         // info!(
-    //         //     "[print_gimli_dwarf] Depth: {} -- Offset {:x} -- Processing {} ==============",
-    //         //     depth,
-    //         //     entry.offset().0,
-    //         //     tag_name
-    //         // );
-    //         // Iterate over the attributes in the DIE.
-    //         let mut attrs_cursor = entry.attrs();
-    //         while let Some(attr) = attrs_cursor.next()? {
-    //             let attr_name = attr.name().to_string();
-    //             let attr_value = DwarfReader::get_attr_value(&attr, dwarf)?;
-    //             info!(
-    //                 "[print_gimli_dwarf] {}{}: {:?}",
-    //                 "   ".repeat(depth.try_into().unwrap()),
-    //                 &attr_name,
-    //                 &attr_value
-    //             );
-    //         }
-    //     }
-    //     Ok(())
-    // }
 
     fn entries_to_dwarf_object<R: gimli::Reader<Offset = usize>>(
         unit: &gimli::Unit<R>,
