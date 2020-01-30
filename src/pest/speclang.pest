@@ -12,39 +12,57 @@ comp_op = @{ "<=_u" | ">=_u" | "<=" | ">=" | "<_u" | ">_u" | "==" | "<" | ">" }
 bool_op = @{ "||" | "&&" | "==>" | "<==>" }
 bit_op = @{ "|" | "&" }
 
-array_index = { (old_identifier | identifier) ~ "[" ~ value_expr ~ "]" }
 _if = @{ "if" }
 _then = @{ "then" }
 _else = @{ "else" }
-if_then_else = { _if ~ bool_expr ~ _then ~ bool_expr ~ _else ~ bool_expr }
+ite = { _if ~ bool_expr ~ _then ~ bool_expr ~ _else ~ bool_expr }
 
-path_expr = { array_index
-			| old_identifier
-			| identifier
-			}
-parenthesis_value_expr = _{ "(" ~ value_expr ~ ")" }
-value_expr = { "(" ~ value_expr ~ bit_op ~ value_expr ~ ")"
-			 | path_expr ~ ("." ~ path_expr)*
- 			 | integer
- 			 }
+array_index = { (old_identifier | identifier) ~ "[" ~ value_expr ~ "]" }
+
+comp_eval = { "(" ~ value_expr ~ comp_op ~ value_expr ~ ")" }
+
+bool_eval = { "(" ~ bool_expr ~ bool_op ~ bool_expr ~ ")" }
+
+bv_eval = { "(" ~ value_expr ~ bit_op ~ value_expr ~ ")" }
 
 bool_const = @{ "true"
 			  | "false"
 			  }
 
-parenthesis_bool_expr = _{ "(" ~ bool_expr ~ ")"}
-bool_expr =  { if_then_else
-			 | "(" ~ value_expr ~ comp_op ~ value_expr ~ ")"
-		     | "(" ~ bool_expr ~ bool_op ~ bool_expr ~ ")"
+path_expr = { array_index
+			| identifier
+			}
+
+deref = { "*" ~ "(" ~ value_expr ~ ")" }
+deref_old = { "*" ~ "old" ~ "(" ~ value_expr ~ ")" }
+ref_val = { "&" ~ "(" ~ value_expr ~ ")" }
+
+path_expr_list = { path_expr ~ ("." ~ path_expr)* }
+
+p_value_expr = _{ "(" ~ value_expr ~ ")" }
+value_expr = { bv_eval
+			 | path_expr_list
+ 			 | integer
+ 			 | p_value_expr
+ 			 | deref
+ 			 | deref_old
+ 			 | ref_val
+ 			 }
+
+p_bool_expr = _{ "(" ~ bool_expr ~ ")"}
+bool_expr =  { ite
+			 | comp_eval
+			 | bool_eval
 			 | bool_const
-		     | parenthesis_bool_expr
+		     | p_bool_expr
 			 }
 
 spec_type = @{ "requires" | "ensures" }
 
 spec_stmt = { spec_type ~ bool_expr }
 
-spec_end = @{ "end_spec" }
-function_spec = { identifier ~ ":" ~ (spec_stmt)+ ~ spec_end }
+spec_end = _{ "end_spec" }
+func_name = { identifier }
+func_spec = { func_name ~ ":" ~ (spec_stmt)+ ~ spec_end }
 
-function_specs = { function_spec+ }
+func_specs = { func_spec+ }

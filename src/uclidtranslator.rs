@@ -383,15 +383,18 @@ impl<'a> UclidTranslator<'a> {
                     } else {
                         panic!("[generate_function_model] jump instruction does not have an immediate value; possibly an invalid objdump.");
                     }
-                },
+                }
                 "jalr" => {
                     ts.add_dependency(atomic_block_entry_addr.to_string(), "");
-                },
+                }
                 _ => {
                     if absolute_target_addrs.contains(&atomic_block_fallthrough_addr) {
-                        ts.add_dependency(atomic_block_entry_addr.to_string(), atomic_block_fallthrough_addr.to_string());
+                        ts.add_dependency(
+                            atomic_block_entry_addr.to_string(),
+                            atomic_block_fallthrough_addr.to_string(),
+                        );
                     }
-                },
+                }
             };
         }
         // ==================== Generate the procedures for functions recursively ==================== //
@@ -608,17 +611,17 @@ impl<'a> UclidTranslator<'a> {
         self.add_uclid_const_variable(
             &format!("zero_const"),
             &self.uclid_bv_type(self.xlen),
-            Some(self.u64_to_uclid_bv_lit(0)),  // FIXME: Doesn't get used in function veirifcation for uclid5
+            Some(self.u64_to_uclid_bv_lit(0)),
         );
         self.add_uclid_const_variable(
             &format!("stack_low_const"),
             &self.uclid_bv_type(self.xlen),
-            None
+            None,
         );
         self.add_uclid_const_variable(
             &format!("stack_high_const"),
             &self.uclid_bv_type(self.xlen),
-            None
+            None,
         );
     }
 

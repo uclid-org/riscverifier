@@ -99,7 +99,7 @@ fn main() {
         warn!("[main] Non-64 bit XLEN is not yet tested. Use with caution.");
     }
     if let Some(binary) = matches.value_of("binary") {
-        let binary_paths = vec![String::from(binary)];  // FIXME: Handle multiple binaries
+        let binary_paths = vec![String::from(binary)]; // FIXME: Handle multiple binaries
         let function_blocks = ObjectDumpReader::get_binary_object_dump(&binary_paths);
         let mut ignored_functions = HashSet::new();
         if let Some(ignore_list_str) = matches.value_of("ignore-funcs") {
@@ -113,8 +113,10 @@ fn main() {
         if let Some(array_macro_list_str) = matches.value_of("array-macros") {
             array_macro_ids = array_macro_list_str.split(",").collect::<HashSet<&str>>();
         }
-        let _specs = matches.value_of("spec").map_or_else(|| None, |v| Some(SpecReader::get_specs(v)));
         let mut dwarf_reader = DwarfReader::create(xlen, &binary_paths);
+        if let Some(spec) = matches.value_of("spec") {
+            let _spec_reader = SpecReader::create(spec);
+        }
         if let Some(write_to_filepath) = matches.value_of("output") {
             if let Some(function_name) = matches.value_of("function") {
                 let mut ut = UclidTranslator::create(
