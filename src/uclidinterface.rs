@@ -199,10 +199,12 @@ impl IRInterface for Uclid5Interface {
         format!("{} = {};", lhs, rhs)
     }
     fn ite_to_string(ite: &IfThenElse) -> String {
-        let cond = Self::expr_to_string(&*ite.cond);
-        let t = indent_text(Self::stmt_to_string(&*ite.then_stmt), 4);
-        let e = indent_text(Self::stmt_to_string(&*ite.else_stmt), 4);
-        format!("if ({}) {{\n{}\n}} else {{\n{}\n}}", cond, t, e)
+        let cond = Self::expr_to_string(&ite.cond);
+        let thn = indent_text(Self::stmt_to_string(&*ite.then_stmt), 4);
+        let els = if let Some(else_stmt) = &ite.else_stmt {
+            format!("else {{\n{}\n}}", indent_text(Self::stmt_to_string(&*else_stmt), 4))
+        } else { String::from("") };
+        format!("if ({}) {{\n{}\n}}{}", cond, thn, els)
     }
     fn block_to_string(blk: &Vec<Rc<Stmt>>) -> String {
         let inner = blk

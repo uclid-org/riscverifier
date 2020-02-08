@@ -86,6 +86,13 @@ pub struct OpApp {
     pub op: Op,
     pub operands: Vec<Rc<Expr>>,
 }
+impl OpApp {
+    pub fn new(op: Op, operands: Vec<Rc<Expr>>) -> Self {
+        OpApp {
+            op, operands
+        }
+    }
+}
 
 /// Operators
 #[derive(Debug)]
@@ -171,23 +178,40 @@ impl Stmt {
 #[derive(Debug)]
 pub struct FuncCall {
     pub func_name: String,
-    pub lhs: Vec<Rc<Expr>>,
-    pub operands: Vec<Rc<Expr>>,
+    pub lhs: Vec<Expr>,
+    pub operands: Vec<Expr>,
 }
+impl FuncCall {
+    pub fn new(func_name: String, lhs: Vec<Expr>, operands: Vec<Expr>) -> Self {
+        FuncCall {
+            func_name,
+            lhs,
+            operands
+        }
+    }
+}
+
 
 /// Assign statement
 #[derive(Debug)]
 pub struct Assign {
-    pub lhs: Vec<Rc<Expr>>,
-    pub rhs: Vec<Rc<Expr>>,
+    pub lhs: Vec<Expr>,
+    pub rhs: Vec<Expr>,
 }
 
 /// If then else statement
 #[derive(Debug)]
 pub struct IfThenElse {
-    pub cond: Box<Expr>,
+    pub cond: Expr,
     pub then_stmt: Box<Stmt>,
-    pub else_stmt: Box<Stmt>,
+    pub else_stmt: Option<Box<Stmt>>,
+}
+impl IfThenElse {
+    pub fn new(cond: Expr, then_stmt: Box<Stmt>, else_stmt: Option<Box<Stmt>>) -> Self {
+        IfThenElse {
+            cond, then_stmt, else_stmt,
+        }
+    }
 }
 
 /// Verification model datatypes
