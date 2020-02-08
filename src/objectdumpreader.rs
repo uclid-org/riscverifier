@@ -2,6 +2,8 @@ use std::process::Command;
 
 use std::collections::{HashMap, HashSet};
 
+use std::rc::Rc;
+
 use pest::Parser;
 
 use std::fmt;
@@ -94,9 +96,6 @@ impl ObjectDumpReader {
                                         }
                                     }
                                 }
-                                if seen_functions.len() == 0 {
-                                    seen_functions.insert(callee_name.clone());
-                                }
                                 if seen_functions.get(&callee_name).is_none()
                                     && !&assembly_lines.is_empty()
                                 {
@@ -107,10 +106,13 @@ impl ObjectDumpReader {
                                     assembly_lines = vec![];
                                     seen_functions.insert(callee_name.clone());
                                 }
-                                // debug!(
-                                //     "[get_binary_object_dump]   Addr: {:?}, Function name: {:?}, Offset: {:?}, OpCode: {:?}, Arguments: {:?}.",
-                                //     address, callee_name, callee_offset, op_code, operands
-                                // );
+                                if seen_functions.len() == 0 {
+                                    seen_functions.insert(callee_name.clone());
+                                }
+                                debug!(
+                                    "[get_binary_object_dump]   Addr: {:?}, Function name: {:?}, Offset: {:?}, OpCode: {:?}, Arguments: {:?}.",
+                                    address, callee_name, callee_offset, op_code, operands
+                                );
                                 assembly_lines.push(AssemblyLine {
                                     address,
                                     callee_name,
@@ -138,6 +140,58 @@ impl ObjectDumpReader {
         function_blocks.insert(assembly_lines[0].address.clone(), assembly_lines.clone());
         function_blocks
     }
+
+    pub fn get_cfg(func_blk: Vec<Rc<AssemblyLine>>) -> Cfg {
+        let mut cfg = Cfg::new();
+        // Stores basic block ENTRY point addresses
+        let mut marked = HashSet::new();
+        let mut blk_entry_addr = None;
+        for al in &func_blk {
+            if blk_entry_addr.is_none() {
+                blk_entry_addr = Some(al.address());
+            }
+            // DEP1. Instruction is branch, add fall through addr
+            // MARK1. branch fall through targets
+            // DEP2. Instruction is branch | jal, add absolute addr
+            // MARK2. absolute jump (branch) targets
+            match &al.op_code[..] {
+                "beq" | "bne" | "blt" | "bge" | "bltu" | "jal" => {
+                    let next_addr = Cfg::next_addr(al.address());
+                    marked.insert(next_addr);
+                    cfg.add_next_blk_addr(blk_entry_addr.unwrap(), next_addr);
+                    let jump_addr = al.imm().unwrap().get_imm_val() as u64;
+                    cfg.add_abs_jump_addr(blk_entry_addr.unwrap(), jump_addr);
+                    marked.insert(jump_addr);
+                },
+                _ => (),
+            }
+            // DEP3. Update blk_entry_addr
+            match &al.op_code[..] {
+                "beq" | "bne" | "blt" | "bge" | "bltu" | "jal" | "jalr" => {
+                    blk_entry_addr = Some(Cfg::next_addr(al.address()))
+                }
+                _ => (),
+            }
+        }
+        // Create basic blocks
+        // 1. If addr is marked, then save the
+        //    previous vector into basic block
+        //    and start a new vector of instructions
+        let mut basic_blk: Vec<Rc<AssemblyLine>> = vec![];
+        for al in &func_blk {
+            if marked.get(&al.address()).is_some() && basic_blk.len() > 0 {
+                let entry_addr = basic_blk[0].address();
+                cfg.add_basic_blk(BasicBlock::new(entry_addr, basic_blk));
+                basic_blk = vec![];
+            }
+            basic_blk.push(Rc::clone(al));
+        }
+        // Add the last to cfg
+        if basic_blk.len() > 0 {
+            cfg.add_basic_blk(BasicBlock::new(basic_blk[0].address(), basic_blk));
+        }
+        cfg
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -149,15 +203,28 @@ pub enum InstOperand {
 impl fmt::Display for InstOperand {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
-            InstOperand::Register(reg_id, _offset) => {
-                // match offset {
-                // 0 => write!(f, "{}", reg_id),
-                // _ => write!(f, "{}+{}", reg_id, offset),
-
-                // }
-                write!(f, "{}", reg_id)
-            }
+            InstOperand::Register(reg_id, _offset) => write!(f, "{}", reg_id),
             InstOperand::Immediate(imm) => write!(f, "{}", imm),
+        }
+    }
+}
+impl InstOperand {
+    pub fn get_imm_val(&self) -> i64 {
+        match self {
+            InstOperand::Immediate(i) => *i,
+            _ => panic!("Not an immediate operand!"),
+        }
+    }
+    pub fn get_reg_name(&self) -> String {
+        match self {
+            InstOperand::Register(n, i) => n.clone(),
+            _ => panic!("Not a register operand!"),
+        }
+    }
+    pub fn get_reg_size(&self) -> i64 {
+        match self {
+            InstOperand::Register(n, i) => *i,
+            _ => panic!("Not a register operand!"),
         }
     }
 }
@@ -169,6 +236,60 @@ pub struct AssemblyLine {
     callee_offset: u64,
     op_code: String,
     operands: Vec<InstOperand>,
+}
+
+#[derive(Debug)]
+pub struct BasicBlock {
+    entry_addr: u64,
+    insts: Vec<Rc<AssemblyLine>>,
+}
+impl BasicBlock {
+    pub fn new(entry_addr: u64, insts: Vec<Rc<AssemblyLine>>) -> Self {
+        BasicBlock { entry_addr, insts }
+    }
+    pub fn insts(&self) -> &Vec<Rc<AssemblyLine>> {
+        &self.insts
+    }
+}
+
+#[derive(Debug)]
+pub struct Cfg {
+    basic_blks_map: HashMap<u64, BasicBlock>,
+    abs_jump_map: HashMap<u64, u64>,
+    next_blk_addr_map: HashMap<u64, u64>,
+}
+impl Cfg {
+    pub fn new() -> Self {
+        Cfg {
+            basic_blks_map: HashMap::new(),
+            abs_jump_map: HashMap::new(),
+            next_blk_addr_map: HashMap::new(),
+        }
+    }
+    pub fn get_basic_blk(&self, addr: u64) -> Option<&BasicBlock> {
+        self.basic_blks_map.get(&addr)
+    }
+    pub fn bbs(&self) -> &HashMap<u64, BasicBlock> {
+        &self.basic_blks_map
+    }
+    pub fn add_basic_blk(&mut self, bb: BasicBlock) {
+        self.basic_blks_map.insert(bb.entry_addr, bb);
+    }
+    pub fn next_blk_addr(&self, addr: u64) -> Option<&u64> {
+        self.next_blk_addr_map.get(&addr)
+    }
+    pub fn next_abs_jump_addr(&self, addr: u64) -> Option<&u64> {
+        self.abs_jump_map.get(&addr)
+    }
+    pub fn add_next_blk_addr(&mut self, from_addr: u64, to_addr: u64) {
+        self.next_blk_addr_map.insert(from_addr, to_addr);
+    }
+    pub fn add_abs_jump_addr(&mut self, from_addr: u64, to_addr: u64) {
+        self.abs_jump_map.insert(from_addr, to_addr);
+    }
+    pub fn next_addr(addr: u64) -> u64 {
+        addr + utils::INST_LENGTH
+    }
 }
 
 impl AssemblyLine {

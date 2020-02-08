@@ -1,7 +1,7 @@
 use std::collections::{HashMap, HashSet};
-use std::fs;
 use std::fs::File;
 use std::io::prelude::*;
+use std::{cell::RefCell, fs, rc::Rc};
 
 use topological_sort::TopologicalSort;
 
@@ -18,7 +18,7 @@ pub struct UclidTranslator<'a> {
     xlen: u64,
     inst_length: u64,
     // Helpers
-    dwarf_reader: &'a mut DwarfReader,
+    dwarf_reader: Rc<RefCell<DwarfReader>>,
     // Context
     function_assembly_line_map: &'a HashMap<u64, Vec<AssemblyLine>>,
     ignored_functions: &'a HashSet<&'a str>,
@@ -32,7 +32,7 @@ pub struct UclidTranslator<'a> {
     const_var_decls: Vec<String>,
     identifiers: HashSet<String>,
     procedures_decls: Vec<String>,
-    function_signatures: HashMap<String, FunctionSig>,
+    function_signatures: HashMap<String, Rc<FunctionSig>>,
     axiom_decls: Vec<String>,
     init_stmts: Vec<String>,
     next_stmts: Vec<String>,
@@ -43,7 +43,7 @@ pub struct UclidTranslator<'a> {
 impl<'a> UclidTranslator<'a> {
     pub fn create(
         xlen: u64,
-        dwarf_reader: &'a mut DwarfReader,
+        dwarf_reader: Rc<RefCell<DwarfReader>>,
         ignored_functions: &'a HashSet<&'a str>,
         struct_macro_ids: &'a HashSet<&'a str>,
         array_macro_ids: &'a HashSet<&'a str>,
@@ -121,48 +121,44 @@ impl<'a> UclidTranslator<'a> {
     }
 
     fn generate_array_helper_macros(&mut self) {
-        let type_decls_map = self.dwarf_reader.get_type_declarations();
         // Vector of tuples (define function name, arguments, output type, body) for uclid5 define declarations
         let mut define_decls_vec = vec![];
         for decl_id in self.array_macro_ids {
-            if let Some(type_decl) = type_decls_map.get(&decl_id.to_string()) {
-                debug!("[generate_array_helper_macros]");
-                let name = format!("{}_array_index", type_decl.name.replace(" ", "_"));
-                let arguments = format!(
-                    "array_base_ptr: {}, i: {}",
-                    self.uclid_bv_type(self.xlen),
-                    self.uclid_bv_type(self.xlen)
-                );
-                let output_type = self.uclid_bv_type(self.xlen);
-                // Compute the multiply expression using the powers of 2 as a function of i
-                let multiply_expr = format!("{:b}", type_decl.size_in_bytes) // Binary expression
-                    .chars()
-                    .rev()
-                    .fold((String::from(""), 0), |acc, x| {
-                        // acc = (expression, i-th bit counter)
-                        if x == '1' {
-                            (
-                                format!(
-                                    "bv_left_shift({}, i){}{}",
-                                    self.u64_to_uclid_bv_lit(acc.1),
-                                    if acc.0.len() == 0 { "" } else { " + " },
-                                    acc.0
-                                ),
-                                acc.1 + 1,
-                            )
-                        } else {
-                            (acc.0, acc.1 + 1)
-                        }
-                    })
-                    .0;
-                let body = format!("array_base_ptr + {};", multiply_expr);
-                define_decls_vec.push((name, arguments, output_type, body));
-            } else {
-                panic!(
-                    "[generate_array_helper_macros] No such declaration {}.",
-                    decl_id
-                );
-            }
+            let type_decl = self
+                .dwarf_reader
+                .borrow()
+                .get_type_declaration(&decl_id.to_string());
+            debug!("[generate_array_helper_macros]");
+            let name = format!("{}_array_index", type_decl.name.replace(" ", "_"));
+            let arguments = format!(
+                "array_base_ptr: {}, i: {}",
+                self.uclid_bv_type(self.xlen),
+                self.uclid_bv_type(self.xlen)
+            );
+            let output_type = self.uclid_bv_type(self.xlen);
+            // Compute the multiply expression using the powers of 2 as a function of i
+            let multiply_expr = format!("{:b}", type_decl.size_in_bytes) // Binary expression
+                .chars()
+                .rev()
+                .fold((String::from(""), 0), |acc, x| {
+                    // acc = (expression, i-th bit counter)
+                    if x == '1' {
+                        (
+                            format!(
+                                "bv_left_shift({}, i){}{}",
+                                self.u64_to_uclid_bv_lit(acc.1),
+                                if acc.0.len() == 0 { "" } else { " + " },
+                                acc.0
+                            ),
+                            acc.1 + 1,
+                        )
+                    } else {
+                        (acc.0, acc.1 + 1)
+                    }
+                })
+                .0;
+            let body = format!("array_base_ptr + {};", multiply_expr);
+            define_decls_vec.push((name, arguments, output_type, body));
         }
         for (name, arguments, output_type, body) in define_decls_vec {
             info!("[generate_array_helper_macros] Generating define {}.", name);
@@ -171,63 +167,57 @@ impl<'a> UclidTranslator<'a> {
     }
 
     fn generate_struct_define_decls(&mut self) {
-        let type_decls_map = self.dwarf_reader.get_type_declarations();
         // Vector of tuples (define function name, arguments, output type, body) for uclid5 define declarations
         let mut define_decls_vec = vec![];
         for decl_id in self.struct_macro_ids {
-            if let Some(type_decl) = type_decls_map.get(&decl_id.to_string()) {
-                debug!(
-                    "[generate_struct_define_decls] Generating define macros for {:#?}.",
-                    type_decl.name
+            let type_decl = self
+                .dwarf_reader
+                .borrow()
+                .get_type_declaration(&decl_id.to_string());
+            debug!(
+                "[generate_struct_define_decls] Generating define macros for {:#?}.",
+                type_decl.name
+            );
+            for field_decl in &type_decl.field_decls {
+                // Offset macro
+                let name = format!("{}_{}", type_decl.name, field_decl.field_name);
+                let arguments = format!("ptr: {}", self.uclid_bv_type(self.xlen));
+                let output_type = self.uclid_bv_type(self.xlen);
+                let body = format!(
+                    "ptr + {};",
+                    self.u64_to_uclid_bv_lit(field_decl.field_member_location)
                 );
-                for field_decl in &type_decl.field_decls {
-                    // Offset macro
-                    let name = format!("{}_{}", type_decl.name, field_decl.field_name);
-                    let arguments = format!("ptr: {}", self.uclid_bv_type(self.xlen));
-                    let output_type = self.uclid_bv_type(self.xlen);
-                    let body = format!(
-                        "ptr + {};",
-                        self.u64_to_uclid_bv_lit(field_decl.field_member_location)
-                    );
-                    define_decls_vec.push((name.clone(), arguments.clone(), output_type, body));
-                    // Deref macro
-                    let name = format!("deref_{}", name.clone());
-                    let arguments = format!(
-                        "memP: {}, ptr: {}",
-                        self.uclid_mem_type(),
-                        self.uclid_bv_type(self.xlen)
-                    );
-                    let output_type = match field_decl.field_size_in_bytes {
-                        1 | 2 | 4 | 8 => {
-                            self.uclid_bv_type(field_decl.field_size_in_bytes * (*BYTE_SIZE))
-                        }
-                        _ => {
-                            info!("[generate_struct_define_decls] Skipped generating deref function {}.", name);
-                            continue;
-                        }
-                    };
-                    let body = match field_decl.field_size_in_bytes {
-                        1 => format!("loadByte_macroP(memP, ptr);"),
-                        2 => format!("loadHalf_macroP(memP, ptr);"),
-                        4 => format!("loadWord_macroP(memP, ptr);"),
-                        8 => format!("loadDouble_macroP(memP, ptr);"),
-                        _ => {
-                            info!("[generate_struct_define_decls] ");
-                            continue;
-                        }
-                    };
-                    define_decls_vec.push((
-                        name.clone(),
-                        arguments.clone(),
-                        output_type.clone(),
-                        body,
-                    ));
-                }
-            } else {
-                panic!(
-                    "[generate_struct_define_decls] No such declaration {}.",
-                    decl_id
+                define_decls_vec.push((name.clone(), arguments.clone(), output_type, body));
+                // Deref macro
+                let name = format!("deref_{}", name.clone());
+                let arguments = format!(
+                    "memP: {}, ptr: {}",
+                    self.uclid_mem_type(),
+                    self.uclid_bv_type(self.xlen)
                 );
+                let output_type = match field_decl.field_size_in_bytes {
+                    1 | 2 | 4 | 8 => {
+                        self.uclid_bv_type(field_decl.field_size_in_bytes * (*BYTE_SIZE))
+                    }
+                    _ => {
+                        info!(
+                            "[generate_struct_define_decls] Skipped generating deref function {}.",
+                            name
+                        );
+                        continue;
+                    }
+                };
+                let body = match field_decl.field_size_in_bytes {
+                    1 => format!("loadByte_macroP(memP, ptr);"),
+                    2 => format!("loadHalf_macroP(memP, ptr);"),
+                    4 => format!("loadWord_macroP(memP, ptr);"),
+                    8 => format!("loadDouble_macroP(memP, ptr);"),
+                    _ => {
+                        info!("[generate_struct_define_decls] ");
+                        continue;
+                    }
+                };
+                define_decls_vec.push((name.clone(), arguments.clone(), output_type.clone(), body));
             }
         }
         for (name, arguments, output_type, body) in define_decls_vec {
@@ -241,25 +231,29 @@ impl<'a> UclidTranslator<'a> {
         let mut define_decls_vec = vec![];
         let mut max_range = u64::min_value();
         let mut min_range = u64::max_value();
-        for global_var in self.dwarf_reader.get_global_vars() {
-            let (
-                _name,
-                GlobalVariable {
-                    name,
-                    size_in_bytes,
-                    memory_addr,
-                },
-            ) = global_var;
+        for global_var in self.dwarf_reader.borrow().get_global_vars() {
+            let GlobalVariable {
+                name,
+                size_in_bytes,
+                type_defn,
+                memory_addr,
+                is_addr,
+            } = global_var.as_ref();
+            let size_in_bytes = if *is_addr {
+                (self.xlen / BYTE_SIZE)
+            } else {
+                *size_in_bytes
+            };
             // update min and max
-            if max_range < *memory_addr + *size_in_bytes {
-                max_range = *memory_addr + *size_in_bytes;
+            if max_range < *memory_addr + size_in_bytes {
+                max_range = *memory_addr + size_in_bytes;
             }
             if min_range > *memory_addr {
                 min_range = *memory_addr;
             }
             assert!(min_range <= max_range);
             let name = format!("global_{}", name);
-            if *size_in_bytes == 0 {
+            if size_in_bytes == 0 {
                 warn!("[generate_global_define_decls] Not generating constant {} because we could not find the size (and by default was set to 0).", name);
                 continue;
             }
@@ -397,7 +391,7 @@ impl<'a> UclidTranslator<'a> {
                 }
             };
         }
-        // ==================== Generate the procedures for functions recursively ==================== //
+        // ==================== Generate the procedures for functions ==================== //
         let mut procedure_body = self.function_body_prologue();
         loop {
             let mut v = ts.pop_all();
@@ -467,66 +461,69 @@ impl<'a> UclidTranslator<'a> {
         }
         procedure_body = format!("{}{}", procedure_body, self.function_body_epilogue());
         // ==================== Get the arugments and requires statement ==================== //
-        let (procedure_arguments, arguments_requires_statement) = if self
-            .is_function_entry_addr(function_addr)
-            && !self.ignored_functions.contains(&function_name[..])
-        {
-            let function_signature = self
-                .dwarf_reader
-                .get_function_signature(&function_name)
-                .clone();
-            debug!(
-                "[generate_function_procedures_by_entry_addr] Formals for function {}: {:?}",
-                function_name, function_signature
-            );
-            self.function_signatures
-                .insert(function_name.to_string(), function_signature.clone());
-            let signature_requires_statement = if function_signature.in_types.len() > 0 {
-                format!("    requires {};", function_signature
-                            .in_types
-                            .iter()
-                            .enumerate()
-                            .map(|(index, name_size_pair)| {
-                                if index > 7 {
-                                    panic!("[generate_function_procedures_by_entry_addr] Currently not supporting arguments with more than 8 arguments.");
-                                }
-                                format!(
-                                    "(a{}[{}:0] == {})",
-                                    index,
-                                    (name_size_pair.1 * (*BYTE_SIZE) - 1),
-                                    name_size_pair.0
-                                )
-                            })
-                            .collect::<Vec<String>>()
-                            .join(" && "))
-            } else {
-                "".to_string()
-            };
-            (
-                format!(
-                    "{}",
-                    function_signature
-                        .in_types
-                        .iter()
-                        .map(|(formal_name, byte_size)| format!(
-                            "{}: {}",
-                            formal_name,
-                            self.uclid_bv_type(*byte_size * (*BYTE_SIZE))
-                        ))
-                        .collect::<Vec<String>>()
-                        .join(", ")
-                ),
-                signature_requires_statement,
-            )
-        } else {
-            // Ignored functions or not entry
-            ("".to_string(), "".to_string())
-        };
+        // let (procedure_arguments, arguments_requires_statement) = if self
+        //     .is_function_entry_addr(function_addr)
+        //     && !self.ignored_functions.contains(&function_name[..])
+        // {
+        //     let function_signature = self
+        //         .dwarf_reader
+        //         .borrow()
+        //         .get_function_signature(&function_name);
+        //     debug!(
+        //         "[generate_function_procedures_by_entry_addr] Formals for function {}: {:?}",
+        //         function_name, function_signature
+        //     );
+        //     self.function_signatures
+        //         .insert(function_name.to_string(), Rc::clone(&function_signature));
+        //     let signature_requires_statement = if function_signature.in_types.len() > 0 {
+        //         format!("    requires {};", function_signature
+        //                     .in_types
+        //                     .iter()
+        //                     .enumerate()
+        //                     .map(|(index, name_size_pair)| {
+        //                         if index > 7 {
+        //                             panic!("[generate_function_procedures_by_entry_addr] Currently not supporting arguments with more than 8 arguments.");
+        //                         }
+        //                         format!(
+        //                             "(a{}[{}:0] == {})",
+        //                             index,
+        //                             (name_size_pair.1 * (*BYTE_SIZE) - 1),
+        //                             name_size_pair.0
+        //                         )
+        //                     })
+        //                     .collect::<Vec<String>>()
+        //                     .join(" && "))
+        //     } else {
+        //         "".to_string()
+        //     };
+        //     (
+        //         format!(
+        //             "{}",
+        //             function_signature
+        //                 .in_types
+        //                 .iter()
+        //                 .map(|(formal_name, byte_size)| format!(
+        //                     "{}: {}",
+        //                     formal_name,
+        //                     self.uclid_bv_type(*byte_size * (*BYTE_SIZE))
+        //                 ))
+        //                 .collect::<Vec<String>>()
+        //                 .join(", ")
+        //         ),
+        //         signature_requires_statement,
+        //     )
+        // } else {
+        //     // Ignored functions or not entry
+        //     ("".to_string(), "".to_string())
+        // };
+        let arguments_requires_statement = "";
         let requires_statement = format!(
             "{}\n    requires pc == {};\n    requires sp_preconditions() && stack_bounds_preconditions();\n    requires (zero_const == 0bv64);\n",
             arguments_requires_statement,
             self.u64_to_uclid_bv_lit(*function_addr),
         );
+        let ensures_statement = String::from("");
+        let procedure_arguments = String::from("");
         let ensures_statement = format!(
             "    ensures (pc == {}(ra)[63:1] ++ 0bv1);\n",
             if modifies_set.contains("ra") {

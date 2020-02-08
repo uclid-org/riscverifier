@@ -6,18 +6,16 @@ integer = @{ "-"? ~ ASCII_DIGIT+ }
 identifier = @{ ASCII_ALPHA ~ char* }
 
 old = @{ "old" }
-old_identifier = { old ~ "(" ~ identifier ~ ")" }
 
 comp_op = @{ "<=_u" | ">=_u" | "<=" | ">=" | "<_u" | ">_u" | "==" | "<" | ">" }
 bool_op = @{ "||" | "&&" | "==>" | "<==>" }
 bit_op = @{ "|" | "&" }
 
-_if = @{ "if" }
-_then = @{ "then" }
-_else = @{ "else" }
-ite = { _if ~ bool_expr ~ _then ~ bool_expr ~ _else ~ bool_expr }
+ite = { "if" ~ bool_expr ~ "then" ~ bool_expr ~ "else" ~ bool_expr }
 
-array_index = { (old_identifier | identifier) ~ "[" ~ value_expr ~ "]" }
+array_index = { "[" ~ value_expr ~ "]" }
+
+get_field = { "." ~ identifier }
 
 comp_eval = { "(" ~ value_expr ~ comp_op ~ value_expr ~ ")" }
 
@@ -29,19 +27,15 @@ bool_const = @{ "true"
 			  | "false"
 			  }
 
-path_expr = { array_index
-			| identifier
-			}
-
 deref = { "*" ~ "(" ~ value_expr ~ ")" }
 deref_old = { "*" ~ "old" ~ "(" ~ value_expr ~ ")" }
 ref_val = { "&" ~ "(" ~ value_expr ~ ")" }
 
-path_expr_list = { path_expr ~ ("." ~ path_expr)* }
+path = { identifier ~ (array_index | get_field)* }
 
 p_value_expr = _{ "(" ~ value_expr ~ ")" }
 value_expr = { bv_eval
-			 | path_expr_list
+			 | path
  			 | integer
  			 | p_value_expr
  			 | deref
