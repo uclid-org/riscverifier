@@ -26,7 +26,7 @@ where
     model: Model,
     func_cfg_map: &'t HashMap<String, Rc<Cfg>>,
     generated_funcs: HashSet<String>,
-    modifies_set: HashMap<String, HashSet<String>>,
+    mod_set_map: HashMap<String, HashSet<String>>,
     _phantom_i: PhantomData<I>,
 }
 
@@ -40,7 +40,7 @@ where
             model: Model::new(),
             func_cfg_map: func_cfg_map,
             generated_funcs: HashSet::new(),
-            modifies_set: HashMap::new(),
+            mod_set_map: HashMap::new(),
             _phantom_i: PhantomData,
         }
     }
@@ -84,24 +84,32 @@ where
                 )
             })
             .collect::<Vec<_>>();
-        let func_mod_set = bb_fms
+        let callees = self.get_callee_addrs(self.get_func_cfg(func_name)?);
+        // Compute modifies set for the current function
+        let mut func_mod_set = bb_fms
             .iter()
             .map(|bb_fm| bb_fm.sig.mod_set.clone())
             .flatten()
             .collect::<HashSet<String>>();
+        // Add basic blocks to model
         self.model.add_func_models(bb_fms);
         // Depth first recursive call (required
         // to happen before we create the current function
         // because we need to compute the modifies set)
-        let callees = self.get_callee_addrs(self.get_func_cfg(func_name)?);
-        for callee in callees {
+        for callee in &callees {
             assert!(
                 self.is_func_entry(&callee.to_string()[..]),
                 format!("Address {} was not found or not an entry point.", callee)
             );
-            let callee_name = self.get_func_name(&callee).unwrap();
+            let callee_name = self.get_func_name(callee).unwrap();
             self.gen_func_model(&callee_name[..]);
         }
+        // Finish computing the mod set (variables from callee functions)
+        for callee in &callees {
+            func_mod_set.union(self.mod_set_map.get(&self.get_func_name(callee).unwrap()).unwrap());
+        }
+        // Memoize modifies set for the current function
+        self.mod_set_map.insert(func_name.to_string(), func_mod_set.clone());
         // Find translate the specification
         let mut requires = vec![];
         let mut ensures = vec![];
