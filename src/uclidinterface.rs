@@ -202,8 +202,13 @@ impl IRInterface for Uclid5Interface {
         let cond = Self::expr_to_string(&ite.cond);
         let thn = indent_text(Self::stmt_to_string(&*ite.then_stmt), 4);
         let els = if let Some(else_stmt) = &ite.else_stmt {
-            format!("else {{\n{}\n}}", indent_text(Self::stmt_to_string(&*else_stmt), 4))
-        } else { String::from("") };
+            format!(
+                "else {{\n{}\n}}",
+                indent_text(Self::stmt_to_string(&*else_stmt), 4)
+            )
+        } else {
+            String::from("")
+        };
         format!("if ({}) {{\n{}\n}}{}", cond, thn, els)
     }
     fn block_to_string(blk: &Vec<Rc<Stmt>>) -> String {
@@ -242,11 +247,24 @@ impl IRInterface for Uclid5Interface {
             .map(|e| format!("\nensures ({});", Self::expr_to_string(e)))
             .collect::<Vec<_>>()
             .join("");
+        let modifies = if fm.sig.mod_set.len() > 0 {
+            format!(
+                "\nmodifies {};",
+                fm.sig
+                    .mod_set
+                    .iter()
+                    .cloned()
+                    .collect::<Vec<_>>()
+                    .join(", ")
+            )
+        } else {
+            format!("")
+        };
         let body = Self::block_to_string(fm.body.get_expect_block());
         let inline = if fm.inline { "[inline] " } else { "" };
         format!(
-            "procedure {}{}({}){}{}{}\n{}",
-            inline, fm.sig.name, args, ret, requires, ensures, body
+            "procedure {}{}({}){}{}{}{}\n{}",
+            inline, fm.sig.name, args, ret, modifies, requires, ensures, body
         )
     }
 

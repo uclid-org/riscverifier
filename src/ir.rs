@@ -88,9 +88,7 @@ pub struct OpApp {
 }
 impl OpApp {
     pub fn new(op: Op, operands: Vec<Expr>) -> Self {
-        OpApp {
-            op, operands
-        }
+        OpApp { op, operands }
     }
 }
 
@@ -186,11 +184,10 @@ impl FuncCall {
         FuncCall {
             func_name,
             lhs,
-            operands
+            operands,
         }
     }
 }
-
 
 /// Assign statement
 #[derive(Debug, Clone)]
@@ -209,7 +206,9 @@ pub struct IfThenElse {
 impl IfThenElse {
     pub fn new(cond: Expr, then_stmt: Box<Stmt>, else_stmt: Option<Box<Stmt>>) -> Self {
         IfThenElse {
-            cond, then_stmt, else_stmt,
+            cond,
+            then_stmt,
+            else_stmt,
         }
     }
 }
@@ -228,6 +227,7 @@ impl FuncModel {
         ret_decl: Option<Expr>,
         requires: Vec<Expr>,
         ensures: Vec<Expr>,
+        mod_set: HashSet<String>,
         body: Stmt,
         inline: bool,
     ) -> Self {
@@ -236,7 +236,7 @@ impl FuncModel {
             format!("Body of {} should be a block.", name)
         );
         FuncModel {
-            sig: FuncSig::new(name, arg_decls, ret_decl, requires, ensures),
+            sig: FuncSig::new(name, arg_decls, ret_decl, requires, ensures, mod_set),
             body: body,
             inline: inline,
         }
@@ -250,6 +250,7 @@ pub struct FuncSig {
     pub ret_decl: Option<Expr>,
     pub requires: Vec<Expr>,
     pub ensures: Vec<Expr>,
+    pub mod_set: HashSet<String>,
 }
 impl FuncSig {
     pub fn new(
@@ -258,6 +259,7 @@ impl FuncSig {
         ret_decl: Option<Expr>,
         requires: Vec<Expr>,
         ensures: Vec<Expr>,
+        mod_set: HashSet<String>,
     ) -> Self {
         assert!(
             arg_decls.iter().all(|v| utils::is_var(v)),
@@ -275,6 +277,7 @@ impl FuncSig {
             ret_decl,
             requires,
             ensures,
+            mod_set,
         }
     }
 }

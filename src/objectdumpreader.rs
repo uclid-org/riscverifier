@@ -162,7 +162,7 @@ impl ObjectDumpReader {
                     let jump_addr = al.imm().unwrap().get_imm_val() as u64;
                     cfg.add_abs_jump_addr(blk_entry_addr.unwrap(), jump_addr);
                     marked.insert(jump_addr);
-                },
+                }
                 _ => (),
             }
             // DEP3. Update blk_entry_addr

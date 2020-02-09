@@ -26,6 +26,7 @@ where
     model: Model,
     func_cfg_map: &'t HashMap<String, Rc<Cfg>>,
     generated_funcs: HashSet<String>,
+    modifies_set: HashMap<String, HashSet<String>>,
     _phantom_i: PhantomData<I>,
 }
 
@@ -39,12 +40,13 @@ where
             model: Model::new(),
             func_cfg_map: func_cfg_map,
             generated_funcs: HashSet::new(),
+            modifies_set: HashMap::new(),
             _phantom_i: PhantomData,
         }
     }
     pub fn gen_func_model_stub(&mut self, name: &str) {
         let stub_fm = FuncModel {
-            sig: FuncSig::new(name, vec![], None, vec![], vec![]),
+            sig: FuncSig::new(name, vec![], None, vec![], vec![], HashSet::new()),
             body: Stmt::Block(vec![]),
             inline: false,
         };
@@ -62,17 +64,32 @@ where
         self.model.add_vars(&self.sys_state_vars());
         // Generate procedure model for each basic block in the function
         // Fixme: Compute modifies set to block
-        let fms = self
+        let bb_fms = self
             .get_func_cfg(func_name)?
             .bbs()
             .iter()
             .map(|(entry_addr, bb)| {
                 let bb_proc_name = self.bb_proc_name(*entry_addr);
                 let body = self.bb_to_block(bb);
-                FuncModel::new(&bb_proc_name, vec![], None, vec![], vec![], body, true)
+                let mod_set = self.bb_mod_set(bb);
+                FuncModel::new(
+                    &bb_proc_name,
+                    vec![],
+                    None,
+                    vec![],
+                    vec![],
+                    mod_set,
+                    body,
+                    true,
+                )
             })
             .collect::<Vec<_>>();
-        self.model.add_func_models(fms);
+        let func_mod_set = bb_fms
+            .iter()
+            .map(|bb_fm| bb_fm.sig.mod_set.clone())
+            .flatten()
+            .collect::<HashSet<String>>();
+        self.model.add_func_models(bb_fms);
         // Depth first recursive call (required
         // to happen before we create the current function
         // because we need to compute the modifies set)
@@ -94,7 +111,16 @@ where
         // Create the cfg
         let body = self.gen_func_body(self.get_func_cfg(func_name)?);
         // Add function model
-        self.model.add_func_model(FuncModel::new(func_name, arg_decls, ret_decl, requires, ensures, body, false));
+        self.model.add_func_model(FuncModel::new(
+            func_name,
+            arg_decls,
+            ret_decl,
+            requires,
+            ensures,
+            func_mod_set,
+            body,
+            false,
+        ));
         Ok(())
     }
     pub fn print_model(&self) {
@@ -120,7 +146,8 @@ where
     fn basic_blk_call(&self, entry_addr: u64, cfg: &Rc<Cfg>) -> Stmt {
         let mut then_stmts_inner = vec![];
         // Add call to basic block
-        let call_stmt = Stmt::FuncCall(FuncCall::new(self.bb_proc_name(entry_addr), vec![], vec![]));
+        let call_stmt =
+            Stmt::FuncCall(FuncCall::new(self.bb_proc_name(entry_addr), vec![], vec![]));
         then_stmts_inner.push(Rc::new(call_stmt));
         // Assert statements for jump targets
         let mut fallthru_guard = None;
@@ -128,18 +155,33 @@ where
         let mut callee_call = false;
         // Fall through target
         if let Some(target_addr) = cfg.next_blk_addr(entry_addr) {
-            fallthru_guard = Some(Expr::OpApp(OpApp::new(Op::Comp(CompOp::Equality), vec![Expr::Var(self.pc_var()), Expr::Literal(Literal::bv(*target_addr, self.xlen))])));
+            fallthru_guard = Some(Expr::OpApp(OpApp::new(
+                Op::Comp(CompOp::Equality),
+                vec![
+                    Expr::Var(self.pc_var()),
+                    Expr::Literal(Literal::bv(*target_addr, self.xlen)),
+                ],
+            )));
         }
         // Jump target (remove fall through if target is function entry; ie. JAL)
         if let Some(target_addr) = cfg.next_abs_jump_addr(entry_addr) {
             if self.is_func_entry(&target_addr.to_string()[..]) {
                 callee_call = true;
             }
-            jump_guard = Some(Expr::OpApp(OpApp::new(Op::Comp(CompOp::Equality), vec![Expr::Var(self.pc_var()), Expr::Literal(Literal::bv(*target_addr, self.xlen))])));
+            jump_guard = Some(Expr::OpApp(OpApp::new(
+                Op::Comp(CompOp::Equality),
+                vec![
+                    Expr::Var(self.pc_var()),
+                    Expr::Literal(Literal::bv(*target_addr, self.xlen)),
+                ],
+            )));
         }
         // Add guard for after basic block
         if fallthru_guard.is_some() && jump_guard.is_some() && !callee_call {
-            then_stmts_inner.push(Rc::new(Stmt::Assert(Expr::OpApp(OpApp::new(Op::Bool(BoolOp::Disj), vec![fallthru_guard.clone().unwrap(), jump_guard.clone().unwrap()])))));
+            then_stmts_inner.push(Rc::new(Stmt::Assert(Expr::OpApp(OpApp::new(
+                Op::Bool(BoolOp::Disj),
+                vec![fallthru_guard.clone().unwrap(), jump_guard.clone().unwrap()],
+            )))));
         } else if jump_guard.is_some() {
             then_stmts_inner.push(Rc::new(Stmt::Assert(jump_guard.clone().unwrap())));
         } else if fallthru_guard.is_some() {
@@ -148,14 +190,24 @@ where
         // Add call statement to callee function
         if let Some(target_addr) = cfg.next_abs_jump_addr(entry_addr) {
             if self.is_func_entry(&target_addr.to_string()[..]) {
-                let call_stmt = Stmt::FuncCall(FuncCall::new(self.get_func_name(target_addr).unwrap(), vec![], vec![]));
+                let call_stmt = Stmt::FuncCall(FuncCall::new(
+                    self.get_func_name(target_addr).unwrap(),
+                    vec![],
+                    vec![],
+                ));
                 then_stmts_inner.push(Rc::new(call_stmt));
                 then_stmts_inner.push(Rc::new(Stmt::Assert(fallthru_guard.unwrap().clone())));
             }
         }
         let then_stmt = Box::new(Stmt::Block(then_stmts_inner));
         // Add condition that checks if pc == basic block entry address
-        let cond = Expr::OpApp(OpApp::new(Op::Comp(CompOp::Equality), vec![Expr::Var(self.pc_var()), Expr::Literal(Literal::bv(entry_addr, self.xlen))]));
+        let cond = Expr::OpApp(OpApp::new(
+            Op::Comp(CompOp::Equality),
+            vec![
+                Expr::Var(self.pc_var()),
+                Expr::Literal(Literal::bv(entry_addr, self.xlen)),
+            ],
+        ));
         Stmt::IfThenElse(IfThenElse::new(cond, then_stmt, None))
     }
     /// Topologically sorted list of entry addresses in the CFG
@@ -219,14 +271,26 @@ where
         }
         // immediate input
         if let Some(imm) = al.imm() {
-            operands.push(Expr::Literal(Literal::bv(
-                imm.get_imm_val() as u64,
-                20,
-            )));
+            operands.push(Expr::Literal(Literal::bv(imm.get_imm_val() as u64, 20)));
         }
         Stmt::FuncCall(FuncCall::new(func_name, lhs, operands))
     }
     /// =================== Helper functions ===================
+    /// Compute modifies set for a basic block
+    fn bb_mod_set(&self, bb: &BasicBlock) -> HashSet<String> {
+        let mut mod_set = HashSet::new();
+        mod_set.insert(PC_VAR.to_string());
+        for al in bb.insts() {
+            if let Some(reg) = al.rd() {
+                mod_set.insert(reg.get_reg_name());
+            }
+            match al.base_instruction_name() {
+                "sb" | "sh" | "sw" | "sd" => mod_set.insert(MEM_VAR.to_string()),
+                _ => false,
+            };
+        }
+        mod_set
+    }
     /// List of callee addresses in the CFG
     fn get_callee_addrs(&self, cfg: &Rc<Cfg>) -> HashSet<u64> {
         cfg.bbs()
