@@ -16,6 +16,7 @@ const PC_VAR: &str = "pc";
 const MEM_VAR: &str = "mem";
 const PRIV_VAR: &str = "current_priv";
 const EXCEPT_VAR: &str = "exception";
+const BYTE_SIZE: u64 = 8;
 
 /// Translator
 pub struct Translator<'t, I>
@@ -26,6 +27,7 @@ where
     model: Model,
     func_cfg_map: &'t HashMap<String, Rc<Cfg>>,
     generated_funcs: HashSet<String>,
+    ignored_funcs: &'t HashSet<&'t str>,
     mod_set_map: HashMap<String, HashSet<String>>,
     _phantom_i: PhantomData<I>,
 }
@@ -34,12 +36,16 @@ impl<'t, I> Translator<'t, I>
 where
     I: IRInterface,
 {
-    pub fn new(func_cfg_map: &'t HashMap<String, Rc<Cfg>>) -> Self {
+    pub fn new(
+        func_cfg_map: &'t HashMap<String, Rc<Cfg>>,
+        ignored_funcs: &'t HashSet<&'t str>,
+    ) -> Self {
         Translator {
             xlen: 64,
             model: Model::new(),
-            func_cfg_map: func_cfg_map,
+            func_cfg_map,
             generated_funcs: HashSet::new(),
+            ignored_funcs,
             mod_set_map: HashMap::new(),
             _phantom_i: PhantomData,
         }
@@ -53,6 +59,10 @@ where
         self.model.add_func_model(stub_fm);
     }
     pub fn gen_func_model(&mut self, func_name: &str) -> Result<(), TErr> {
+        if self.ignored_funcs.get(func_name).is_some() {
+            self.gen_func_model_stub(func_name);
+            return Ok(());
+        }
         if self.generated_funcs.get(func_name).is_some() {
             return Ok(());
         }
@@ -104,13 +114,16 @@ where
             let callee_name = self.get_func_name(callee).unwrap();
             self.gen_func_model(&callee_name[..]);
         }
-        // Finish computing the mod set (variables from callee functions)
+        // Add callee mod set variables
         for callee in &callees {
-            func_mod_set.union(
-                self.mod_set_map
-                    .get(&self.get_func_name(callee).unwrap())
-                    .unwrap(),
-            );
+            let callee_name = self.get_func_name(callee).unwrap();
+            if self.ignored_funcs.get(&callee_name[..]).is_some() {
+                continue;
+            }
+            func_mod_set = func_mod_set
+                .union(self.mod_set_map.get(&callee_name).unwrap())
+                .cloned()
+                .collect::<HashSet<String>>();
         }
         // Memoize modifies set for the current function
         self.mod_set_map
@@ -267,8 +280,9 @@ where
             if let Some(reg) = reg_op {
                 lhs.push(Expr::Var(Var::new(
                     &reg.get_reg_name()[..],
-                    self.bv_type(reg.get_reg_size() as u64),
+                    self.bv_type(self.xlen),
                 )));
+                assert!(!reg.has_offset());
             }
         }
         // inputs
@@ -278,13 +292,19 @@ where
             if let Some(reg) = reg_op {
                 operands.push(Expr::Var(Var::new(
                     &reg.get_reg_name()[..],
-                    self.bv_type(reg.get_reg_size() as u64),
+                    self.bv_type(self.xlen),
                 )));
+                if reg.has_offset() {
+                    operands.push(self.bv_lit(reg.get_reg_offset() as u64, self.xlen));
+                }
             }
         }
         // immediate input
         if let Some(imm) = al.imm() {
-            operands.push(Expr::Literal(Literal::bv(imm.get_imm_val() as u64, 20)));
+            operands.push(Expr::Literal(Literal::bv(
+                imm.get_imm_val() as u64,
+                self.xlen,
+            )));
         }
         Stmt::FuncCall(FuncCall::new(func_name, lhs, operands))
     }
@@ -293,8 +313,12 @@ where
     fn bb_mod_set(&self, bb: &BasicBlock) -> HashSet<String> {
         let mut mod_set = HashSet::new();
         mod_set.insert(PC_VAR.to_string());
+        mod_set.insert(EXCEPT_VAR.to_string()); // Note: Doesn't always need to be modified
         for al in bb.insts() {
             if let Some(reg) = al.rd() {
+                mod_set.insert(reg.get_reg_name());
+            }
+            if let Some(reg) = al.csr() {
                 mod_set.insert(reg.get_reg_name());
             }
             match al.base_instruction_name() {
@@ -352,12 +376,16 @@ where
     fn mem_type(&self) -> Rc<Type> {
         Rc::new(Type::Array {
             in_typs: vec![self.bv_type(self.xlen)],
-            out_typ: self.bv_type(8),
+            out_typ: self.bv_type(BYTE_SIZE),
         })
     }
     /// Returns a bitvector type of specified width
     fn bv_type(&self, width: u64) -> Rc<Type> {
         Rc::new(Type::Bv { w: width })
+    }
+    /// Returns a bitvector literal
+    fn bv_lit(&self, val: u64, width: u64) -> Expr {
+        Expr::Literal(Literal::bv(val, width))
     }
     /// Infers registers used by the instructions in the CFG
     fn infer_vars(&self, cfg_rc: &Rc<Cfg>) -> Vec<Var> {

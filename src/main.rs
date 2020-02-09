@@ -23,8 +23,8 @@ use objectdumpreader::ObjectDumpReader;
 mod specreader;
 use specreader::SpecReader;
 
-mod uclidtranslator;
-use uclidtranslator::UclidTranslator;
+// mod uclidtranslator;
+// use uclidtranslator::UclidTranslator;
 
 mod translator;
 use translator::Translator;
@@ -145,7 +145,8 @@ fn main() {
         func_blks.insert(format!("{}", k), Rc::clone(&cfg));
         func_blks.insert(blk[0].function_name().to_string(), Rc::clone(&cfg));
     }
-    let mut translator: Translator<Uclid5Interface> = Translator::new(&func_blks);
+    let mut translator: Translator<Uclid5Interface> =
+        Translator::new(&func_blks, &ignored_functions);
     translator.gen_func_model(&func_name);
     translator.print_model();
 

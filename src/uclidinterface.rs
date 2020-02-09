@@ -1,4 +1,7 @@
 use std::fmt;
+use std::fs;
+use std::fs::File;
+use std::io::prelude::*;
 use std::rc::Rc;
 
 use crate::ir::*;
@@ -21,6 +24,9 @@ impl Uclid5Interface {
             defn_string = format!("{}\n{}", defn_string, var_defn);
         }
         defn_string
+    }
+    fn prelude() -> String {
+        fs::read_to_string("models/prelude.ucl").expect("Unable to read prelude.")
     }
     fn gen_array_defns(model: &Model) -> String {
         format!("")
@@ -71,7 +77,7 @@ impl Uclid5Interface {
 impl IRInterface for Uclid5Interface {
     fn lit_to_string(lit: &Literal) -> String {
         match lit {
-            Literal::Bv { val, width } => format!("{}bv{}", val, width),
+            Literal::Bv { val, width } => format!("{}bv{}", *val as i64, width),
             Literal::Bool { val } => format!("{}", val),
         }
     }
@@ -273,6 +279,7 @@ impl IRInterface for Uclid5Interface {
     // NOTE: Replace string with write to file
     fn ir_model_to_string(model: &Model) -> String {
         // prelude
+        let prelude = Self::prelude();
         // variables
         let var_defns = indent_text(Self::gen_var_defns(model), 4);
         // definitions
@@ -284,8 +291,8 @@ impl IRInterface for Uclid5Interface {
         // control block
         let ctrl_blk = Self::control_blk(model);
         format!(
-            "module main {{\n{}\n{}\n{}\n{}\n{}\n\n{}\n}}",
-            var_defns, array_defns, struct_defns, global_defns, procs, ctrl_blk
+            "module main {{\n{}\n{}\n{}\n{}\n{}\n{}\n\n{}\n}}",
+            prelude, var_defns, array_defns, struct_defns, global_defns, procs, ctrl_blk
         )
     }
 }

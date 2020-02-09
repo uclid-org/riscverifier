@@ -82,13 +82,13 @@ impl ObjectDumpReader {
                                             operands.push(imm);
                                         }
                                         Rule::ident => {
-                                            let reg = InstOperand::Register(operand_value.as_str().to_string(), 0);
+                                            let reg = InstOperand::Register(operand_value.as_str().to_string(), None);
                                             operands.push(reg);
                                         }
                                         Rule::offset_operand => {
                                             let mut offset_operand_iter = operand_value.into_inner();
                                             let offset = utils::dec_str_to_i64(offset_operand_iter.next().unwrap().as_str()).expect("[get_binary_object_dump] Unable to parse offset in instruction arugment");
-                                            let reg = InstOperand::Register(offset_operand_iter.as_str().to_string(), offset);
+                                            let reg = InstOperand::Register(offset_operand_iter.as_str().to_string(), Some(offset));
                                             operands.push(reg);
                                         }
                                         _ => {
@@ -196,7 +196,7 @@ impl ObjectDumpReader {
 
 #[derive(Debug, Clone)]
 pub enum InstOperand {
-    Register(String, i64),
+    Register(String, Option<i64>),
     Immediate(i64),
 }
 
@@ -221,9 +221,15 @@ impl InstOperand {
             _ => panic!("Not a register operand!"),
         }
     }
-    pub fn get_reg_size(&self) -> i64 {
+    pub fn get_reg_offset(&self) -> i64 {
         match self {
-            InstOperand::Register(n, i) => *i,
+            InstOperand::Register(n, i) => i.expect("Register has no offset."),
+            _ => panic!("Not a register operand!"),
+        }
+    }
+    pub fn has_offset(&self) -> bool {
+        match self {
+            InstOperand::Register(n, i) => i.is_some(),
             _ => panic!("Not a register operand!"),
         }
     }
@@ -357,7 +363,9 @@ impl AssemblyLine {
             | "sd" => {
                 assert!(self.operands.len() == 2);
                 match &self.operands[1] {
-                    InstOperand::Register(_register_id, offset) => Some(*offset),
+                    InstOperand::Register(_register_id, offset) => {
+                        Some(offset.expect("Instruction has no offset!"))
+                    }
                     _ => panic!("[offset] Operand has no offset!"),
                 }
             }
