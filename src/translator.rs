@@ -106,10 +106,15 @@ where
         }
         // Finish computing the mod set (variables from callee functions)
         for callee in &callees {
-            func_mod_set.union(self.mod_set_map.get(&self.get_func_name(callee).unwrap()).unwrap());
+            func_mod_set.union(
+                self.mod_set_map
+                    .get(&self.get_func_name(callee).unwrap())
+                    .unwrap(),
+            );
         }
         // Memoize modifies set for the current function
-        self.mod_set_map.insert(func_name.to_string(), func_mod_set.clone());
+        self.mod_set_map
+            .insert(func_name.to_string(), func_mod_set.clone());
         // Find translate the specification
         let mut requires = vec![];
         let mut ensures = vec![];

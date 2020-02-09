@@ -53,6 +53,7 @@ impl Uclid5Interface {
             })
             .collect::<Vec<_>>()
             .join("\n");
+        let verif_fns_string = format!("{}\ncheck;\nprint_results;", verif_fns_string);
         let verif_fns_string = indent_text(verif_fns_string, 4);
         let control_string = format!("control {{\n{}\n}}", verif_fns_string);
         indent_text(control_string, 4)
@@ -237,19 +238,19 @@ impl IRInterface for Uclid5Interface {
             .sig
             .requires
             .iter()
-            .map(|e| format!("\nrequires ({});", Self::expr_to_string(e)))
+            .map(|e| format!("\n    requires ({});", Self::expr_to_string(e)))
             .collect::<Vec<_>>()
             .join("");
         let ensures = fm
             .sig
             .ensures
             .iter()
-            .map(|e| format!("\nensures ({});", Self::expr_to_string(e)))
+            .map(|e| format!("\n    ensures ({});", Self::expr_to_string(e)))
             .collect::<Vec<_>>()
             .join("");
         let modifies = if fm.sig.mod_set.len() > 0 {
             format!(
-                "\nmodifies {};",
+                "\n    modifies {};",
                 fm.sig
                     .mod_set
                     .iter()
