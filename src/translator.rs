@@ -118,8 +118,44 @@ where
     }
     /// Basic block call in function body
     fn basic_blk_call(&self, entry_addr: u64, cfg: &Rc<Cfg>) -> Stmt {
-        let cond = Expr::OpApp(OpApp::new(Op::Comp(CompOp::Equality), vec![Rc::new(Expr::Var(self.pc_var())), Rc::new(Expr::Literal(Literal::bv(entry_addr, self.xlen)))]));
-        let then_stmt = Box::new(Stmt::FuncCall(FuncCall::new(self.bb_proc_name(entry_addr), vec![], vec![])));
+        let mut then_stmts_inner = vec![];
+        // Add call to basic block
+        let call_stmt = Stmt::FuncCall(FuncCall::new(self.bb_proc_name(entry_addr), vec![], vec![]));
+        then_stmts_inner.push(Rc::new(call_stmt));
+        // Assert statements for jump targets
+        let mut fallthru_guard = None;
+        let mut jump_guard = None;
+        let mut callee_call = false;
+        // Fall through target
+        if let Some(target_addr) = cfg.next_blk_addr(entry_addr) {
+            fallthru_guard = Some(Expr::OpApp(OpApp::new(Op::Comp(CompOp::Equality), vec![Expr::Var(self.pc_var()), Expr::Literal(Literal::bv(*target_addr, self.xlen))])));
+        }
+        // Jump target (remove fall through if target is function entry; ie. JAL)
+        if let Some(target_addr) = cfg.next_abs_jump_addr(entry_addr) {
+            if self.is_func_entry(&target_addr.to_string()[..]) {
+                callee_call = true;
+            }
+            jump_guard = Some(Expr::OpApp(OpApp::new(Op::Comp(CompOp::Equality), vec![Expr::Var(self.pc_var()), Expr::Literal(Literal::bv(*target_addr, self.xlen))])));
+        }
+        // Add guard for after basic block
+        if fallthru_guard.is_some() && jump_guard.is_some() && !callee_call {
+            then_stmts_inner.push(Rc::new(Stmt::Assert(Expr::OpApp(OpApp::new(Op::Bool(BoolOp::Disj), vec![fallthru_guard.clone().unwrap(), jump_guard.clone().unwrap()])))));
+        } else if jump_guard.is_some() {
+            then_stmts_inner.push(Rc::new(Stmt::Assert(jump_guard.clone().unwrap())));
+        } else if fallthru_guard.is_some() {
+            then_stmts_inner.push(Rc::new(Stmt::Assert(fallthru_guard.clone().unwrap())));
+        }
+        // Add call statement to callee function
+        if let Some(target_addr) = cfg.next_abs_jump_addr(entry_addr) {
+            if self.is_func_entry(&target_addr.to_string()[..]) {
+                let call_stmt = Stmt::FuncCall(FuncCall::new(self.get_func_name(target_addr).unwrap(), vec![], vec![]));
+                then_stmts_inner.push(Rc::new(call_stmt));
+                then_stmts_inner.push(Rc::new(Stmt::Assert(fallthru_guard.unwrap().clone())));
+            }
+        }
+        let then_stmt = Box::new(Stmt::Block(then_stmts_inner));
+        // Add condition that checks if pc == basic block entry address
+        let cond = Expr::OpApp(OpApp::new(Op::Comp(CompOp::Equality), vec![Expr::Var(self.pc_var()), Expr::Literal(Literal::bv(entry_addr, self.xlen))]));
         Stmt::IfThenElse(IfThenElse::new(cond, then_stmt, None))
     }
     /// Topologically sorted list of entry addresses in the CFG

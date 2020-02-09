@@ -19,7 +19,7 @@ pub enum Type {
     },
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum Expr {
     Literal(Literal),
     Var(Var),
@@ -37,7 +37,7 @@ impl Expr {
 }
 
 /// Literals
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum Literal {
     Bv { val: u64, width: u64 },
     Bool { val: bool },
@@ -81,13 +81,13 @@ impl PartialEq for Var {
 }
 
 // Operator application
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct OpApp {
     pub op: Op,
-    pub operands: Vec<Rc<Expr>>,
+    pub operands: Vec<Expr>,
 }
 impl OpApp {
-    pub fn new(op: Op, operands: Vec<Rc<Expr>>) -> Self {
+    pub fn new(op: Op, operands: Vec<Expr>) -> Self {
         OpApp {
             op, operands
         }
@@ -95,7 +95,7 @@ impl OpApp {
 }
 
 /// Operators
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum Op {
     Comp(CompOp),
     Bv(BVOp),
@@ -104,14 +104,14 @@ pub enum Op {
 }
 
 /// Comparison operators
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum CompOp {
     Equality,
     Inequality,
 }
 
 /// BV operators
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum BVOp {
     Lt,  // <
     Le,  // <=
@@ -137,7 +137,7 @@ pub enum BVOp {
 }
 
 /// Boolean operators
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum BoolOp {
     Conj, // and: &&
     Disj, // or: ||
@@ -147,14 +147,14 @@ pub enum BoolOp {
 }
 
 /// Function application
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct FuncApp {
     pub func_name: &'static str,
     pub operands: Vec<Rc<Expr>>,
 }
 
 /// Statements
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum Stmt {
     Skip,
     Assert(Expr),
@@ -175,7 +175,7 @@ impl Stmt {
 }
 
 /// Function call statement
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct FuncCall {
     pub func_name: String,
     pub lhs: Vec<Expr>,
@@ -193,14 +193,14 @@ impl FuncCall {
 
 
 /// Assign statement
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct Assign {
     pub lhs: Vec<Expr>,
     pub rhs: Vec<Expr>,
 }
 
 /// If then else statement
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct IfThenElse {
     pub cond: Expr,
     pub then_stmt: Box<Stmt>,
@@ -215,7 +215,7 @@ impl IfThenElse {
 }
 
 /// Verification model datatypes
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct FuncModel {
     pub sig: FuncSig,
     pub body: Stmt,
@@ -243,7 +243,7 @@ impl FuncModel {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct FuncSig {
     pub name: String,
     pub arg_decls: Vec<Expr>,
