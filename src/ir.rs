@@ -1,12 +1,12 @@
 use std::cmp::Ordering;
 use std::collections::HashSet;
 use std::fmt;
-use std::marker::PhantomData;
 use std::rc::Rc;
 
 use crate::utils;
 
 /// Types
+#[allow(dead_code)]
 #[derive(Debug, PartialEq, Eq, Hash)]
 pub enum Type {
     Bool,
@@ -19,6 +19,7 @@ pub enum Type {
     },
 }
 
+#[allow(dead_code)]
 #[derive(Debug, Clone)]
 pub enum Expr {
     Literal(Literal),
@@ -37,6 +38,7 @@ impl Expr {
 }
 
 /// Literals
+#[allow(dead_code)]
 #[derive(Debug, Clone)]
 pub enum Literal {
     Bv { val: u64, width: u64 },
@@ -46,6 +48,8 @@ impl Literal {
     pub fn bv(val: u64, width: u64) -> Self {
         Literal::Bv { val, width }
     }
+
+    #[allow(dead_code)]
     pub fn bool(val: bool) -> Self {
         Literal::Bool { val }
     }
@@ -93,6 +97,7 @@ impl OpApp {
 }
 
 /// Operators
+#[allow(dead_code)]
 #[derive(Debug, Clone)]
 pub enum Op {
     Comp(CompOp),
@@ -102,6 +107,7 @@ pub enum Op {
 }
 
 /// Comparison operators
+#[allow(dead_code)]
 #[derive(Debug, Clone)]
 pub enum CompOp {
     Equality,
@@ -109,6 +115,7 @@ pub enum CompOp {
 }
 
 /// BV operators
+#[allow(dead_code)]
 #[derive(Debug, Clone)]
 pub enum BVOp {
     Lt,  // <
@@ -135,6 +142,7 @@ pub enum BVOp {
 }
 
 /// Boolean operators
+#[allow(dead_code)]
 #[derive(Debug, Clone)]
 pub enum BoolOp {
     Conj, // and: &&
@@ -152,6 +160,7 @@ pub struct FuncApp {
 }
 
 /// Statements
+#[allow(dead_code)]
 #[derive(Debug, Clone)]
 pub enum Stmt {
     Skip,
@@ -322,7 +331,6 @@ pub trait IRInterface: fmt::Debug {
             Expr::FuncApp(fapp) => Self::fapp_to_string(fapp),
             Expr::OpApp(opapp) => Self::opapp_to_string(opapp),
             Expr::Var(v) | Expr::Const(v) => Self::var_to_string(v),
-            _ => panic!("[expr_to_string] Unimplemented."),
         }
     }
     fn opapp_to_string(opapp: &OpApp) -> String {

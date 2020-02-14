@@ -1,15 +1,13 @@
-use std::fmt;
 use std::fs;
-use std::fs::File;
-use std::io::prelude::*;
 use std::rc::Rc;
 
 use crate::ir::*;
-use crate::translator::*;
 use crate::utils::*;
 
 #[derive(Debug)]
-pub struct Uclid5Interface;
+pub struct Uclid5Interface {
+    
+};
 
 impl Uclid5Interface {
     pub fn new() -> Self {
@@ -28,13 +26,13 @@ impl Uclid5Interface {
     fn prelude() -> String {
         fs::read_to_string("models/prelude.ucl").expect("Unable to read prelude.")
     }
-    fn gen_array_defns(model: &Model) -> String {
+    fn gen_array_defns(_model: &Model) -> String {
         format!("")
     }
-    fn gen_struct_defns(model: &Model) -> String {
+    fn gen_struct_defns(_model: &Model) -> String {
         format!("")
     }
-    fn gen_global_defns(model: &Model) -> String {
+    fn gen_global_defns(_model: &Model) -> String {
         format!("")
     }
     fn gen_procs(model: &Model) -> String {

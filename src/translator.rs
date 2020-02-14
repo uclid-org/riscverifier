@@ -1,7 +1,6 @@
 use std::boxed::Box;
 use std::collections::HashMap;
 use std::collections::HashSet;
-use std::fmt;
 use std::marker::PhantomData;
 use std::rc::Rc;
 
@@ -10,6 +9,7 @@ use topological_sort::TopologicalSort;
 use crate::ir::*;
 use crate::objectdumpreader::*;
 use crate::utils::*;
+use crate::dwarfreader::{DwarfReader, DwarfInterface};
 
 /// Constants
 const PC_VAR: &str = "pc";
@@ -19,9 +19,10 @@ const EXCEPT_VAR: &str = "exception";
 const BYTE_SIZE: u64 = 8;
 
 /// Translator
-pub struct Translator<'t, I>
+pub struct Translator<'t, I, J>
 where
     I: IRInterface,
+    J: DwarfInterface,
 {
     xlen: u64,
     model: Model,
@@ -29,24 +30,28 @@ where
     generated_funcs: HashSet<String>,
     ignored_funcs: &'t HashSet<&'t str>,
     mod_set_map: HashMap<String, HashSet<String>>,
+    dwarf_reader: &'t Option<DwarfReader<J>>,
     _phantom_i: PhantomData<I>,
 }
 
-impl<'t, I> Translator<'t, I>
+impl<'t, I, J> Translator<'t, I, J>
 where
     I: IRInterface,
+    J: DwarfInterface,
 {
     pub fn new(
         func_cfg_map: &'t HashMap<String, Rc<Cfg>>,
         ignored_funcs: &'t HashSet<&'t str>,
+        dwarf_reader: &'t Option<DwarfReader<J>>,
     ) -> Self {
         Translator {
-            xlen: 64,
+            xlen: 64,   // TODO: Support for other architecture widths
             model: Model::new(),
             func_cfg_map,
             generated_funcs: HashSet::new(),
             ignored_funcs,
             mod_set_map: HashMap::new(),
+            dwarf_reader,
             _phantom_i: PhantomData,
         }
     }
@@ -58,7 +63,7 @@ where
         };
         self.model.add_func_model(stub_fm);
     }
-    pub fn gen_func_model(&mut self, func_name: &str) -> Result<(), TErr> {
+    pub fn gen_func_model(&mut self, func_name: &str) -> Result<(), Error> {
         if self.ignored_funcs.get(func_name).is_some() {
             self.gen_func_model_stub(func_name);
             return Ok(());
@@ -129,8 +134,8 @@ where
         self.mod_set_map
             .insert(func_name.to_string(), func_mod_set.clone());
         // Find translate the specification
-        let mut requires = vec![];
-        let mut ensures = vec![];
+        let requires = vec![];
+        let ensures = vec![];
         // Get the arguments
         let arg_decls = vec![];
         let ret_decl = None;
@@ -240,7 +245,7 @@ where
     fn topological_sort(&self, cfg: &Rc<Cfg>) -> Vec<u64> {
         let mut sorted = vec![];
         let mut ts = TopologicalSort::<&u64>::new();
-        for (entry_addr, bb) in cfg.bbs() {
+        for (entry_addr, _bb) in cfg.bbs() {
             if let Some(target) = cfg.next_blk_addr(*entry_addr) {
                 ts.add_dependency(entry_addr, target);
             }
@@ -332,7 +337,7 @@ where
     fn get_callee_addrs(&self, cfg: &Rc<Cfg>) -> HashSet<u64> {
         cfg.bbs()
             .iter()
-            .map(|(entry_addr, bb)| {
+            .map(|(_entry_addr, bb)| {
                 bb.insts()
                     .iter()
                     .filter(|al| al.base_instruction_name() == "jal")
@@ -390,7 +395,7 @@ where
     /// Infers registers used by the instructions in the CFG
     fn infer_vars(&self, cfg_rc: &Rc<Cfg>) -> Vec<Var> {
         let mut var_names = vec![];
-        for (entry_addr, bb) in cfg_rc.bbs() {
+        for (_entry_addr, bb) in cfg_rc.bbs() {
             for al in bb.insts() {
                 let mut regs: [Option<&InstOperand>; 4] = [al.rd(), al.rs1(), al.rs2(), al.csr()];
                 for reg_op in regs.iter_mut() {
@@ -410,9 +415,9 @@ where
             })
             .collect::<Vec<Var>>()
     }
-    fn get_func_cfg(&self, func_name: &str) -> Result<&Rc<Cfg>, TErr> {
+    fn get_func_cfg(&self, func_name: &str) -> Result<&Rc<Cfg>, Error> {
         self.func_cfg_map.get(func_name).map_or(
-            Err(TErr {
+            Err(Error::TErr {
                 msg: format!("Could not find function {}.", func_name),
             }),
             |rc| Ok(rc),
@@ -432,9 +437,9 @@ where
                 )
             })
     }
-    fn get_func_cfg_addr(&self, addr: &str) -> Result<&Rc<Cfg>, TErr> {
+    fn get_func_cfg_addr(&self, addr: &str) -> Result<&Rc<Cfg>, Error> {
         self.func_cfg_map.get(addr).map_or(
-            Err(TErr {
+            Err(Error::TErr {
                 msg: format!("Could not find function at addr {}.", addr),
             }),
             |rc| Ok(rc),

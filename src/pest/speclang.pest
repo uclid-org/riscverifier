@@ -56,7 +56,8 @@ spec_type = @{ "requires" | "ensures" }
 spec_stmt = { spec_type ~ bool_expr }
 
 spec_end = _{ "end_spec" }
+spec_begin = _{ "begin_spec" }
 func_name = { identifier }
-func_spec = { func_name ~ ":" ~ (spec_stmt)+ ~ spec_end }
+func_spec = { spec_begin ~ "(" ~ func_name ~ ")" ~ (spec_stmt)+ ~ spec_end }
 
 func_specs = { func_spec+ }

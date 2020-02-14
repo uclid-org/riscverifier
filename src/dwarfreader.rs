@@ -1,60 +1,72 @@
-use crate::utils::*;
 use object::Object;
 use std::collections::BTreeMap;
 use std::collections::HashMap;
-use std::iter::Cloned;
-use std::{borrow, cell::RefCell, fs, rc::Rc};
+use std::marker::PhantomData;
+use std::{borrow, fs};
 
-#[derive(Debug, Clone)]
-pub struct FunctionSig {
-    pub in_types: Vec<(String, u64)>,
-    pub out_type: u64,
-}
+use crate::utils;
 
 #[derive(Debug)]
-pub struct GlobalVariable {
+pub struct DwarfVar {
     pub name: String,
-    pub size_in_bytes: u64, //FIXME: Remove this
-    pub type_defn: Rc<TypeDefinition>,
+    pub typ_defn: DwarfTypeDefn,
     pub memory_addr: u64,
-    pub is_addr: bool,
+}
+impl DwarfVar {
+    pub fn new(name: String, typ_defn: DwarfTypeDefn, memory_addr: u64) -> Self {
+        DwarfVar {
+            name,
+            typ_defn,
+            memory_addr,
+        }
+    }
 }
 
 #[derive(Debug)]
-pub struct TypeDefinition {
+pub struct DwarfFuncSig {
     pub name: String,
-    pub size_in_bytes: u64,
-    pub field_decls: Vec<StructFieldDefinition>,
+    pub args: Vec<DwarfVar>,
+    pub ret_typ_defn: Option<DwarfTypeDefn>,
+}
+impl DwarfFuncSig {
+    pub fn new(name: String, args: Vec<DwarfVar>, ret_typ_defn: Option<DwarfTypeDefn>) -> Self {
+        DwarfFuncSig {
+            name,
+            args,
+            ret_typ_defn,
+        }
+    }
 }
 
 #[derive(Debug)]
-pub struct StructFieldDefinition {
-    pub field_name: String,
-    pub field_member_location: u64,
-    pub field_size_in_bytes: u64,
-}
-
-#[derive(Debug)]
-pub enum DwarfAttributeValue {
-    NumericAttr(u64),
-    StringAttr(String),
-    BooleanAttr(bool),
+pub enum DwarfTypeDefn {
+    Primitive {
+        bytes: u64,
+    },
+    Array {
+        in_typ: Box<DwarfTypeDefn>,
+        out_typ: Box<DwarfTypeDefn>,
+    },
+    Struct {
+        id: String,
+        fields: HashMap<String, Box<DwarfTypeDefn>>,
+        bytes: u64,
+    },
 }
 
 #[derive(Debug)]
 pub struct DwarfObject {
-    tag_name: String,
-    offset: usize,
-    attrs: BTreeMap<String, DwarfAttributeValue>,
-    child_tags: BTreeMap<usize, DwarfObject>,
+    pub tag_name: String,
+    pub offset: u64,
+    pub attrs: BTreeMap<String, DwarfAttributeValue>,
+    pub child_tags: BTreeMap<u64, DwarfObject>,
 }
-
 impl DwarfObject {
     pub fn create(
         tag_name: String,
-        offset: usize,
+        offset: u64,
         attrs: BTreeMap<String, DwarfAttributeValue>,
-        child_tags: BTreeMap<usize, DwarfObject>,
+        child_tags: BTreeMap<u64, DwarfObject>,
     ) -> DwarfObject {
         DwarfObject {
             tag_name,
@@ -63,464 +75,96 @@ impl DwarfObject {
             child_tags,
         }
     }
-
     pub fn add_child_tag(&mut self, dwarf_object: DwarfObject) {
         self.child_tags.insert(dwarf_object.offset, dwarf_object);
     }
-
     pub fn last_child(&mut self) -> DwarfObject {
         let last_child_key = self.child_tags.values_mut().last().unwrap().offset;
         self.child_tags.remove(&last_child_key).unwrap()
     }
+    pub fn get_child(&self, index: &u64) -> Result<&DwarfObject, utils::Error> {
+        self.child_tags
+            .get(index)
+            .map_or_else(|| Err(utils::Error::CouldNotFindDwarfChild), |v| Ok(v))
+    }
+    pub fn get_child_named(&self, tag_name: &str) -> Result<&DwarfObject, utils::Error> {
+        self.child_tags
+            .iter()
+            .find(|(_os, dobj)| dobj.tag_name == tag_name)
+            .map_or_else(|| Err(utils::Error::CouldNotFindDwarfChild), |v| Ok(v.1))
+    }
+    pub fn get_attr(&self, attr: &str) -> Result<&DwarfAttributeValue, utils::Error> {
+        self.attrs
+            .get(attr)
+            .map_or_else(|| Err(utils::Error::NoSuchDwarfFieldError), |v| Ok(v))
+    }
 }
 
 #[derive(Debug)]
-pub struct DwarfReader {
-    xlen: u64,
-    dwarf_objects: Vec<DwarfObject>,
-    function_sigs: RefCell<HashMap<String, Rc<FunctionSig>>>,
-    global_vars: RefCell<Vec<Rc<GlobalVariable>>>,
-    type_declarations: RefCell<HashMap<String, Rc<TypeDefinition>>>,
+pub enum DwarfAttributeValue {
+    NumericAttr(u64),
+    StringAttr(String),
+    BooleanAttr(bool),
+}
+impl DwarfAttributeValue {
+    pub fn get_expect_num_val(&self) -> &u64 {
+        match self {
+            DwarfAttributeValue::NumericAttr(v) => v,
+            _ => panic!("[get_expect_num_val] Not a numeric attribute."),
+        }
+    }
+    pub fn get_expect_str_val(&self) -> &String {
+        match self {
+            DwarfAttributeValue::StringAttr(v) => v,
+            _ => panic!("[get_expect_num_val] Not a numeric attribute."),
+        }
+    }
+    #[allow(dead_code)]
+    pub fn get_expect_bool_val(&self) -> &bool {
+        match self {
+            DwarfAttributeValue::BooleanAttr(v) => v,
+            _ => panic!("[get_expect_num_val] Not a numeric attribute."),
+        }
+    }
 }
 
-impl DwarfReader {
-    pub fn create(xlen: u64, files: &Vec<String>) -> DwarfReader {
-        let mut dwarf_reader = DwarfReader {
-            xlen,
-            dwarf_objects: vec![], // DwarfReader::process_dwarf_files(files).expect("Encountered error while parsing binary files."),
-            function_sigs: RefCell::new(HashMap::new()),
-            global_vars: RefCell::new(vec![]),
-            type_declarations: RefCell::new(HashMap::new()),
-        };
-        dwarf_reader.process_type_declarations();
-        dwarf_reader.process_global_variables();
-        dwarf_reader
-    }
-
-    /// ========================================================================== ///
-    /// Function signature helpers                                                 ///
-    /// ========================================================================== ///
-
-    fn process_related_function_signatures(&self, function_name: &str) {
-        let comp_unit = self.get_function_comp_unit(function_name);
-        self.get_function_signatures(comp_unit);
-    }
-
-    fn get_function_comp_unit(&self, function_name: &str) -> &DwarfObject {
-        &self
-            .dwarf_objects
-            .iter()
-            .find(|dwarf_object| {
-                dwarf_object
-                    .child_tags
-                    .iter()
-                    .find(|(_, dwarf_object2)| {
-                        let dw_at_name = &dwarf_object2.attrs.get("DW_AT_name");
-                        &dwarf_object2.tag_name == "DW_TAG_subprogram"
-                            && !dw_at_name.is_none()
-                            && match dw_at_name.unwrap() {
-                                DwarfAttributeValue::StringAttr(name) => name == function_name,
-                                _ => panic!("Could not find function."),
-                            }
-                    })
-                    .is_some()
-            })
-            .expect("[get_function_signature] No dwarf objects...")
-    }
-
-    fn get_function_signatures(&self, comp_unit: &DwarfObject) {
-        for (_child_offset, dwarf_object) in &comp_unit.child_tags {
-            // Try to add subprogram if it has all the required fields
-            if &dwarf_object.tag_name == "DW_TAG_subprogram" {
-                if let Some(dw_at_name) = &dwarf_object.attrs.get("DW_AT_name") {
-                    if let DwarfAttributeValue::StringAttr(function_name) = dw_at_name {
-                        let in_types = dwarf_object
-                            .child_tags
-                            .iter()
-                            .filter(|(_offset, child)| child.tag_name == "DW_TAG_formal_parameter")
-                            .map(|(_offset, child)| {
-                                // debug!("[get_function_signature] Found formal for {}: {:#?}", function_name, child);
-                                let formal_name = match child
-                                    .attrs
-                                    .get("DW_AT_name")
-                                    .expect("[get_function_signature] Formal does not have name.")
-                                {
-                                    DwarfAttributeValue::StringAttr(name) => name.clone(),
-                                    _ => panic!("[get_function_signature] Name should be a string!"),
-                                };
-                                let formal_size_index = match child
-                                    .attrs
-                                    .get("DW_AT_type")
-                                    .expect("[get_function_signature] Formal does not have size.")
-                                {
-                                    DwarfAttributeValue::NumericAttr(value) => value.clone(),
-                                    _ => panic!(
-                                        "[get_function_signature] Formal size index should be a numeric value."
-                                    ),
-                                };
-                                // debug!("formal_size_index: {:#?}", formal_size_index);
-                                let formal_size = match self.get_type_byte_size(&(formal_size_index as usize), comp_unit) {
-                                    Ok(result) => result,
-                                    Err(_) => {
-                                        warn!("[get_function_signatures] Formal {} in {} has no size.", formal_name, function_name);
-                                        0
-                                    },
-                                };
-                                (formal_name, formal_size)
-                            })
-                            .collect();
-                        let out_type = match dwarf_object.attrs.get("DW_AT_type") {
-                            Some(dwarf_attr) => match dwarf_attr {
-                                DwarfAttributeValue::NumericAttr(value) => {
-                                    match self.get_type_byte_size(&(*value as usize), comp_unit) {
-                                        Ok(result) => result,
-                                        Err(_) => {
-                                            // info!("[get_function_signatures] {} has no return type.", function_name);
-                                            0
-                                        }
-                                    }
-                                }
-                                _ => panic!("[get_function_signature] Type should be numeric."),
-                            },
-                            _ => 0,
-                        };
-                        self.function_sigs.borrow_mut().insert(
-                            function_name.to_string(),
-                            Rc::new(FunctionSig { in_types, out_type }),
-                        );
-                    }
-                }
-            }
-        }
-    }
-
-    pub fn get_function_signature(&self, function_name: &str) -> Rc<FunctionSig> {
-        let map_contains_function = self.function_sigs.borrow().contains_key(function_name);
-        if map_contains_function {
-            Rc::clone(self.function_sigs.borrow().get(function_name).unwrap())
-        } else {
-            self.process_related_function_signatures(function_name);
-            Rc::clone(self.function_sigs.borrow().get(function_name).unwrap())
-        }
-    }
-
-    /// ========================================================================== ///
-    /// Type declaration helpers                                                   ///
-    /// ========================================================================== ///
-
-    fn process_type_declarations(&self) {
-        for comp_unit in &self.dwarf_objects {
-            // debug!("[process_type_declarations] comp_unit: {:#?}", comp_unit);
-            self.create_type_declarations(&comp_unit);
-        }
-    }
-
-    fn create_type_declarations(&self, comp_unit: &DwarfObject) {
-        for (_offset, dwarf_object) in &comp_unit.child_tags {
-            match &dwarf_object.tag_name[..] {
-                "DW_TAG_structure_type" | "DW_TAG_base_type" => {
-                    if let Some(dwarf_attr) = dwarf_object.attrs.get("DW_AT_name") {
-                        if let DwarfAttributeValue::StringAttr(name) = dwarf_attr {
-                            let name = name.clone();
-                            let size_in_bytes = match dwarf_object.attrs.get("DW_AT_byte_size") {
-                                Some(dwarf_attr) => {
-                                    if let DwarfAttributeValue::NumericAttr(value) = dwarf_attr {
-                                        *value
-                                    } else {
-                                        0
-                                    }
-                                }
-                                _ => 0,
-                            };
-                            let mut field_decls = vec![];
-                            for (_child_offset, member_object) in &dwarf_object.child_tags {
-                                if member_object.tag_name == "DW_TAG_member" {
-                                    let field_name = match member_object.attrs.get("DW_AT_name") {
-                                        Some(dwarf_attr) => {
-                                            if let DwarfAttributeValue::StringAttr(field_name) =
-                                                dwarf_attr
-                                            {
-                                                field_name.clone()
-                                            } else {
-                                                panic!("[create_type_declarations] Name of field should be a string attribute.");
-                                            }
-                                        }
-                                        _ => {
-                                            warn!("[create_type_declarations] Struct {} has a no-name field.", name);
-                                            "".to_string()
-                                        }
-                                    };
-                                    let field_member_location = match member_object
-                                        .attrs
-                                        .get("DW_AT_data_member_location")
-                                    {
-                                        Some(dwarf_attr) => {
-                                            if let DwarfAttributeValue::NumericAttr(value) =
-                                                dwarf_attr
-                                            {
-                                                *value
-                                            } else {
-                                                panic!("[create_type_declarations] Location of member should be numeric in struct {}.", name);
-                                            }
-                                        }
-                                        _ => 0,
-                                    };
-                                    let field_size_in_bytes = match member_object
-                                        .attrs
-                                        .get("DW_AT_type")
-                                    {
-                                        Some(dwarf_attr) => {
-                                            if let DwarfAttributeValue::NumericAttr(value) =
-                                                dwarf_attr
-                                            {
-                                                self.get_type_byte_size(
-                                                    &(*value as usize),
-                                                    comp_unit,
-                                                )
-                                                .unwrap_or(0)
-                                            } else {
-                                                panic!("[create_type_declarations] Size of member should be numeric in struct {}.", name);
-                                            }
-                                        }
-                                        _ => 0,
-                                    };
-                                    field_decls.push(StructFieldDefinition {
-                                        field_name,
-                                        field_member_location,
-                                        field_size_in_bytes,
-                                    });
-                                }
-                            }
-                            self.type_declarations.borrow_mut().insert(
-                                name.clone(),
-                                Rc::new(TypeDefinition {
-                                    name,
-                                    size_in_bytes,
-                                    field_decls,
-                                }),
-                            );
-                        }
-                    }
-                }
-                _ => (),
-            }
-        }
-    }
-
-    pub fn get_type_declaration(&self, id: &String) -> Rc<TypeDefinition> {
-        Rc::clone(self.type_declarations.borrow().get(id).unwrap())
-    }
-
-    /// ========================================================================== ///
-    /// Global variable helpers                                                    ///
-    /// ========================================================================== ///
-
-    fn process_global_variables(&self) {
-        for comp_unit in &self.dwarf_objects {
-            self.create_global_vars_map(&comp_unit);
-        }
-    }
-
-    // FIXME: Take these helpers out of the impl
-    fn get_str_attr(&self, dobj: &DwarfObject, id: &str) -> Result<String, NoSuchDwarfFieldError> {
-        if let Some(attr) = dobj.attrs.get(id) {
-            if let DwarfAttributeValue::StringAttr(name) = attr {
-                Ok(name.clone())
-            } else {
-                Err(NoSuchDwarfFieldError {})
-            }
-        } else {
-            Err(NoSuchDwarfFieldError {})
-        }
-    }
-
-    // FIXME: Take these helpers out of the impl
-    fn get_num_attr(&self, dobj: &DwarfObject, id: &str) -> Result<u64, NoSuchDwarfFieldError> {
-        if let Some(attr) = dobj.attrs.get(id) {
-            if let DwarfAttributeValue::NumericAttr(n) = attr {
-                Ok(*n)
-            } else {
-                Err(NoSuchDwarfFieldError {})
-            }
-        } else {
-            Err(NoSuchDwarfFieldError {})
-        }
-    }
-
-    fn get_type_name(&self, index: &usize, comp_unit: &DwarfObject) -> String {
-        if let Some(dobj) = comp_unit.child_tags.get(index) {
-            if let Ok(name) = self.get_str_attr(dobj, "DW_AT_name") {
-                name
-            } else {
-                if let Ok(id) = self.get_num_attr(dobj, "DW_AT_type") {
-                    self.get_type_name(&(id as usize), comp_unit)
-                } else {
-                    panic!("[get_type_name] Not a valid type.")
-                }
-            }
-        } else {
-            panic!("[get_type_name] Could not find child with index {}.", index);
-        }
-    }
-
-    fn create_global_vars_map(&self, comp_unit: &DwarfObject) {
-        for (_child_offset, dwarf_object) in &comp_unit.child_tags {
-            if &dwarf_object.tag_name == "DW_TAG_variable" {
-                if let Some(dwarf_attribute) = dwarf_object.attrs.get("DW_AT_name") {
-                    if let DwarfAttributeValue::StringAttr(name) = dwarf_attribute {
-                        let name = name.clone();
-                        // FIXME: Remove size_in_bytes
-                        let (type_defn, size_in_bytes) = match dwarf_object.attrs.get("DW_AT_type")
-                        {
-                            Some(dwarf_attr) => match dwarf_attr {
-                                DwarfAttributeValue::NumericAttr(value) => {
-                                    let type_name =
-                                        self.get_type_name(&(*value as usize), comp_unit);
-                                    let type_defn = self.get_type_declaration(&type_name);
-                                    let size = match self
-                                        .get_type_byte_size(&(*value as usize), comp_unit)
-                                    {
-                                        Ok(size) => size,
-                                        Err(_) => {
-                                            warn!("[get_global_vars] Global {} has no type.", name);
-                                            0
-                                        }
-                                    };
-                                    (type_defn, size)
-                                }
-                                _ => panic!("[get_global_vars] Type should be numeric."),
-                            },
-                            _ => panic!(
-                                "[get_global_vars] Could not find DW_AT_type attribute for {}",
-                                name
-                            ),
-                        };
-                        let memory_addr = match dwarf_object.attrs.get("DW_AT_location") {
-                            Some(dwarf_attr) => {
-                                if let DwarfAttributeValue::NumericAttr(address) = dwarf_attr {
-                                    *address
-                                } else {
-                                    0
-                                }
-                            }
-                            _ => 0,
-                        };
-                        let is_addr = (size_in_bytes == 0);
-                        if memory_addr > 0 {
-                            self.global_vars.borrow_mut().push(Rc::new(GlobalVariable {
-                                name,
-                                size_in_bytes,
-                                type_defn,
-                                memory_addr,
-                                is_addr,
-                            }));
-                        } else {
-                            // warn!("[get_global_vars] Could not find memory address of global variable {}.", name);
-                        }
-                    }
-                }
-            }
-        }
-    }
-
-    pub fn get_global_var_type(&self, name: &str) -> Rc<TypeDefinition> {
-        Rc::clone(
-            &self
-                .global_vars
-                .borrow()
-                .iter()
-                .find(|e| e.name == name)
-                .unwrap()
-                .type_defn,
-        )
-    }
-
-    pub fn is_global_var(&self, name: &str) -> bool {
-        self.global_vars
-            .borrow()
-            .iter()
-            .find(|e| e.name == name)
-            .is_some()
-    }
-
-    pub fn get_global_vars(&self) -> Vec<Rc<GlobalVariable>> {
-        self.global_vars.borrow().clone()
-    }
-
-    /// ========================================================================== ///
-    /// Helper functions                                                           ///
-    /// ========================================================================== ///
-
-    fn get_type_byte_size(
-        &self,
-        dwarf_object_index: &usize,
-        comp_unit: &DwarfObject,
-    ) -> Result<u64, NoSuchDwarfFieldError> {
-        if let Some(dwarf_object) = comp_unit.child_tags.get(dwarf_object_index) {
-            match &dwarf_object.tag_name[..] {
-                "DW_TAG_typedef" | "DW_TAG_volatile_type" => {
-                    let next_type_index = match dwarf_object.attrs
-                            .get("DW_AT_type")
-                            .unwrap_or_else(|| panic!("[get_type_byte_size] Type definition at address {} didn't have a DW_AT_type tag.", dwarf_object.offset))
-                            {
-                                DwarfAttributeValue::NumericAttr(value) => value.clone(),
-                                _=> panic!("[get_type_byte_size] Should be numeric index."),
-                            };
-                    self.get_type_byte_size(&(next_type_index as usize), comp_unit)
-                }
-                "DW_TAG_base_type" | "DW_TAG_enumeration_type" | "DW_TAG_pointer_type" => {
-                    match dwarf_object.attrs.get("DW_AT_byte_size")
-                    .unwrap_or_else(|| panic!("[get_type_byte_size] No DW_AT_byte_size tag inside base type at address {}.", dwarf_object.offset)) {
-                        DwarfAttributeValue::NumericAttr(value) => Ok(value.clone()),
-                        _ => panic!("[get_type_byte_size] DW_AT_byte_size should be a numeric value."),
-                    }
-                },
-                "DW_TAG_structure_type" | "DW_TAG_array_type" => {
-                    // FIXME: This will only work for GCC!!
-                    // NOTE: I believe riscv gcc compiler will use base pointers for 
-                    //       the structs on the stack and memory as well as arrays.
-                    //       So using pointer length in this case is enough information
-                    // Ok(self.xlen / 8)
-                    Ok(0)
-                },
-                _ => {
-                    debug!("[get_type_byte_size] Not a type dwarf object!");
-                    Err(NoSuchDwarfFieldError {})
-                },
-            }
-        } else {
-            debug!(
-                "[get_type_byte_size] No such node at address {}.",
-                dwarf_object_index
-            );
-            Err(NoSuchDwarfFieldError {})
-        }
-    }
-
-    /// ========================================================================== ///
-    /// Functions for processing dwarf files                                       ///
-    /// ========================================================================== ///
-
-    fn process_dwarf_files(files: &Vec<String>) -> Result<Vec<DwarfObject>, gimli::Error> {
+pub trait DwarfInterface {
+    /// ===================== DWARF Reader functions =================
+    /// Process the function signatures from the DwarfObject
+    fn process_func_sigs(dobj: &DwarfObject) -> Vec<DwarfFuncSig>;
+    /// Process the list of global variables for the DwarfObject
+    fn process_global_vars(dobj: &DwarfObject) -> Vec<DwarfVar>;
+    /// Creates the type searching in comp_unit with the DwarfObject index
+    fn get_type(index: &u64, comp_unit: &DwarfObject) -> Result<DwarfTypeDefn, utils::Error>;
+    /// ====================== Helper functions ======================
+    /// Parses the binary files in the paths and returns
+    /// the corresponding DwarfObjects from the debugging information
+    fn process_dwarf_files(paths: &Vec<String>) -> Result<Vec<DwarfObject>, gimli::Error> {
         let mut dwarf_objects = vec![];
-        for path in files {
-            info!("[process_dwarf_files] Processing dwarf file {:?}.", path);
-            let file = fs::File::open(&path[..]).unwrap();
-            let mmap = unsafe { memmap::Mmap::map(&file).unwrap() };
-            let object = object::File::parse(&*mmap).unwrap();
-            let endian = if object.is_little_endian() {
-                gimli::RunTimeEndian::Little
-            } else {
-                gimli::RunTimeEndian::Big
-            };
-            let mut file_objects = DwarfReader::process_dwarf_file_object(&object, endian)?;
-            // debug!("file_objects: {:#?}", file_objects);
-            dwarf_objects.append(&mut file_objects);
+        for path in paths {
+            let mut dwarf_object = Self::process_dwarf_file(path)?;
+            dwarf_objects.append(&mut dwarf_object);
         }
-        // debug!("{:#?}", dwarf_objects);
+        // debug!("[process_dwarf_files] dwarf_objects: {:#?}", dwarf_objects);
         Ok(dwarf_objects)
     }
 
+    /// Parses the specified binary file in the path and returns
+    /// the corresponding DwarfObjects from the debugging information
+    fn process_dwarf_file(path: &String) -> Result<Vec<DwarfObject>, gimli::Error> {
+        info!("[process_dwarf_file] Processing dwarf file {:?}.", path);
+        let file = fs::File::open(&path[..]).unwrap();
+        let mmap = unsafe { memmap::Mmap::map(&file).unwrap() };
+        let object = object::File::parse(&*mmap).unwrap();
+        let endian = if object.is_little_endian() {
+            gimli::RunTimeEndian::Little
+        } else {
+            gimli::RunTimeEndian::Big
+        };
+        Ok(Self::process_dwarf_file_object(&object, endian)?)
+    }
+
+    /// Converts an object file into a vector of DwarfObjects
     fn process_dwarf_file_object(
         object: &object::File,
         endian: gimli::RunTimeEndian,
@@ -548,15 +192,11 @@ impl DwarfReader {
         let mut iter = dwarf.units();
         let mut dwarf_objects = vec![];
         while let Some(header) = iter.next()? {
-            // debug!(
-            //     "[process_dwarf_file] Processing unit at <.debug_info+0x{:x}>",
-            //     header.offset().0
-            // );
             let unit = dwarf.unit(header)?;
             // Iterate over the Debugging Information Entries (DIEs) in the unit.
             let mut entries_cursor = unit.entries();
             if let Some(dwarf_object) =
-                DwarfReader::entries_to_dwarf_object(&unit, &dwarf, &mut entries_cursor)?
+                Self::entries_to_dwarf_object(&unit, &dwarf, &mut entries_cursor)?
             {
                 // info!("Compilation unit: \n{:#?}", &dwarf_object);
                 dwarf_objects.push(dwarf_object);
@@ -565,6 +205,7 @@ impl DwarfReader {
         Ok(dwarf_objects)
     }
 
+    /// Converts gimli entries_cursor to a DwarfObject
     fn entries_to_dwarf_object<R: gimli::Reader<Offset = usize>>(
         unit: &gimli::Unit<R>,
         dwarf: &gimli::Dwarf<R>,
@@ -575,15 +216,11 @@ impl DwarfReader {
             let mut dwarf_object_stack: Vec<DwarfObject> = vec![];
             // Immediate parent of the processed node
             let mut parent;
-            // debug!(
-            //     "[gimli_unit_to_dwarf_object] Processing the first node... {}",
-            //     entry.tag().to_string()
-            // );
             // Create dummy node to store unit
             let first_dwarf_object = DwarfObject::create(
                 entry.tag().to_string(),
-                entry.offset().0,
-                DwarfReader::gimli_attr_to_dwarf_attr_map(unit, entry, dwarf)?,
+                entry.offset().0 as u64,
+                Self::gimli_attr_to_dwarf_attr_map(unit, entry, dwarf)?,
                 BTreeMap::new(),
             );
             parent = DwarfObject::create(format!("dummy"), 0, BTreeMap::new(), BTreeMap::new());
@@ -612,8 +249,8 @@ impl DwarfReader {
                 // debug!("[entries_to_dwarf_object] Adding child {} to parent.", entry.offset().0);
                 parent.add_child_tag(DwarfObject::create(
                     entry.tag().to_string(),
-                    entry.offset().0,
-                    DwarfReader::gimli_attr_to_dwarf_attr_map(unit, entry, dwarf)?,
+                    entry.offset().0 as u64,
+                    Self::gimli_attr_to_dwarf_attr_map(unit, entry, dwarf)?,
                     BTreeMap::new(),
                 ));
             }
@@ -623,13 +260,12 @@ impl DwarfReader {
                 grandparent.add_child_tag(parent);
                 parent = grandparent;
             }
-            // info!("[entries_to_dwarf_object] DWARF object generated for file.");
             return Ok(Some(parent));
         }
-        // warn!("[entries_to_dwarf_object] No DWARF objects generated for file.");
         Ok(None)
     }
 
+    /// Converts gimli attributes entry to attribute map
     fn gimli_attr_to_dwarf_attr_map<R: gimli::Reader<Offset = usize>>(
         unit: &gimli::Unit<R>,
         entry: &gimli::DebuggingInformationEntry<R>,
@@ -638,13 +274,14 @@ impl DwarfReader {
         let mut attributes = BTreeMap::new();
         let mut attrs_cursor = entry.attrs();
         while let Some(attr) = attrs_cursor.next()? {
-            if let Some(attr_value) = DwarfReader::get_attr_value(unit, &attr, dwarf)? {
+            if let Some(attr_value) = Self::get_attr_value(unit, &attr, dwarf)? {
                 attributes.insert(attr.name().to_string(), attr_value);
             }
         }
         Ok(attributes)
     }
 
+    /// Converts attribute value to a DwarfAttributeValue
     fn get_attr_value<R: gimli::Reader<Offset = usize>>(
         unit: &gimli::Unit<R>,
         attr: &gimli::Attribute<R>,
@@ -684,5 +321,49 @@ impl DwarfReader {
             _ => None,
         };
         Ok(attr_value)
+    }
+}
+
+pub struct DwarfReader<I>
+where
+    I: DwarfInterface,
+{
+    dwarf_obj_vec: Vec<DwarfObject>,
+    func_sigs: HashMap<String, DwarfFuncSig>,
+    global_vars: Vec<DwarfVar>,
+    _phantom_data: PhantomData<I>,
+}
+
+impl<I> DwarfReader<I>
+where
+    I: DwarfInterface,
+{
+    pub fn new(binary_paths: &Vec<String>) -> Result<DwarfReader<I>, gimli::Error> {
+        let dwarf_obj_vec = I::process_dwarf_files(binary_paths)?;
+        let func_sigs = dwarf_obj_vec
+            .iter()
+            .map(|comp_unit| I::process_func_sigs(comp_unit))
+            .flatten()
+            .map(|fs| (fs.name.clone(), fs))
+            .collect::<HashMap<String, DwarfFuncSig>>();
+        let global_vars = dwarf_obj_vec
+            .iter()
+            .map(|comp_unit| I::process_global_vars(comp_unit))
+            .flatten()
+            .collect();
+        // info!("[new] Global Variables: {:#?}", global_vars);
+        // info!("[new] Func Sigs: {:#?}", func_sigs);
+        Ok(DwarfReader {
+            dwarf_obj_vec,
+            func_sigs,
+            global_vars,
+            _phantom_data: PhantomData,
+        })
+    }
+    pub fn global_vars(&self) -> &Vec<DwarfVar> {
+        &self.global_vars
+    }
+    pub fn func_sig(&self, func_name: &String) -> Option<&DwarfFuncSig> {
+        self.func_sigs.get(func_name)
     }
 }

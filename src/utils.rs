@@ -1,32 +1,25 @@
 use crate::ir::*;
 
-/// Translator error
-#[derive(Debug)]
-pub struct TErr {
-    pub msg: String,
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum Error {
+    // Dwarf reader errors
+    NoSuchDwarfFieldError,
+    CouldNotFindDwarfChild,
+    // Translator errors
+    TErr { msg: String },
 }
-
-/// Deprecated translator error
-#[derive(Debug)]
-pub struct NoSuchModelError {
-    pub error_msg: String,
-}
-
-// DWARF reader error
-#[derive(Debug)]
-pub struct NoSuchDwarfFieldError {}
 
 // Utility functions
 pub fn is_var(e: &Expr) -> bool {
     match e {
-        Expr::Var(v) => true,
+        Expr::Var(_) => true,
         _ => false,
     }
 }
 
 pub fn is_block(e: &Stmt) -> bool {
     match e {
-        Stmt::Block(v) => true,
+        Stmt::Block(_) => true,
         _ => false,
     }
 }

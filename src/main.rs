@@ -12,7 +12,10 @@ extern crate pest_derive;
 extern crate topological_sort;
 
 use std::collections::{HashMap, HashSet};
-use std::{cell::RefCell, rc::Rc};
+use std::rc::Rc;
+
+mod cdwarfinterface;
+use cdwarfinterface::CDwarfInterface;
 
 mod dwarfreader;
 use dwarfreader::DwarfReader;
@@ -20,17 +23,13 @@ use dwarfreader::DwarfReader;
 mod objectdumpreader;
 use objectdumpreader::ObjectDumpReader;
 
-mod specreader;
-use specreader::SpecReader;
-
-// mod uclidtranslator;
-// use uclidtranslator::UclidTranslator;
+// mod specreader;
+// use specreader::SpecReader;
 
 mod translator;
 use translator::Translator;
 
 mod uclidinterface;
-
 use uclidinterface::Uclid5Interface;
 
 mod ir;
@@ -118,21 +117,26 @@ fn main() {
         .map_or(HashSet::new(), |lst| {
             lst.split(",").collect::<HashSet<&str>>()
         });
-    let struct_macro_ids = matches
+    let _struct_macro_ids = matches
         .value_of("struct-macros")
         .map_or(HashSet::new(), |lst| {
             lst.split(",").collect::<HashSet<&str>>()
         });
-    let array_macro_ids = matches
+    let _array_macro_ids = matches
         .value_of("array-macros")
         .map_or(HashSet::new(), |lst| {
             lst.split(",").collect::<HashSet<&str>>()
         });
-    // Parse specification
-    let dwarf_reader = Rc::new(RefCell::new(DwarfReader::create(xlen, &binary_paths)));
-    if let Some(spec) = matches.value_of("spec") {
-        let _spec_reader = SpecReader::create(spec, Rc::clone(&dwarf_reader));
-    }
+    // Initialize DWARF reader
+    let dwarf_reader: Option<DwarfReader<CDwarfInterface>> =
+        if matches.value_of("ignore-funcs").is_some()
+            || matches.value_of("struct-macros").is_some()
+            || matches.value_of("array-macros").is_some()
+        {
+            DwarfReader::new(&binary_paths).ok()
+        } else {
+            None
+        };
     // Function to generate
     let func_name = matches
         .value_of("function")
@@ -145,27 +149,8 @@ fn main() {
         func_blks.insert(format!("{}", k), Rc::clone(&cfg));
         func_blks.insert(blk[0].function_name().to_string(), Rc::clone(&cfg));
     }
-    let mut translator: Translator<Uclid5Interface> =
-        Translator::new(&func_blks, &ignored_functions);
+    let mut translator: Translator<Uclid5Interface, CDwarfInterface> =
+        Translator::new(&func_blks, &ignored_functions, &dwarf_reader);
     translator.gen_func_model(&func_name);
     translator.print_model();
-
-    // IGNORE OLD TRANSLATOR
-    // if let Some(write_to_filepath) = matches.value_of("output") {
-    //     if let Some(function_name) = matches.value_of("function") {
-    //         let mut ut = UclidTranslator::create(
-    //             xlen,
-    //             Rc::clone(&dwarf_reader),
-    //             &ignored_functions,
-    //             &struct_macro_ids,
-    //             &array_macro_ids,
-    //             &function_blocks,
-    //         );
-    //         ut.generate_function_model(function_name)
-    //             .expect("[main] Unable to generate model for function");
-    //         ut.write_model(&write_to_filepath)
-    //             .expect("[main] Unable to write model to file.");
-    //         ut.reset_model();
-    //     }
-    // }
 }

@@ -1,3 +1,5 @@
+// TODO: Rewrite parser to read the binary
+
 use std::process::Command;
 
 use std::collections::{HashMap, HashSet};
@@ -109,10 +111,10 @@ impl ObjectDumpReader {
                                 if seen_functions.len() == 0 {
                                     seen_functions.insert(callee_name.clone());
                                 }
-                                debug!(
-                                    "[get_binary_object_dump]   Addr: {:?}, Function name: {:?}, Offset: {:?}, OpCode: {:?}, Arguments: {:?}.",
-                                    address, callee_name, callee_offset, op_code, operands
-                                );
+                                // debug!(
+                                //     "[get_binary_object_dump]   Addr: {:?}, Function name: {:?}, Offset: {:?}, OpCode: {:?}, Arguments: {:?}.",
+                                //     address, callee_name, callee_offset, op_code, operands
+                                // );
                                 assembly_lines.push(AssemblyLine {
                                     address,
                                     callee_name,
@@ -121,13 +123,13 @@ impl ObjectDumpReader {
                                     operands,
                                 });
                             }
-                            Err(e) => {
+                            Err(_e) => {
                                 // TODO: Handle this instead of failing silently
-                                warn!(
-                                    "Error parsing object dump line {:?}. {:?}",
-                                    &line.replace("\t", " ")[..],
-                                    e
-                                );
+                                // warn!(
+                                //     "Error parsing object dump line {:?}. {:?}",
+                                //     &line.replace("\t", " ")[..],
+                                //     e
+                                // );
                             }
                         }
                     }
@@ -194,70 +196,6 @@ impl ObjectDumpReader {
     }
 }
 
-#[derive(Debug, Clone)]
-pub enum InstOperand {
-    Register(String, Option<i64>),
-    Immediate(i64),
-}
-
-impl fmt::Display for InstOperand {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        match self {
-            InstOperand::Register(reg_id, _offset) => write!(f, "{}", reg_id),
-            InstOperand::Immediate(imm) => write!(f, "{}", imm),
-        }
-    }
-}
-impl InstOperand {
-    pub fn get_imm_val(&self) -> i64 {
-        match self {
-            InstOperand::Immediate(i) => *i,
-            _ => panic!("Not an immediate operand!"),
-        }
-    }
-    pub fn get_reg_name(&self) -> String {
-        match self {
-            InstOperand::Register(n, i) => n.clone(),
-            _ => panic!("Not a register operand!"),
-        }
-    }
-    pub fn get_reg_offset(&self) -> i64 {
-        match self {
-            InstOperand::Register(n, i) => i.expect("Register has no offset."),
-            _ => panic!("Not a register operand!"),
-        }
-    }
-    pub fn has_offset(&self) -> bool {
-        match self {
-            InstOperand::Register(n, i) => i.is_some(),
-            _ => panic!("Not a register operand!"),
-        }
-    }
-}
-
-#[derive(Debug, Clone)]
-pub struct AssemblyLine {
-    address: u64,
-    callee_name: String,
-    callee_offset: u64,
-    op_code: String,
-    operands: Vec<InstOperand>,
-}
-
-#[derive(Debug)]
-pub struct BasicBlock {
-    entry_addr: u64,
-    insts: Vec<Rc<AssemblyLine>>,
-}
-impl BasicBlock {
-    pub fn new(entry_addr: u64, insts: Vec<Rc<AssemblyLine>>) -> Self {
-        BasicBlock { entry_addr, insts }
-    }
-    pub fn insts(&self) -> &Vec<Rc<AssemblyLine>> {
-        &self.insts
-    }
-}
-
 #[derive(Debug)]
 pub struct Cfg {
     basic_blks_map: HashMap<u64, BasicBlock>,
@@ -296,6 +234,30 @@ impl Cfg {
     pub fn next_addr(addr: u64) -> u64 {
         addr + utils::INST_LENGTH
     }
+}
+
+#[derive(Debug)]
+pub struct BasicBlock {
+    entry_addr: u64,
+    insts: Vec<Rc<AssemblyLine>>,
+}
+
+impl BasicBlock {
+    pub fn new(entry_addr: u64, insts: Vec<Rc<AssemblyLine>>) -> Self {
+        BasicBlock { entry_addr, insts }
+    }
+    pub fn insts(&self) -> &Vec<Rc<AssemblyLine>> {
+        &self.insts
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct AssemblyLine {
+    address: u64,
+    callee_name: String,
+    callee_offset: u64,
+    op_code: String,
+    operands: Vec<InstOperand>,
 }
 
 impl AssemblyLine {
@@ -387,6 +349,48 @@ impl AssemblyLine {
         match &self.op_code[..] {
             "csrrwi" | "csrrsi" | "csrrci" | "csrrw" | "csrrs" | "csrrc" => Some(&self.operands[1]),
             _ => None,
+        }
+    }
+}
+
+#[derive(Debug, Clone)]
+pub enum InstOperand {
+    Register(String, Option<i64>),
+    Immediate(i64),
+}
+
+impl fmt::Display for InstOperand {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        match self {
+            InstOperand::Register(reg_id, _offset) => write!(f, "{}", reg_id),
+            InstOperand::Immediate(imm) => write!(f, "{}", imm),
+        }
+    }
+}
+
+impl InstOperand {
+    pub fn get_imm_val(&self) -> i64 {
+        match self {
+            InstOperand::Immediate(i) => *i,
+            _ => panic!("Not an immediate operand!"),
+        }
+    }
+    pub fn get_reg_name(&self) -> String {
+        match self {
+            InstOperand::Register(n, _i) => n.clone(),
+            _ => panic!("Not a register operand!"),
+        }
+    }
+    pub fn get_reg_offset(&self) -> i64 {
+        match self {
+            InstOperand::Register(_n, i) => i.expect("Register has no offset."),
+            _ => panic!("Not a register operand!"),
+        }
+    }
+    pub fn has_offset(&self) -> bool {
+        match self {
+            InstOperand::Register(_n, i) => i.is_some(),
+            _ => panic!("Not a register operand!"),
         }
     }
 }
