@@ -8,15 +8,11 @@ use crate::DwarfReader;
 
 #[derive(Parser)]
 #[grammar = "pest/speclang.pest"]
-pub struct SpecReader {
-    dwarf_reader: Rc<RefCell<DwarfReader>>,
-}
+pub struct SpecReader;
 
 impl SpecReader {
-    pub fn create(spec_file_path: &str, dwarf_reader: Rc<RefCell<DwarfReader>>) -> SpecReader {
-        let sr = SpecReader { dwarf_reader };
-        sr.process_specs_file(spec_file_path);
-        sr
+    pub fn new() -> SpecReader {
+        SpecReader {}
     }
 
     #[allow(dead_code)]
@@ -27,7 +23,7 @@ impl SpecReader {
         self.parse_specs(&specs_str[..])
     }
 
-    fn parse_specs(&self, specs_string: &str) -> HashMap<String, Vec<String>> {
+    pub fn parse_specs(&self, specs_string: &str) -> HashMap<String, Vec<String>> {
         match SpecReader::parse(Rule::func_specs, specs_string) {
             Ok(mut func_specs_pair) => {
                 let mut func_specs_inner = func_specs_pair
@@ -121,11 +117,7 @@ impl SpecReader {
                 path
             }
             Rule::identifier => {
-                if self.dwarf_reader.borrow().is_global_var(pair_str) {
-                    format!("global_{}()", pair_str)
-                } else {
-                    format!("{}", pair_str)
-                }
+                format!("{}", pair_str)
             }
             Rule::deref => {
                 let ptr = self.translate_expr(inner.next().unwrap());
@@ -142,5 +134,21 @@ impl SpecReader {
             Rule::comp_op => String::from(pair_str),
             _ => panic!("Unsupported rule. {:#?} {:#?}", rule, inner),
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_fn_decl() {
+        let sr = SpecReader::new();
+        let spec_str = "begin_spec(inc)\n\
+                        requires true\n\
+                        end_spec";
+        let spec = sr.parse_specs(spec_str);
+        println!("{:#?}", spec);
+        assert_eq!(true, true);
     }
 }

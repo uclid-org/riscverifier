@@ -155,7 +155,7 @@ where
         Ok(())
     }
     pub fn print_model(&self) {
-        println!("{}", I::ir_model_to_string(&self.model));
+        println!("{}", I::model_to_string(&self.model));
     }
     /// Function model body
     fn gen_func_body(&self, cfg: &Rc<Cfg>) -> Stmt {
@@ -168,7 +168,7 @@ where
             if callees.get(&entry_addr).is_some() {
                 continue;
             } else {
-                stmts_vec.push(Rc::new(self.basic_blk_call(entry_addr, cfg)));
+                stmts_vec.push(Box::new(self.basic_blk_call(entry_addr, cfg)));
             }
         }
         Stmt::Block(stmts_vec)
@@ -178,68 +178,68 @@ where
         let mut then_stmts_inner = vec![];
         // Add call to basic block
         let call_stmt =
-            Stmt::FuncCall(FuncCall::new(self.bb_proc_name(entry_addr), vec![], vec![]));
-        then_stmts_inner.push(Rc::new(call_stmt));
+            Stmt::func_call(self.bb_proc_name(entry_addr), vec![], vec![]);
+        then_stmts_inner.push(Box::new(call_stmt));
         // Assert statements for jump targets
         let mut fallthru_guard = None;
         let mut jump_guard = None;
         let mut callee_call = false;
         // Fall through target
         if let Some(target_addr) = cfg.next_blk_addr(entry_addr) {
-            fallthru_guard = Some(Expr::OpApp(OpApp::new(
+            fallthru_guard = Some(Expr::op_app(
                 Op::Comp(CompOp::Equality),
                 vec![
                     Expr::Var(self.pc_var()),
-                    Expr::Literal(Literal::bv(*target_addr, self.xlen)),
+                    Expr::bv_lit(*target_addr, self.xlen),
                 ],
-            )));
+            ));
         }
         // Jump target (remove fall through if target is function entry; ie. JAL)
         if let Some(target_addr) = cfg.next_abs_jump_addr(entry_addr) {
             if self.is_func_entry(&target_addr.to_string()[..]) {
                 callee_call = true;
             }
-            jump_guard = Some(Expr::OpApp(OpApp::new(
+            jump_guard = Some(Expr::op_app(
                 Op::Comp(CompOp::Equality),
                 vec![
                     Expr::Var(self.pc_var()),
-                    Expr::Literal(Literal::bv(*target_addr, self.xlen)),
+                    Expr::bv_lit(*target_addr, self.xlen),
                 ],
-            )));
+            ));
         }
         // Add guard for after basic block
         if fallthru_guard.is_some() && jump_guard.is_some() && !callee_call {
-            then_stmts_inner.push(Rc::new(Stmt::Assert(Expr::OpApp(OpApp::new(
+            then_stmts_inner.push(Box::new(Stmt::Assert(Expr::op_app(
                 Op::Bool(BoolOp::Disj),
                 vec![fallthru_guard.clone().unwrap(), jump_guard.clone().unwrap()],
-            )))));
+            ))));
         } else if jump_guard.is_some() {
-            then_stmts_inner.push(Rc::new(Stmt::Assert(jump_guard.clone().unwrap())));
+            then_stmts_inner.push(Box::new(Stmt::Assert(jump_guard.clone().unwrap())));
         } else if fallthru_guard.is_some() {
-            then_stmts_inner.push(Rc::new(Stmt::Assert(fallthru_guard.clone().unwrap())));
+            then_stmts_inner.push(Box::new(Stmt::Assert(fallthru_guard.clone().unwrap())));
         }
         // Add call statement to callee function
         if let Some(target_addr) = cfg.next_abs_jump_addr(entry_addr) {
             if self.is_func_entry(&target_addr.to_string()[..]) {
-                let call_stmt = Stmt::FuncCall(FuncCall::new(
+                let call_stmt = Stmt::func_call(
                     self.get_func_name(target_addr).unwrap(),
                     vec![],
                     vec![],
-                ));
-                then_stmts_inner.push(Rc::new(call_stmt));
-                then_stmts_inner.push(Rc::new(Stmt::Assert(fallthru_guard.unwrap().clone())));
+                );
+                then_stmts_inner.push(Box::new(call_stmt));
+                then_stmts_inner.push(Box::new(Stmt::Assert(fallthru_guard.unwrap().clone())));
             }
         }
         let then_stmt = Box::new(Stmt::Block(then_stmts_inner));
         // Add condition that checks if pc == basic block entry address
-        let cond = Expr::OpApp(OpApp::new(
+        let cond = Expr::op_app(
             Op::Comp(CompOp::Equality),
             vec![
                 Expr::Var(self.pc_var()),
-                Expr::Literal(Literal::bv(entry_addr, self.xlen)),
+                Expr::bv_lit(entry_addr, self.xlen),
             ],
-        ));
-        Stmt::IfThenElse(IfThenElse::new(cond, then_stmt, None))
+        );
+        Stmt::if_then_else(cond, then_stmt, None)
     }
     /// Topologically sorted list of entry addresses in the CFG
     fn topological_sort(&self, cfg: &Rc<Cfg>) -> Vec<u64> {
@@ -272,7 +272,7 @@ where
     fn bb_to_block(&self, bb: &BasicBlock) -> Stmt {
         let mut inst_vec = vec![];
         for al in bb.insts() {
-            inst_vec.push(Rc::new(self.al_to_ir(&al)));
+            inst_vec.push(Box::new(self.al_to_ir(&al)));
         }
         Stmt::Block(inst_vec)
     }
@@ -283,10 +283,10 @@ where
         let mut regs: [Option<&InstOperand>; 2] = [al.rd(), al.csr()];
         for reg_op in regs.iter_mut() {
             if let Some(reg) = reg_op {
-                lhs.push(Expr::Var(Var::new(
+                lhs.push(Expr::var(
                     &reg.get_reg_name()[..],
                     self.bv_type(self.xlen),
-                )));
+                ));
                 assert!(!reg.has_offset());
             }
         }
@@ -295,23 +295,23 @@ where
         let mut regs: [Option<&InstOperand>; 3] = [al.rs1(), al.rs2(), al.csr()];
         for reg_op in regs.iter_mut() {
             if let Some(reg) = reg_op {
-                operands.push(Expr::Var(Var::new(
+                operands.push(Expr::var(
                     &reg.get_reg_name()[..],
                     self.bv_type(self.xlen),
-                )));
+                ));
                 if reg.has_offset() {
-                    operands.push(self.bv_lit(reg.get_reg_offset() as u64, self.xlen));
+                    operands.push(Expr::bv_lit(reg.get_reg_offset() as u64, self.xlen));
                 }
             }
         }
         // immediate input
         if let Some(imm) = al.imm() {
-            operands.push(Expr::Literal(Literal::bv(
+            operands.push(Expr::bv_lit(
                 imm.get_imm_val() as u64,
                 self.xlen,
-            )));
+            ));
         }
-        Stmt::FuncCall(FuncCall::new(func_name, lhs, operands))
+        Stmt::func_call(func_name, lhs, operands)
     }
     /// =================== Helper functions ===================
     /// Compute modifies set for a basic block
@@ -358,16 +358,16 @@ where
     }
     /// The set of system state variables
     fn pc_var(&self) -> Var {
-        Var::new(PC_VAR, self.bv_type(self.xlen))
+        Var{name: PC_VAR.to_string(), typ: self.bv_type(self.xlen)}
     }
     fn mem_var(&self) -> Var {
-        Var::new(MEM_VAR, self.mem_type())
+        Var {name: MEM_VAR.to_string(), typ: self.mem_type()}
     }
     fn priv_var(&self) -> Var {
-        Var::new(PRIV_VAR, self.bv_type(2))
+        Var{name: PRIV_VAR.to_string(), typ: self.bv_type(2)}
     }
     fn except_var(&self) -> Var {
-        Var::new(EXCEPT_VAR, self.bv_type(self.xlen))
+        Var{name: EXCEPT_VAR.to_string(), typ: self.bv_type(self.xlen)}
     }
     fn sys_state_vars(&self) -> Vec<Var> {
         let mut vec_var = vec![];
@@ -378,19 +378,15 @@ where
         vec_var
     }
     /// Returns the type of memory (XLEN addressable byte valued array)
-    fn mem_type(&self) -> Rc<Type> {
-        Rc::new(Type::Array {
-            in_typs: vec![self.bv_type(self.xlen)],
-            out_typ: self.bv_type(BYTE_SIZE),
-        })
+    fn mem_type(&self) -> Type {
+        Type::Array {
+            in_typs: vec![Box::new(self.bv_type(self.xlen))],
+            out_typ: Box::new(self.bv_type(BYTE_SIZE)),
+        }
     }
     /// Returns a bitvector type of specified width
-    fn bv_type(&self, width: u64) -> Rc<Type> {
-        Rc::new(Type::Bv { w: width })
-    }
-    /// Returns a bitvector literal
-    fn bv_lit(&self, val: u64, width: u64) -> Expr {
-        Expr::Literal(Literal::bv(val, width))
+    fn bv_type(&self, width: u64) -> Type {
+        Type::Bv { w: width }
     }
     /// Infers registers used by the instructions in the CFG
     fn infer_vars(&self, cfg_rc: &Rc<Cfg>) -> Vec<Var> {

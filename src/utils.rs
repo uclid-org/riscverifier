@@ -10,20 +10,6 @@ pub enum Error {
 }
 
 // Utility functions
-pub fn is_var(e: &Expr) -> bool {
-    match e {
-        Expr::Var(_) => true,
-        _ => false,
-    }
-}
-
-pub fn is_block(e: &Stmt) -> bool {
-    match e {
-        Stmt::Block(_) => true,
-        _ => false,
-    }
-}
-
 pub fn hex_str_to_u64(numeric: &str) -> Result<u64, std::num::ParseIntError> {
     Ok(u64::from_str_radix(numeric, 16)?)
 }
@@ -50,4 +36,5 @@ pub fn indent_text(s: String, indent: usize) -> String {
     )
 }
 
+/// Constants
 pub const INST_LENGTH: u64 = 4;

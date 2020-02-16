@@ -7,18 +7,19 @@ use crate::utils;
 
 /// Types
 #[allow(dead_code)]
-#[derive(Debug, PartialEq, Eq, Hash)]
+#[derive(Debug, PartialEq, Eq, Hash, Clone)]
 pub enum Type {
     Bool,
     Bv {
         w: u64,
     },
     Array {
-        in_typs: Vec<Rc<Type>>,
-        out_typ: Rc<Type>,
+        in_typs: Vec<Box<Type>>,
+        out_typ: Box<Type>,
     },
 }
 
+/// Expressions
 #[allow(dead_code)]
 #[derive(Debug, Clone)]
 pub enum Expr {
@@ -35,8 +36,32 @@ impl Expr {
             _ => panic!("Not a literal"),
         }
     }
+    pub fn is_var(&self) -> bool {
+        if let Expr::Var(_) = self {
+            true
+        } else {
+            false
+        }
+    }
+    pub fn bv_lit(val: u64, width: u64) -> Self {
+        Expr::Literal(Literal::Bv {val, width})
+    }
+    pub fn bool_lit(val: bool) -> Self {
+        Expr::Literal(Literal::Bool {val})
+    }
+    pub fn var(name: &str, typ: Type) -> Self {
+        Expr::Var(Var {name: name.to_string(), typ})
+    }
+    pub fn const_var(name: &str, typ: Type) -> Self {
+        Expr::Const(Var {name: name.to_string(), typ})
+    }
+    pub fn op_app(op: Op, operands: Vec<Self>) -> Self {
+        Expr::OpApp(OpApp { op, operands })
+    }
+    pub fn func_app(func_name: String, operands: Vec<Self>) -> Self {
+        Expr::FuncApp(FuncApp{func_name, operands})
+    }
 }
-
 /// Literals
 #[allow(dead_code)]
 #[derive(Debug, Clone)]
@@ -44,29 +69,10 @@ pub enum Literal {
     Bv { val: u64, width: u64 },
     Bool { val: bool },
 }
-impl Literal {
-    pub fn bv(val: u64, width: u64) -> Self {
-        Literal::Bv { val, width }
-    }
-
-    #[allow(dead_code)]
-    pub fn bool(val: bool) -> Self {
-        Literal::Bool { val }
-    }
-}
-
 #[derive(Debug, Eq, Hash, Clone)]
 pub struct Var {
     pub name: String,
-    pub typ: Rc<Type>,
-}
-impl Var {
-    pub fn new(name: &str, typ: Rc<Type>) -> Self {
-        Var {
-            name: String::from(name),
-            typ: typ,
-        }
-    }
+    pub typ: Type,
 }
 impl Ord for Var {
     fn cmp(&self, other: &Self) -> Ordering {
@@ -90,12 +96,6 @@ pub struct OpApp {
     pub op: Op,
     pub operands: Vec<Expr>,
 }
-impl OpApp {
-    pub fn new(op: Op, operands: Vec<Expr>) -> Self {
-        OpApp { op, operands }
-    }
-}
-
 /// Operators
 #[allow(dead_code)]
 #[derive(Debug, Clone)]
@@ -105,7 +105,6 @@ pub enum Op {
     Bool(BoolOp),
     ArrayIndex,
 }
-
 /// Comparison operators
 #[allow(dead_code)]
 #[derive(Debug, Clone)]
@@ -113,7 +112,6 @@ pub enum CompOp {
     Equality,
     Inequality,
 }
-
 /// BV operators
 #[allow(dead_code)]
 #[derive(Debug, Clone)]
@@ -140,7 +138,6 @@ pub enum BVOp {
     RightShift,
     ARightShift, // arithmetic right shift
 }
-
 /// Boolean operators
 #[allow(dead_code)]
 #[derive(Debug, Clone)]
@@ -151,12 +148,11 @@ pub enum BoolOp {
     Impl, // implication: ==>
     Neg,  // negation: !
 }
-
 /// Function application
 #[derive(Debug, Clone)]
 pub struct FuncApp {
-    pub func_name: &'static str,
-    pub operands: Vec<Rc<Expr>>,
+    pub func_name: String,
+    pub operands: Vec<Expr>,
 }
 
 /// Statements
@@ -170,14 +166,35 @@ pub enum Stmt {
     FuncCall(FuncCall),
     Assign(Assign),
     IfThenElse(IfThenElse),
-    Block(Vec<Rc<Stmt>>),
+    Block(Vec<Box<Stmt>>),
 }
 impl Stmt {
-    pub fn get_expect_block(&self) -> &Vec<Rc<Stmt>> {
+    pub fn get_expect_block(&self) -> &Vec<Box<Stmt>> {
         match self {
             Stmt::Block(b) => b,
             _ => panic!("Not a block."),
         }
+    }
+    pub fn is_blk(&self) -> bool {
+        if let Stmt::Block(_) = self {
+            true
+        } else {
+            false
+        }
+    }
+    pub fn func_call(func_name: String, lhs: Vec<Expr>, operands: Vec<Expr>) -> Self {
+        Stmt::FuncCall(FuncCall {
+            func_name,
+            lhs,
+            operands,
+        }   )
+    }
+    pub fn if_then_else(cond: Expr, then_stmt: Box<Stmt>, else_stmt: Option<Box<Stmt>>) -> Self {
+        Stmt::IfThenElse(IfThenElse {
+            cond,
+            then_stmt,
+            else_stmt,
+        })
     }
 }
 
@@ -188,23 +205,12 @@ pub struct FuncCall {
     pub lhs: Vec<Expr>,
     pub operands: Vec<Expr>,
 }
-impl FuncCall {
-    pub fn new(func_name: String, lhs: Vec<Expr>, operands: Vec<Expr>) -> Self {
-        FuncCall {
-            func_name,
-            lhs,
-            operands,
-        }
-    }
-}
-
 /// Assign statement
 #[derive(Debug, Clone)]
 pub struct Assign {
     pub lhs: Vec<Expr>,
     pub rhs: Vec<Expr>,
 }
-
 /// If then else statement
 #[derive(Debug, Clone)]
 pub struct IfThenElse {
@@ -212,16 +218,6 @@ pub struct IfThenElse {
     pub then_stmt: Box<Stmt>,
     pub else_stmt: Option<Box<Stmt>>,
 }
-impl IfThenElse {
-    pub fn new(cond: Expr, then_stmt: Box<Stmt>, else_stmt: Option<Box<Stmt>>) -> Self {
-        IfThenElse {
-            cond,
-            then_stmt,
-            else_stmt,
-        }
-    }
-}
-
 /// Verification model datatypes
 #[derive(Debug, Clone)]
 pub struct FuncModel {
@@ -229,6 +225,7 @@ pub struct FuncModel {
     pub body: Stmt,
     pub inline: bool,
 }
+/// Function Model for pre/post verification
 impl FuncModel {
     pub fn new(
         name: &str,
@@ -241,7 +238,7 @@ impl FuncModel {
         inline: bool,
     ) -> Self {
         assert!(
-            utils::is_block(&body),
+            &body.is_blk(),
             format!("Body of {} should be a block.", name)
         );
         FuncModel {
@@ -251,7 +248,7 @@ impl FuncModel {
         }
     }
 }
-
+/// Function signature
 #[derive(Debug, Clone)]
 pub struct FuncSig {
     pub name: String,
@@ -271,12 +268,12 @@ impl FuncSig {
         mod_set: HashSet<String>,
     ) -> Self {
         assert!(
-            arg_decls.iter().all(|v| utils::is_var(v)),
+            arg_decls.iter().all(|v| v.is_var()),
             format!("An argument of {} is not a variable.", name)
         );
         if let Some(rd) = &ret_decl {
             assert!(
-                utils::is_var(rd),
+                rd.is_var(),
                 format!("The return value of {} is {:?}; not a variable.", name, rd)
             );
         }
@@ -290,13 +287,12 @@ impl FuncSig {
         }
     }
 }
-
+/// Verification Model
 #[derive(Debug)]
 pub struct Model {
     pub vars: HashSet<Var>,
     pub func_models: Vec<FuncModel>,
 }
-
 impl Model {
     pub fn new() -> Self {
         Model {
@@ -323,6 +319,9 @@ impl Model {
     // fn model_to_string(&self) -> String {}
 }
 
+/// This intermediate representation (IR) interface
+/// contains the function declarations to define for a
+/// verification engine
 pub trait IRInterface: fmt::Debug {
     /// Expressions to string functions
     fn expr_to_string(expr: &Expr) -> String {
@@ -368,9 +367,8 @@ pub trait IRInterface: fmt::Debug {
     fn func_call_to_string(func_call: &FuncCall) -> String;
     fn assign_to_string(assign: &Assign) -> String;
     fn ite_to_string(ite: &IfThenElse) -> String;
-    fn block_to_string(blk: &Vec<Rc<Stmt>>) -> String;
+    fn block_to_string(blk: &Vec<Box<Stmt>>) -> String;
     fn func_model_to_string(fm: &FuncModel) -> String;
-
     // IR to model string
-    fn ir_model_to_string(model: &Model) -> String;
+    fn model_to_string(model: &Model) -> String;
 }

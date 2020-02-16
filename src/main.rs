@@ -23,8 +23,8 @@ use dwarfreader::DwarfReader;
 mod objectdumpreader;
 use objectdumpreader::ObjectDumpReader;
 
-// mod specreader;
-// use specreader::SpecReader;
+mod specreader;
+use specreader::SpecReader;
 
 mod translator;
 use translator::Translator;

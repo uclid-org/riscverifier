@@ -5,9 +5,7 @@ use crate::ir::*;
 use crate::utils::*;
 
 #[derive(Debug)]
-pub struct Uclid5Interface {
-    
-};
+pub struct Uclid5Interface;
 
 impl Uclid5Interface {
     pub fn new() -> Self {
@@ -67,7 +65,7 @@ impl Uclid5Interface {
         format!(
             "var {}: {};",
             Self::var_to_string(var),
-            Self::typ_to_string(&*var.typ)
+            Self::typ_to_string(&var.typ)
         )
     }
 }
@@ -216,7 +214,7 @@ impl IRInterface for Uclid5Interface {
         };
         format!("if ({}) {{\n{}\n}}{}", cond, thn, els)
     }
-    fn block_to_string(blk: &Vec<Rc<Stmt>>) -> String {
+    fn block_to_string(blk: &Vec<Box<Stmt>>) -> String {
         let inner = blk
             .iter()
             .map(|rc_stmt| Self::stmt_to_string(rc_stmt))
@@ -275,7 +273,7 @@ impl IRInterface for Uclid5Interface {
 
     // Generate function model
     // NOTE: Replace string with write to file
-    fn ir_model_to_string(model: &Model) -> String {
+    fn model_to_string(model: &Model) -> String {
         // prelude
         let prelude = Self::prelude();
         // variables
@@ -308,12 +306,12 @@ mod tests {
 
     #[test]
     fn test_assign_to_string() {
-        let bv64_type = Rc::new(Type::Bv { w: 64 });
-        let var_x = Rc::new(Expr::Var(Var {
-            name: "x",
+        let bv64_type = Type::Bv { w: 64 };
+        let var_x = Expr::Var(Var {
+            name: "x".to_string(),
             typ: bv64_type,
-        }));
-        let bv_lit = Rc::new(Expr::Literal(Literal::Bv { val: 0, width: 64 }));
+        });
+        let bv_lit = Expr::Literal(Literal::Bv { val: 0, width: 64 });
         let assign = Assign {
             lhs: vec![var_x],
             rhs: vec![bv_lit],
