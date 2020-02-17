@@ -1,4 +1,5 @@
 WHITESPACE = _{ " " | NEWLINE }
+COMMENT = _{ ("/*" ~ (!"*/" ~ ANY)* ~ "*/") | ("//" ~ (!NEWLINE ~ ANY)* ~ NEWLINE) }
 
 char = { ASCII_ALPHANUMERIC | "_" }
 
@@ -8,10 +9,8 @@ identifier = @{ ASCII_ALPHA ~ char* }
 old = @{ "old" }
 
 comp_op = @{ "<=_u" | ">=_u" | "<=" | ">=" | "<_u" | ">_u" | "==" | "<" | ">" }
-bool_op = @{ "||" | "&&" | "==>" | "<==>" }
-bit_op = @{ "|" | "&" }
-
-ite = { "if" ~ bool_expr ~ "then" ~ bool_expr ~ "else" ~ bool_expr }
+bool_op = @{ "||" | "&&" | "==>" | "<==>" | "!" }
+bit_op = @{ "|" | "&" | "+" | "-" }
 
 array_index = { "[" ~ value_expr ~ "]" }
 
@@ -27,25 +26,18 @@ bool_const = @{ "true"
 			  | "false"
 			  }
 
-deref = { "*" ~ "(" ~ value_expr ~ ")" }
-deref_old = { "*" ~ "old" ~ "(" ~ value_expr ~ ")" }
-ref_val = { "&" ~ "(" ~ value_expr ~ ")" }
-
-path = { identifier ~ (array_index | get_field)* }
+path = { path_ref? ~ identifier ~ (array_index | get_field)* }
+path_ref = @{ "&" }
 
 p_value_expr = _{ "(" ~ value_expr ~ ")" }
 value_expr = { bv_eval
 			 | path
  			 | integer
  			 | p_value_expr
- 			 | deref
- 			 | deref_old
- 			 | ref_val
  			 }
 
 p_bool_expr = _{ "(" ~ bool_expr ~ ")"}
-bool_expr =  { ite
-			 | comp_eval
+bool_expr =  { comp_eval
 			 | bool_eval
 			 | bool_const
 		     | p_bool_expr
@@ -60,4 +52,4 @@ spec_begin = _{ "begin_spec" }
 func_name = { identifier }
 func_spec = { spec_begin ~ "(" ~ func_name ~ ")" ~ (spec_stmt)+ ~ spec_end }
 
-func_specs = { func_spec+ }
+func_specs = { SOI ~ func_spec+ ~ EOI}

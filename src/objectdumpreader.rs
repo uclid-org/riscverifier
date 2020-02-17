@@ -176,9 +176,9 @@ impl ObjectDumpReader {
             }
         }
         // Create basic blocks
-        // 1. If addr is marked, then save the
-        //    previous vector into basic block
-        //    and start a new vector of instructions
+        //  If addr is marked, then save the
+        //  previous vector into basic block
+        //  and start a new vector of instructions
         let mut basic_blk: Vec<Rc<AssemblyLine>> = vec![];
         for al in &func_blk {
             if marked.get(&al.address()).is_some() && basic_blk.len() > 0 {

@@ -79,6 +79,7 @@ impl IRInterface for Uclid5Interface {
     }
     fn typ_to_string(typ: &Type) -> String {
         match typ {
+            Type::Unknown => panic!("Type is unknown!"),
             Type::Bool => format!("bool"),
             Type::Bv { w } => format!("bv{}", w),
             Type::Array { in_typs, out_typ } => format!(
@@ -96,18 +97,18 @@ impl IRInterface for Uclid5Interface {
         match compop {
             CompOp::Equality => format!("{} == {}", e1.unwrap(), e2.unwrap()),
             CompOp::Inequality => format!("{} != {}", e1.unwrap(), e2.unwrap()),
+            CompOp::Lt => format!("{} < {}", e1.unwrap(), e2.unwrap()),
+            CompOp::Le => format!("{} <= {}", e1.unwrap(), e2.unwrap()),
+            CompOp::Gt => format!("{} > {}", e1.unwrap(), e2.unwrap()),
+            CompOp::Ge => format!("{} >= {}", e1.unwrap(), e2.unwrap()),
+            CompOp::Ltu => format!("{} <_u {}", e1.unwrap(), e2.unwrap()),
+            CompOp::Leu => format!("{} <=_u {}", e1.unwrap(), e2.unwrap()),
+            CompOp::Gtu => format!("{} >_u {}", e1.unwrap(), e2.unwrap()),
+            CompOp::Geu => format!("{} >=_u {}", e1.unwrap(), e2.unwrap()),
         }
     }
     fn bv_app_to_string(bvop: &BVOp, e1: Option<String>, e2: Option<String>) -> String {
         match bvop {
-            BVOp::Lt => format!("{} < {}", e1.unwrap(), e2.unwrap()),
-            BVOp::Le => format!("{} <= {}", e1.unwrap(), e2.unwrap()),
-            BVOp::Gt => format!("{} > {}", e1.unwrap(), e2.unwrap()),
-            BVOp::Ge => format!("{} >= {}", e1.unwrap(), e2.unwrap()),
-            BVOp::Ltu => format!("{} <_u {}", e1.unwrap(), e2.unwrap()),
-            BVOp::Leu => format!("{} <=_u {}", e1.unwrap(), e2.unwrap()),
-            BVOp::Gtu => format!("{} >_u {}", e1.unwrap(), e2.unwrap()),
-            BVOp::Geu => format!("{} >=_u {}", e1.unwrap(), e2.unwrap()),
             BVOp::Add => format!("{} + {}", e1.unwrap(), e2.unwrap()),
             BVOp::Sub => format!("{} - {}", e1.unwrap(), e2.unwrap()),
             BVOp::Mul => format!("{} * {}", e1.unwrap(), e2.unwrap()),
@@ -144,6 +145,9 @@ impl IRInterface for Uclid5Interface {
     }
     fn array_index_to_string(e1: String, e2: String) -> String {
         format!("{}[{}]", e1, e2)
+    }
+    fn get_field_to_string(e1: String, field: String) -> String {
+        format!("{}.{}", e1, field)
     }
 
     /// Statements to string
@@ -240,14 +244,14 @@ impl IRInterface for Uclid5Interface {
             .sig
             .requires
             .iter()
-            .map(|e| format!("\n    requires ({});", Self::expr_to_string(e)))
+            .map(|spec| format!("\n    requires ({});", Self::expr_to_string(spec.expr())))
             .collect::<Vec<_>>()
             .join("");
         let ensures = fm
             .sig
             .ensures
             .iter()
-            .map(|e| format!("\n    ensures ({});", Self::expr_to_string(e)))
+            .map(|spec| format!("\n    ensures ({});", Self::expr_to_string(spec.expr())))
             .collect::<Vec<_>>()
             .join("");
         let modifies = if fm.sig.mod_set.len() > 0 {

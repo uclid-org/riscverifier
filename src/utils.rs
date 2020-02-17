@@ -7,6 +7,8 @@ pub enum Error {
     CouldNotFindDwarfChild,
     // Translator errors
     TErr { msg: String },
+    // Specification parser errors
+    SpecParseError(String)
 }
 
 // Utility functions

@@ -141,6 +141,12 @@ fn main() {
     let func_name = matches
         .value_of("function")
         .expect("[main] No function given to translate.");
+    // Specification
+    let spec_reader = SpecReader::new();
+    let mut specs_map = None;
+    if let Some(spec_file) = matches.value_of("spec") {
+        specs_map = spec_reader.process_specs_file(spec_file).ok();
+    }
     // Translate and write to output file
     let mut func_blks = HashMap::new();
     for (k, v) in function_blocks {
@@ -152,5 +158,5 @@ fn main() {
     let mut translator: Translator<Uclid5Interface, CDwarfInterface> =
         Translator::new(&func_blks, &ignored_functions, &dwarf_reader);
     translator.gen_func_model(&func_name);
-    translator.print_model();
+    // translator.print_model();
 }

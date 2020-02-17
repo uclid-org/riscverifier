@@ -9,6 +9,7 @@ use crate::utils;
 #[allow(dead_code)]
 #[derive(Debug, PartialEq, Eq, Hash, Clone)]
 pub enum Type {
+    Unknown,
     Bool,
     Bv {
         w: u64,
@@ -21,7 +22,7 @@ pub enum Type {
 
 /// Expressions
 #[allow(dead_code)]
-#[derive(Debug, Clone)]
+#[derive(Debug, PartialEq, Eq, Hash, Clone)]
 pub enum Expr {
     Literal(Literal),
     Var(Var),
@@ -64,7 +65,7 @@ impl Expr {
 }
 /// Literals
 #[allow(dead_code)]
-#[derive(Debug, Clone)]
+#[derive(Debug, PartialEq, Eq, Hash, Clone)]
 pub enum Literal {
     Bv { val: u64, width: u64 },
     Bool { val: bool },
@@ -91,31 +92,27 @@ impl PartialEq for Var {
 }
 
 // Operator application
-#[derive(Debug, Clone)]
+#[derive(Debug, PartialEq, Eq, Hash, Clone)]
 pub struct OpApp {
     pub op: Op,
     pub operands: Vec<Expr>,
 }
 /// Operators
 #[allow(dead_code)]
-#[derive(Debug, Clone)]
+#[derive(Debug, PartialEq, Eq, Hash, Clone)]
 pub enum Op {
     Comp(CompOp),
     Bv(BVOp),
     Bool(BoolOp),
     ArrayIndex,
+    GetField(String),
 }
 /// Comparison operators
 #[allow(dead_code)]
-#[derive(Debug, Clone)]
+#[derive(Debug, PartialEq, Eq, Hash, Clone)]
 pub enum CompOp {
     Equality,
     Inequality,
-}
-/// BV operators
-#[allow(dead_code)]
-#[derive(Debug, Clone)]
-pub enum BVOp {
     Lt,  // <
     Le,  // <=
     Gt,  // >
@@ -124,6 +121,11 @@ pub enum BVOp {
     Leu, // <=_u
     Gtu, // >_u
     Geu, // >=_u
+}
+/// BV operators
+#[allow(dead_code)]
+#[derive(Debug, PartialEq, Eq, Hash, Clone)]
+pub enum BVOp {
     Add,
     Sub,
     Mul,
@@ -140,7 +142,7 @@ pub enum BVOp {
 }
 /// Boolean operators
 #[allow(dead_code)]
-#[derive(Debug, Clone)]
+#[derive(Debug, PartialEq, Eq, Hash, Clone)]
 pub enum BoolOp {
     Conj, // and: &&
     Disj, // or: ||
@@ -149,7 +151,7 @@ pub enum BoolOp {
     Neg,  // negation: !
 }
 /// Function application
-#[derive(Debug, Clone)]
+#[derive(Debug, PartialEq, Eq, Hash, Clone)]
 pub struct FuncApp {
     pub func_name: String,
     pub operands: Vec<Expr>,
@@ -231,8 +233,8 @@ impl FuncModel {
         name: &str,
         arg_decls: Vec<Expr>,
         ret_decl: Option<Expr>,
-        requires: Vec<Expr>,
-        ensures: Vec<Expr>,
+        requires: Vec<Spec>,
+        ensures: Vec<Spec>,
         mod_set: HashSet<String>,
         body: Stmt,
         inline: bool,
@@ -254,8 +256,8 @@ pub struct FuncSig {
     pub name: String,
     pub arg_decls: Vec<Expr>,
     pub ret_decl: Option<Expr>,
-    pub requires: Vec<Expr>,
-    pub ensures: Vec<Expr>,
+    pub requires: Vec<Spec>,
+    pub ensures: Vec<Spec>,
     pub mod_set: HashSet<String>,
 }
 impl FuncSig {
@@ -263,8 +265,8 @@ impl FuncSig {
         name: &str,
         arg_decls: Vec<Expr>,
         ret_decl: Option<Expr>,
-        requires: Vec<Expr>,
-        ensures: Vec<Expr>,
+        requires: Vec<Spec>,
+        ensures: Vec<Spec>,
         mod_set: HashSet<String>,
     ) -> Self {
         assert!(
@@ -284,6 +286,18 @@ impl FuncSig {
             requires,
             ensures,
             mod_set,
+        }
+    }
+}
+#[derive(Debug, Clone)]
+pub enum Spec {
+    Requires(Expr),
+    Ensures(Expr),
+}
+impl Spec {
+    pub fn expr(&self) -> &Expr {
+        match &self {
+            Spec::Requires(e) | Spec::Ensures(e) => e,
         }
     }
 }
@@ -346,6 +360,7 @@ pub trait IRInterface: fmt::Debug {
             Op::Bv(bvop) => Self::bv_app_to_string(bvop, e1_str, e2_str),
             Op::Bool(bop) => Self::bool_app_to_string(bop, e1_str, e2_str),
             Op::ArrayIndex => Self::array_index_to_string(e1_str.unwrap(), e2_str.unwrap()),
+            Op::GetField(field) => Self::get_field_to_string(e1_str.unwrap(), field.clone()),
         }
     }
     fn fapp_to_string(fapp: &FuncApp) -> String;
@@ -358,6 +373,7 @@ pub trait IRInterface: fmt::Debug {
     fn bv_app_to_string(bvop: &BVOp, e1: Option<String>, e2: Option<String>) -> String;
     fn bool_app_to_string(bop: &BoolOp, e1: Option<String>, e2: Option<String>) -> String;
     fn array_index_to_string(e1: String, e2: String) -> String;
+    fn get_field_to_string(e1: String, field: String) -> String;
     /// Statements to string
     fn stmt_to_string(stmt: &Stmt) -> String;
     fn skip_to_string() -> String;
