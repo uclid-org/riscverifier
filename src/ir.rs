@@ -353,7 +353,6 @@ impl Model {
             self.add_var(v.clone());
         }
     }
-    // fn model_to_string(&self) -> String {}
 }
 
 /// This intermediate representation (IR) interface
@@ -414,4 +413,16 @@ pub trait IRInterface: fmt::Debug {
         func_sigs: &Vec<DwarfVar>,
         func_sigs: &HashMap<String, DwarfFuncSig>,
     ) -> String;
+    // Specification langauge
+    fn spec_expr_to_string(expr: &Expr) -> String {
+        match expr {
+            Expr::Literal(l) => Self::lit_to_string(l),
+            Expr::FuncApp(fapp) => Self::spec_fapp_to_string(fapp),
+            Expr::OpApp(opapp) => Self::spec_opapp_to_string(opapp),
+            Expr::Var(v) | Expr::Const(v) => Self::spec_var_to_string(v),
+        }
+    }
+    fn spec_fapp_to_string(fapp: &FuncApp) -> String;
+    fn spec_opapp_to_string(opapp: &OpApp) -> String;
+    fn spec_var_to_string(v: &Var) -> String;
 }

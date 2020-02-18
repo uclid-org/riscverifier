@@ -15,7 +15,7 @@ impl Uclid5Interface {
         sorted.sort();
         let defns = sorted
             .iter()
-            .map(|v| Self::var_decl(v))
+            .map(|v| format!("var {};", Self::var_decl(v)))
             .collect::<Vec<String>>()
             .join("\n");
         format!("// RISC-V system state variables\n{}", defns)
@@ -47,8 +47,8 @@ impl Uclid5Interface {
         let mut defns = vec![];
         match &typ_defn {
             DwarfTypeDefn::Primitive { bytes } => defns.push(format!(
-                "define index_by_{}(index: bv64): bv64 = {};",
-                bytes,
+                "define {}(index: bv64): bv64 = {};",
+                Self::array_index_macro_name(bytes),
                 Self::multiply_expr(bytes, "index")
             )),
             DwarfTypeDefn::Array { in_typ, out_typ } => {
@@ -65,13 +65,16 @@ impl Uclid5Interface {
                     defns.append(&mut Self::gen_array_defn(&field.typ));
                 }
                 defns.push(format!(
-                    "define mult_by_{}(index: bv64): bv64 = {};",
-                    bytes,
+                    "define {}(index: bv64): bv64 = {};",
+                    Self::array_index_macro_name(bytes),
                     Self::multiply_expr(bytes, "index")
                 ))
             }
         };
         defns
+    }
+    fn array_index_macro_name(bytes: &u64) -> String {
+        format!("index_by_{}", bytes)
     }
     fn multiply_expr(num_const: &u64, expr: &str) -> String {
         format!("{:b}", num_const) // Binary expression
@@ -127,8 +130,8 @@ impl Uclid5Interface {
                 for (field_name, field) in fields {
                     defns.append(&mut Self::gen_struct_defn(&*field.typ));
                     defns.push(format!(
-                        "define {}_{}(ptr: bv64): bv64 = ptr + {}bv64;",
-                        id, field_name, field.loc
+                        "define {}(ptr: bv64): bv64 = ptr + {}bv64;",
+                        Self::get_field_macro_name(&id[..], field_name), field.loc
                     ));
                 }
             }
@@ -140,6 +143,9 @@ impl Uclid5Interface {
         }
         defns
     }
+    fn get_field_macro_name(struct_id: &str, field_name: &String) -> String {
+        format!("{}_{}", struct_id, field_name)
+    }
     fn gen_global_defns(global_vars: &Vec<DwarfVar>) -> String {
         let mut defns = String::from("// Global variables\n");
         for var in global_vars {
@@ -149,11 +155,14 @@ impl Uclid5Interface {
     }
     fn gen_global_defn(global_var: &DwarfVar) -> String {
         format!(
-            "define global_{}(): {} = {};",
-            global_var.name,
+            "define {}(): {} = {};",
+            Self::global_var_ptr_name(&global_var.name[..]),
             "bv64",
             format!("{}bv64", global_var.memory_addr)
         )
+    }
+    fn global_var_ptr_name(name: &str) -> String {
+        format!("global_{}", name)
     }
     fn gen_procs(model: &Model) -> String {
         let procs_string = model
@@ -185,7 +194,7 @@ impl Uclid5Interface {
     /// Helper functions
     fn var_decl(var: &Var) -> String {
         format!(
-            "var {}: {};",
+            "{}: {}",
             Self::var_to_string(var),
             Self::typ_to_string(&var.typ)
         )
@@ -366,14 +375,14 @@ impl IRInterface for Uclid5Interface {
             .sig
             .requires
             .iter()
-            .map(|spec| format!("\n    requires ({});", Self::expr_to_string(spec.expr())))
+            .map(|spec| format!("\n    requires ({});", Self::spec_expr_to_string(spec.expr())))
             .collect::<Vec<_>>()
             .join("");
         let ensures = fm
             .sig
             .ensures
             .iter()
-            .map(|spec| format!("\n    ensures ({});", Self::expr_to_string(spec.expr())))
+            .map(|spec| format!("\n    ensures ({});", Self::spec_expr_to_string(spec.expr())))
             .collect::<Vec<_>>()
             .join("");
         let modifies = if fm.sig.mod_set.len() > 0 {
@@ -420,6 +429,53 @@ impl IRInterface for Uclid5Interface {
             "module main {{\n{}\n{}\n{}\n{}\n{}\n{}\n\n{}\n}}",
             prelude, var_defns, array_defns, struct_defns, global_defns, procs, ctrl_blk
         )
+    }
+
+    /// Specification langauge translation functions
+    fn spec_fapp_to_string(fapp: &FuncApp) -> String {
+        format!(
+            "{}({})",
+            fapp.func_name,
+            fapp.operands
+                .iter()
+                .map(|x| Self::spec_expr_to_string(&*x))
+                .collect::<Vec<String>>()
+                .join(", ")
+        )
+    }
+    fn spec_opapp_to_string(opapp: &OpApp) -> String {
+        let e1_str = opapp
+            .operands
+            .get(0)
+            .map_or(None, |e| Some(Self::spec_expr_to_string(e)));
+        let e2_str = opapp
+            .operands
+            .get(1)
+            .map_or(None, |e| Some(Self::spec_expr_to_string(e)));
+        match &opapp.op {
+            Op::Comp(cop) => Self::comp_app_to_string(cop, e1_str, e2_str),
+            Op::Bv(bvop) => Self::bv_app_to_string(bvop, e1_str, e2_str),
+            Op::Bool(bop) => Self::bool_app_to_string(bop, e1_str, e2_str),
+            Op::ArrayIndex => {
+                // Get expression expression type
+                let expr_type = 10;
+                let array = e1_str.unwrap();
+                let index = e2_str.unwrap();
+                format!("{}({}, {})", Self::array_index_macro_name(&10), array, index)
+            },
+            Op::GetField(field) => {
+                let struct_id = "SID";
+                format!("{}({})", Self::get_field_macro_name(struct_id, field), e1_str.unwrap())
+            },
+        }
+    }
+
+    fn spec_var_to_string(v: &Var) -> String {
+        // if true {
+            format!("{}()", Self::global_var_ptr_name(&v.name[..]))
+        // } else {
+            // v.name.clone()
+        // }
     }
 }
 

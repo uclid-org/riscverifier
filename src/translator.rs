@@ -6,7 +6,7 @@ use std::rc::Rc;
 
 use topological_sort::TopologicalSort;
 
-use crate::dwarfreader::{DwarfInterface, DwarfReader};
+use crate::dwarfreader::{DwarfInterface, DwarfReader, DwarfTypeDefn};
 use crate::ir::*;
 use crate::objectdumpreader::*;
 use crate::utils::*;
@@ -170,7 +170,15 @@ where
             })
             .map_or(vec![], |v| v);
         // Get the arguments
-        let arg_decls = vec![];
+        let arg_decls = self.dwarf_reader
+            .func_sig(func_name)
+            .and_then(|fs| {
+                Some(fs.args
+                    .iter()
+                    .map(|x| Expr::var(&x.name[..], self.dwarf_typ_to_ir(&x.typ_defn)))
+                    .collect::<Vec<Expr>>())
+            })
+            .map_or(vec![], |v| v);
         let ret_decl = None;
         // Create the cfg
         let body = self.gen_func_body(self.get_func_cfg(func_name)?);
@@ -339,6 +347,17 @@ where
         Stmt::func_call(func_name, lhs, operands)
     }
     /// =================== Helper functions ===================
+    /// Translates DwarfTypeDefn to Type
+    fn dwarf_typ_to_ir(&self, typ: &DwarfTypeDefn) -> Type {
+        match &typ {
+            DwarfTypeDefn::Primitive { bytes } => {
+                Type::Bv { w: bytes * BYTE_SIZE }
+            }
+            DwarfTypeDefn::Array { .. } | DwarfTypeDefn::Struct { .. } => {
+                Type::Bv { w: self.xlen }
+            }
+        }
+    }
     /// Compute modifies set for a basic block
     fn bb_mod_set(&self, bb: &BasicBlock) -> HashSet<String> {
         let mut mod_set = HashSet::new();

@@ -370,7 +370,7 @@ where
     pub fn global_vars(&self) -> &Vec<DwarfVar> {
         &self.global_vars
     }
-    pub fn func_sig(&self, func_name: &String) -> Option<&DwarfFuncSig> {
+    pub fn func_sig(&self, func_name: &str) -> Option<&DwarfFuncSig> {
         self.func_sigs.get(func_name)
     }
     pub fn func_sigs(&self) -> &HashMap<String, DwarfFuncSig> {
