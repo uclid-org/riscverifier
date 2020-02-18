@@ -1,5 +1,3 @@
-use crate::ir::*;
-
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Error {
     // Dwarf reader errors
@@ -8,7 +6,7 @@ pub enum Error {
     // Translator errors
     TErr { msg: String },
     // Specification parser errors
-    SpecParseError(String)
+    SpecParseError(String),
 }
 
 // Utility functions

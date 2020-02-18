@@ -6,10 +6,10 @@ use std::rc::Rc;
 
 use topological_sort::TopologicalSort;
 
+use crate::dwarfreader::{DwarfInterface, DwarfReader};
 use crate::ir::*;
 use crate::objectdumpreader::*;
 use crate::utils::*;
-use crate::dwarfreader::{DwarfReader, DwarfInterface};
 
 /// Constants
 const PC_VAR: &str = "pc";
@@ -30,7 +30,8 @@ where
     generated_funcs: HashSet<String>,
     ignored_funcs: &'t HashSet<&'t str>,
     mod_set_map: HashMap<String, HashSet<String>>,
-    dwarf_reader: &'t Option<DwarfReader<J>>,
+    dwarf_reader: Rc<DwarfReader<J>>,
+    specs_map: &'t Option<HashMap<String, Vec<Spec>>>,
     _phantom_i: PhantomData<I>,
 }
 
@@ -42,16 +43,18 @@ where
     pub fn new(
         func_cfg_map: &'t HashMap<String, Rc<Cfg>>,
         ignored_funcs: &'t HashSet<&'t str>,
-        dwarf_reader: &'t Option<DwarfReader<J>>,
+        dwarf_reader: Rc<DwarfReader<J>>,
+        specs_map: &'t Option<HashMap<String, Vec<Spec>>>,
     ) -> Self {
         Translator {
-            xlen: 64,   // TODO: Support for other architecture widths
+            xlen: 64, // TODO: Support for other architecture widths
             model: Model::new(),
             func_cfg_map,
             generated_funcs: HashSet::new(),
             ignored_funcs,
             mod_set_map: HashMap::new(),
             dwarf_reader,
+            specs_map,
             _phantom_i: PhantomData,
         }
     }
@@ -117,7 +120,7 @@ where
                 format!("Address {} was not found or not an entry point.", callee)
             );
             let callee_name = self.get_func_name(callee).unwrap();
-            self.gen_func_model(&callee_name[..]);
+            self.gen_func_model(&callee_name[..])?;
         }
         // Add callee mod set variables
         for callee in &callees {
@@ -134,8 +137,38 @@ where
         self.mod_set_map
             .insert(func_name.to_string(), func_mod_set.clone());
         // Find translate the specification
-        let requires = vec![];
-        let ensures = vec![];
+        let requires = self
+            .specs_map
+            .as_ref()
+            .and_then(|specs_map| Some(specs_map.get(func_name)))
+            .and_then(|spec_vec| {
+                Some(
+                    spec_vec
+                        .unwrap()
+                        .iter()
+                        .cloned()
+                        .filter(|spec| spec.is_requires())
+                        .map(|spec| spec)
+                        .collect::<Vec<Spec>>(),
+                )
+            })
+            .map_or(vec![], |v| v);
+        let ensures = self
+            .specs_map
+            .as_ref()
+            .and_then(|specs_map| Some(specs_map.get(func_name)))
+            .and_then(|spec_vec| {
+                Some(
+                    spec_vec
+                        .unwrap()
+                        .iter()
+                        .cloned()
+                        .filter(|spec| spec.is_ensures())
+                        .map(|spec| spec)
+                        .collect::<Vec<Spec>>(),
+                )
+            })
+            .map_or(vec![], |v| v);
         // Get the arguments
         let arg_decls = vec![];
         let ret_decl = None;
@@ -155,7 +188,12 @@ where
         Ok(())
     }
     pub fn print_model(&self) {
-        println!("{}", I::model_to_string(&self.model));
+        let global_vars = self.dwarf_reader.global_vars();
+        let func_sigs = self.dwarf_reader.func_sigs();
+        println!(
+            "{}",
+            I::model_to_string(&self.model, &global_vars, &func_sigs)
+        );
     }
     /// Function model body
     fn gen_func_body(&self, cfg: &Rc<Cfg>) -> Stmt {
@@ -177,8 +215,7 @@ where
     fn basic_blk_call(&self, entry_addr: u64, cfg: &Rc<Cfg>) -> Stmt {
         let mut then_stmts_inner = vec![];
         // Add call to basic block
-        let call_stmt =
-            Stmt::func_call(self.bb_proc_name(entry_addr), vec![], vec![]);
+        let call_stmt = Stmt::func_call(self.bb_proc_name(entry_addr), vec![], vec![]);
         then_stmts_inner.push(Box::new(call_stmt));
         // Assert statements for jump targets
         let mut fallthru_guard = None;
@@ -221,11 +258,8 @@ where
         // Add call statement to callee function
         if let Some(target_addr) = cfg.next_abs_jump_addr(entry_addr) {
             if self.is_func_entry(&target_addr.to_string()[..]) {
-                let call_stmt = Stmt::func_call(
-                    self.get_func_name(target_addr).unwrap(),
-                    vec![],
-                    vec![],
-                );
+                let call_stmt =
+                    Stmt::func_call(self.get_func_name(target_addr).unwrap(), vec![], vec![]);
                 then_stmts_inner.push(Box::new(call_stmt));
                 then_stmts_inner.push(Box::new(Stmt::Assert(fallthru_guard.unwrap().clone())));
             }
@@ -283,10 +317,7 @@ where
         let mut regs: [Option<&InstOperand>; 2] = [al.rd(), al.csr()];
         for reg_op in regs.iter_mut() {
             if let Some(reg) = reg_op {
-                lhs.push(Expr::var(
-                    &reg.get_reg_name()[..],
-                    self.bv_type(self.xlen),
-                ));
+                lhs.push(Expr::var(&reg.get_reg_name()[..], self.bv_type(self.xlen)));
                 assert!(!reg.has_offset());
             }
         }
@@ -295,10 +326,7 @@ where
         let mut regs: [Option<&InstOperand>; 3] = [al.rs1(), al.rs2(), al.csr()];
         for reg_op in regs.iter_mut() {
             if let Some(reg) = reg_op {
-                operands.push(Expr::var(
-                    &reg.get_reg_name()[..],
-                    self.bv_type(self.xlen),
-                ));
+                operands.push(Expr::var(&reg.get_reg_name()[..], self.bv_type(self.xlen)));
                 if reg.has_offset() {
                     operands.push(Expr::bv_lit(reg.get_reg_offset() as u64, self.xlen));
                 }
@@ -306,10 +334,7 @@ where
         }
         // immediate input
         if let Some(imm) = al.imm() {
-            operands.push(Expr::bv_lit(
-                imm.get_imm_val() as u64,
-                self.xlen,
-            ));
+            operands.push(Expr::bv_lit(imm.get_imm_val() as u64, self.xlen));
         }
         Stmt::func_call(func_name, lhs, operands)
     }
@@ -358,16 +383,28 @@ where
     }
     /// The set of system state variables
     fn pc_var(&self) -> Var {
-        Var{name: PC_VAR.to_string(), typ: self.bv_type(self.xlen)}
+        Var {
+            name: PC_VAR.to_string(),
+            typ: self.bv_type(self.xlen),
+        }
     }
     fn mem_var(&self) -> Var {
-        Var {name: MEM_VAR.to_string(), typ: self.mem_type()}
+        Var {
+            name: MEM_VAR.to_string(),
+            typ: self.mem_type(),
+        }
     }
     fn priv_var(&self) -> Var {
-        Var{name: PRIV_VAR.to_string(), typ: self.bv_type(2)}
+        Var {
+            name: PRIV_VAR.to_string(),
+            typ: self.bv_type(2),
+        }
     }
     fn except_var(&self) -> Var {
-        Var{name: EXCEPT_VAR.to_string(), typ: self.bv_type(self.xlen)}
+        Var {
+            name: EXCEPT_VAR.to_string(),
+            typ: self.bv_type(self.xlen),
+        }
     }
     fn sys_state_vars(&self) -> Vec<Var> {
         let mut vec_var = vec![];

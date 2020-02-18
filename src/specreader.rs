@@ -4,33 +4,35 @@ use std::fs;
 use pest::iterators::Pair;
 use pest::Parser;
 
-use crate::DwarfReader;
 use crate::ir;
 use crate::utils;
 
 #[derive(Parser)]
 #[grammar = "pest/speclang.pest"]
 pub struct SpecReader {
-    xlen: u64
+    xlen: u64,
 }
 
 impl SpecReader {
-    pub fn new() -> SpecReader {
-        SpecReader {
-            xlen: 64,
-        }
+    pub fn new(xlen: u64) -> SpecReader {
+        SpecReader { xlen }
     }
 
-    pub fn process_specs_file(&self, spec_file_path: &str) -> Result<HashMap<String, Vec<ir::Spec>>, utils::Error> {
+    pub fn process_specs_file(
+        &self,
+        spec_file_path: &str,
+    ) -> Result<HashMap<String, Vec<ir::Spec>>, utils::Error> {
         let specs_str = fs::read_to_string(spec_file_path)
             .expect("[get_specs] Failed to open specification file.");
         self.parse_specs(&specs_str[..])
     }
 
-    pub fn parse_specs(&self, specs_string: &str) -> Result<HashMap<String, Vec<ir::Spec>>, utils::Error> {
+    pub fn parse_specs(
+        &self,
+        specs_string: &str,
+    ) -> Result<HashMap<String, Vec<ir::Spec>>, utils::Error> {
         match SpecReader::parse(Rule::func_specs, specs_string) {
             Ok(mut func_specs_pair) => {
-                println!("{:#?}", func_specs_pair);
                 let mut func_specs_inner = func_specs_pair
                     .next()
                     .expect("[parse_specs] Could not find function specifications.")
@@ -51,7 +53,10 @@ impl SpecReader {
                 }
                 Ok(function_specs_map)
             }
-            Err(e) => Err(utils::Error::SpecParseError(format!("Unable to parse spec {:?}.", e))),
+            Err(e) => Err(utils::Error::SpecParseError(format!(
+                "Unable to parse spec {:?}.",
+                e
+            ))),
         }
     }
 
@@ -65,7 +70,9 @@ impl SpecReader {
                     .as_str();
                 Ok(String::from(func_name))
             }
-            _ => Err(utils::Error::SpecParseError("Could not get function name in spec.".to_string())),
+            _ => Err(utils::Error::SpecParseError(
+                "Could not get function name in spec.".to_string(),
+            )),
         }
     }
 
@@ -75,14 +82,17 @@ impl SpecReader {
                 let mut spec_stmt_inner = pair.into_inner();
                 let spec_type = spec_stmt_inner.next().unwrap().as_str();
                 let bool_expr = self.translate_expr(spec_stmt_inner.next().unwrap())?;
-                println!("Specification: {:?} {:#?}", spec_type, bool_expr);
                 match spec_type {
                     "requires" => Ok(ir::Spec::Requires(bool_expr)),
                     "ensures" => Ok(ir::Spec::Ensures(bool_expr)),
-                    _ => Err(utils::Error::SpecParseError("Invalid spec line.".to_string())),
+                    _ => Err(utils::Error::SpecParseError(
+                        "Invalid spec line.".to_string(),
+                    )),
                 }
             }
-            _ => Err(utils::Error::SpecParseError("Unable to translate spec statement.".to_string())),
+            _ => Err(utils::Error::SpecParseError(
+                "Unable to translate spec statement.".to_string(),
+            )),
         }
     }
 
@@ -91,10 +101,9 @@ impl SpecReader {
         let pair_str = pair.as_str();
         let mut inner = pair.into_inner();
         match rule {
-            Rule::value_expr
-            | Rule::bool_expr
-            | Rule::get_field
-            | Rule::array_index => self.translate_expr(inner.next().unwrap()),
+            Rule::value_expr | Rule::bool_expr | Rule::get_field | Rule::array_index => {
+                self.translate_expr(inner.next().unwrap())
+            }
             Rule::comp_eval | Rule::bool_eval | Rule::bv_eval => {
                 let v1 = self.translate_expr(inner.next().unwrap())?;
                 let op = self.translate_op(inner.next().unwrap())?;
@@ -103,7 +112,10 @@ impl SpecReader {
             }
             Rule::bool_const => Ok(ir::Expr::bool_lit(pair_str == "true")),
             // FIXME: integer can be negative but currently parsing unsigned int
-            Rule::integer => Ok(ir::Expr::bv_lit(utils::dec_str_to_u64(pair_str).unwrap(), self.xlen)),
+            Rule::integer => Ok(ir::Expr::bv_lit(
+                utils::dec_str_to_u64(pair_str).unwrap(),
+                self.xlen,
+            )),
             Rule::path => {
                 let mut path_ref = false;
                 let mut path = self.translate_expr(inner.next().unwrap())?;
@@ -113,16 +125,22 @@ impl SpecReader {
                             path_ref = true;
                         }
                         Rule::array_index => {
-                            path = ir::Expr::op_app(ir::Op::ArrayIndex, vec![path, self.translate_expr(e)?]);
+                            path = ir::Expr::op_app(
+                                ir::Op::ArrayIndex,
+                                vec![path, self.translate_expr(e)?],
+                            );
                         }
                         Rule::get_field => {
-                            path = ir::Expr::op_app(ir::Op::GetField(e.into_inner().next().unwrap().as_str().to_string()), vec![path]);
+                            path = ir::Expr::op_app(
+                                ir::Op::GetField(
+                                    e.into_inner().next().unwrap().as_str().to_string(),
+                                ),
+                                vec![path],
+                            );
                         }
                         _ => panic!("[translate_expr] Not a valid path."),
                     }
                 }
-                // If the path is not a reference, then deference it 
-                // TODO: above
                 Ok(path)
             }
             Rule::identifier => Ok(ir::Expr::var(pair_str, ir::Type::Unknown)),
@@ -133,43 +151,44 @@ impl SpecReader {
     fn translate_op(&self, pair: Pair<Rule>) -> Result<ir::Op, utils::Error> {
         let rule = pair.as_rule();
         let pair_str = pair.as_str();
-        let mut inner = pair.into_inner();
         match rule {
-            Rule::comp_op => {
-                match pair_str {
-                    "==" => Ok(ir::Op::Comp(ir::CompOp::Equality)),
-                    "!=" => Ok(ir::Op::Comp(ir::CompOp::Inequality)),
-                    "<" => Ok(ir::Op::Comp(ir::CompOp::Lt)),
-                    "<=" => Ok(ir::Op::Comp(ir::CompOp::Le)),
-                    ">" => Ok(ir::Op::Comp(ir::CompOp::Gt)),
-                    ">=" => Ok(ir::Op::Comp(ir::CompOp::Ge)),
-                    "<_u" => Ok(ir::Op::Comp(ir::CompOp::Ltu)),
-                    "<=_u" => Ok(ir::Op::Comp(ir::CompOp::Leu)),
-                    ">_u" => Ok(ir::Op::Comp(ir::CompOp::Gtu)),
-                    ">=_u" => Ok(ir::Op::Comp(ir::CompOp::Geu)),
-                    _ => Err(utils::Error::SpecParseError("Invalid compare operation.".to_string()))
-                }
+            Rule::comp_op => match pair_str {
+                "==" => Ok(ir::Op::Comp(ir::CompOp::Equality)),
+                "!=" => Ok(ir::Op::Comp(ir::CompOp::Inequality)),
+                "<" => Ok(ir::Op::Comp(ir::CompOp::Lt)),
+                "<=" => Ok(ir::Op::Comp(ir::CompOp::Le)),
+                ">" => Ok(ir::Op::Comp(ir::CompOp::Gt)),
+                ">=" => Ok(ir::Op::Comp(ir::CompOp::Ge)),
+                "<_u" => Ok(ir::Op::Comp(ir::CompOp::Ltu)),
+                "<=_u" => Ok(ir::Op::Comp(ir::CompOp::Leu)),
+                ">_u" => Ok(ir::Op::Comp(ir::CompOp::Gtu)),
+                ">=_u" => Ok(ir::Op::Comp(ir::CompOp::Geu)),
+                _ => Err(utils::Error::SpecParseError(
+                    "Invalid compare operation.".to_string(),
+                )),
             },
-            Rule::bool_op => {
-                match pair_str {
-                    "==>" => Ok(ir::Op::Bool(ir::BoolOp::Impl)),
-                    "<==>" => Ok(ir::Op::Bool(ir::BoolOp::Iff)),
-                    "&&" => Ok(ir::Op::Bool(ir::BoolOp::Conj)),
-                    "||" => Ok(ir::Op::Bool(ir::BoolOp::Disj)),
-                    "!" => Ok(ir::Op::Bool(ir::BoolOp::Neg)),
-                    _ => Err(utils::Error::SpecParseError("Invalid bool operation.".to_string()))
-                }
+            Rule::bool_op => match pair_str {
+                "==>" => Ok(ir::Op::Bool(ir::BoolOp::Impl)),
+                "<==>" => Ok(ir::Op::Bool(ir::BoolOp::Iff)),
+                "&&" => Ok(ir::Op::Bool(ir::BoolOp::Conj)),
+                "||" => Ok(ir::Op::Bool(ir::BoolOp::Disj)),
+                "!" => Ok(ir::Op::Bool(ir::BoolOp::Neg)),
+                _ => Err(utils::Error::SpecParseError(
+                    "Invalid bool operation.".to_string(),
+                )),
             },
-            Rule::bit_op => {
-                match pair_str {
-                    "-" => Ok(ir::Op::Bv(ir::BVOp::Sub)),
-                    "+" => Ok(ir::Op::Bv(ir::BVOp::Add)),
-                    "&" => Ok(ir::Op::Bv(ir::BVOp::And)),
-                    "|" => Ok(ir::Op::Bv(ir::BVOp::Or)),
-                    _ => Err(utils::Error::SpecParseError("Invalid bitvector operation.".to_string()))
-                }
+            Rule::bit_op => match pair_str {
+                "-" => Ok(ir::Op::Bv(ir::BVOp::Sub)),
+                "+" => Ok(ir::Op::Bv(ir::BVOp::Add)),
+                "&" => Ok(ir::Op::Bv(ir::BVOp::And)),
+                "|" => Ok(ir::Op::Bv(ir::BVOp::Or)),
+                _ => Err(utils::Error::SpecParseError(
+                    "Invalid bitvector operation.".to_string(),
+                )),
             },
-            _ => Err(utils::Error::SpecParseError("Not an operation.".to_string())),
+            _ => Err(utils::Error::SpecParseError(
+                "Not an operation.".to_string(),
+            )),
         }
     }
 }

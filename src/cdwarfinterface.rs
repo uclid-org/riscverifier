@@ -117,8 +117,19 @@ impl DwarfInterface for CDwarfInterface {
                             .get_attr("DW_AT_type")
                             .expect("Field doesn't have a type.")
                             .get_expect_num_val();
-                        let type_defn = Box::new(Self::get_type(type_index, comp_unit).unwrap());
-                        (field_name.clone(), type_defn)
+                        let typ = Box::new(Self::get_type(type_index, comp_unit).unwrap());
+                        let loc = *child_dobj
+                            .get_attr("DW_AT_data_member_location")
+                            .expect("Field doesn't have a location.")
+                            .get_expect_num_val();
+                        (
+                            field_name.clone(),
+                            StructField {
+                                name: field_name.clone(),
+                                typ,
+                                loc,
+                            },
+                        )
                     })
                     .collect();
                 Ok(DwarfTypeDefn::Struct { id, fields, bytes })

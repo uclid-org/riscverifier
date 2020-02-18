@@ -1,6 +1,8 @@
+use std::collections::HashMap;
 use std::fs;
 use std::rc::Rc;
 
+use crate::dwarfreader::{DwarfFuncSig, DwarfTypeDefn, DwarfVar};
 use crate::ir::*;
 use crate::utils::*;
 
@@ -8,30 +10,150 @@ use crate::utils::*;
 pub struct Uclid5Interface;
 
 impl Uclid5Interface {
-    pub fn new() -> Self {
-        Uclid5Interface {}
-    }
     fn gen_var_defns(model: &Model) -> String {
-        let mut defn_string = String::from("");
         let mut sorted = model.vars.iter().collect::<Vec<_>>();
         sorted.sort();
-        for v in sorted.iter() {
-            let var_defn = Self::var_decl(&v);
-            defn_string = format!("{}\n{}", defn_string, var_defn);
-        }
-        defn_string
+        let defns = sorted
+            .iter()
+            .map(|v| Self::var_decl(v))
+            .collect::<Vec<String>>()
+            .join("\n");
+        format!("// RISC-V system state variables\n{}", defns)
     }
     fn prelude() -> String {
         fs::read_to_string("models/prelude.ucl").expect("Unable to read prelude.")
     }
-    fn gen_array_defns(_model: &Model) -> String {
-        format!("")
+    fn gen_array_defns(
+        global_vars: &Vec<DwarfVar>,
+        func_sigs: &HashMap<String, DwarfFuncSig>,
+    ) -> String {
+        let mut defns: Vec<String> = vec![];
+        for var in global_vars {
+            defns.append(&mut Self::gen_array_defn(&var.typ_defn));
+        }
+        for (_, func_sig) in func_sigs {
+            for var in &func_sig.args {
+                defns.append(&mut Self::gen_array_defn(&var.typ_defn));
+            }
+            if let Some(ret_typ) = &func_sig.ret_typ_defn {
+                defns.append(&mut Self::gen_array_defn(&ret_typ));
+            }
+        }
+        defns.sort();
+        defns.dedup();
+        indent_text(format!("// Array helpers\n{}", defns.join("\n")), 4)
     }
-    fn gen_struct_defns(_model: &Model) -> String {
-        format!("")
+    fn gen_array_defn(typ_defn: &DwarfTypeDefn) -> Vec<String> {
+        let mut defns = vec![];
+        match &typ_defn {
+            DwarfTypeDefn::Primitive { bytes } => defns.push(format!(
+                "define index_by_{}(index: bv64): bv64 = {};",
+                bytes,
+                Self::multiply_expr(bytes, "index")
+            )),
+            DwarfTypeDefn::Array { in_typ, out_typ } => {
+                defns.append(&mut Self::gen_array_defn(in_typ));
+                defns.append(&mut Self::gen_array_defn(out_typ));
+            }
+            DwarfTypeDefn::Struct {
+                id: _,
+                fields,
+                bytes,
+            } => {
+                let mut defns = vec![];
+                for (_, field) in fields {
+                    defns.append(&mut Self::gen_array_defn(&field.typ));
+                }
+                defns.push(format!(
+                    "define mult_by_{}(index: bv64): bv64 = {};",
+                    bytes,
+                    Self::multiply_expr(bytes, "index")
+                ))
+            }
+        };
+        defns
     }
-    fn gen_global_defns(_model: &Model) -> String {
-        format!("")
+    fn multiply_expr(num_const: &u64, expr: &str) -> String {
+        format!("{:b}", num_const) // Binary expression
+            .chars()
+            .rev()
+            .fold((String::from(""), 0), |acc, x| {
+                // acc = (expression, i-th bit counter)
+                if x == '1' {
+                    (
+                        format!(
+                            "bv_left_shift({}, {}){}{}",
+                            format!("{}bv64", acc.1),
+                            expr,
+                            if acc.0.len() == 0 { "" } else { " + " },
+                            acc.0
+                        ),
+                        acc.1 + 1,
+                    )
+                } else {
+                    (acc.0, acc.1 + 1)
+                }
+            })
+            .0
+    }
+    fn gen_struct_defns(
+        global_vars: &Vec<DwarfVar>,
+        func_sigs: &HashMap<String, DwarfFuncSig>,
+    ) -> String {
+        let mut defns = vec![];
+        for var in global_vars {
+            defns.append(&mut Self::gen_struct_defn(&var.typ_defn));
+        }
+        for (_, func_sig) in func_sigs {
+            for var in &func_sig.args {
+                defns.append(&mut Self::gen_struct_defn(&var.typ_defn));
+            }
+            if let Some(ret_typ) = &func_sig.ret_typ_defn {
+                defns.append(&mut Self::gen_struct_defn(&ret_typ));
+            }
+        }
+        defns.sort();
+        defns.dedup();
+        indent_text(format!("// Struct helpers\n{}", defns.join("\n")), 4)
+    }
+    fn gen_struct_defn(typ: &DwarfTypeDefn) -> Vec<String> {
+        let mut defns = vec![];
+        match typ {
+            DwarfTypeDefn::Struct {
+                id,
+                fields,
+                bytes: _,
+            } => {
+                for (field_name, field) in fields {
+                    defns.append(&mut Self::gen_struct_defn(&*field.typ));
+                    defns.push(format!(
+                        "define {}_{}(ptr: bv64): bv64 = ptr + {}bv64;",
+                        id, field_name, field.loc
+                    ));
+                }
+            }
+            DwarfTypeDefn::Array { in_typ, out_typ } => {
+                defns.append(&mut Self::gen_struct_defn(&in_typ));
+                defns.append(&mut Self::gen_struct_defn(&out_typ));
+            }
+            _ => (),
+        }
+        defns
+    }
+    fn gen_global_defns(global_vars: &Vec<DwarfVar>) -> String {
+        let mut defns = String::from("// Global variables\n");
+        for var in global_vars {
+            defns = format!("{}{}\n", defns, Self::gen_global_defn(&var));
+        }
+        indent_text(defns, 4)
+    }
+    fn gen_global_defn(global_var: &DwarfVar) -> String {
+        format!(
+            "define global_{}(): {} = {};",
+            global_var.name,
+            "bv64",
+            format!("{}bv64", global_var.memory_addr)
+        )
     }
     fn gen_procs(model: &Model) -> String {
         let procs_string = model
@@ -277,15 +399,19 @@ impl IRInterface for Uclid5Interface {
 
     // Generate function model
     // NOTE: Replace string with write to file
-    fn model_to_string(model: &Model) -> String {
+    fn model_to_string(
+        model: &Model,
+        global_vars: &Vec<DwarfVar>,
+        func_sigs: &HashMap<String, DwarfFuncSig>,
+    ) -> String {
         // prelude
         let prelude = Self::prelude();
         // variables
         let var_defns = indent_text(Self::gen_var_defns(model), 4);
         // definitions
-        let array_defns = Self::gen_array_defns(model);
-        let struct_defns = Self::gen_struct_defns(model);
-        let global_defns = Self::gen_global_defns(model);
+        let array_defns = Self::gen_array_defns(global_vars, func_sigs);
+        let struct_defns = Self::gen_struct_defns(global_vars, func_sigs);
+        let global_defns = Self::gen_global_defns(global_vars);
         // procedures
         let procs = Self::gen_procs(model);
         // control block

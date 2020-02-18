@@ -49,9 +49,15 @@ pub enum DwarfTypeDefn {
     },
     Struct {
         id: String,
-        fields: HashMap<String, Box<DwarfTypeDefn>>,
+        fields: HashMap<String, StructField>,
         bytes: u64,
     },
+}
+#[derive(Debug)]
+pub struct StructField {
+    pub name: String,
+    pub typ: Box<DwarfTypeDefn>,
+    pub loc: u64,
 }
 
 #[derive(Debug)]
@@ -328,7 +334,6 @@ pub struct DwarfReader<I>
 where
     I: DwarfInterface,
 {
-    dwarf_obj_vec: Vec<DwarfObject>,
     func_sigs: HashMap<String, DwarfFuncSig>,
     global_vars: Vec<DwarfVar>,
     _phantom_data: PhantomData<I>,
@@ -354,16 +359,21 @@ where
         // info!("[new] Global Variables: {:#?}", global_vars);
         // info!("[new] Func Sigs: {:#?}", func_sigs);
         Ok(DwarfReader {
-            dwarf_obj_vec,
             func_sigs,
             global_vars,
             _phantom_data: PhantomData,
         })
+    }
+    pub fn is_global_var(&self, name: &str) -> bool {
+        self.global_vars.iter().find(|v| v.name == name).is_some()
     }
     pub fn global_vars(&self) -> &Vec<DwarfVar> {
         &self.global_vars
     }
     pub fn func_sig(&self, func_name: &String) -> Option<&DwarfFuncSig> {
         self.func_sigs.get(func_name)
+    }
+    pub fn func_sigs(&self) -> &HashMap<String, DwarfFuncSig> {
+        &self.func_sigs
     }
 }

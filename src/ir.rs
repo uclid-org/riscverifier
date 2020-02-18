@@ -1,9 +1,9 @@
 use std::cmp::Ordering;
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 use std::fmt;
 use std::rc::Rc;
 
-use crate::utils;
+use crate::dwarfreader::{DwarfFuncSig, DwarfVar};
 
 /// Types
 #[allow(dead_code)]
@@ -45,22 +45,31 @@ impl Expr {
         }
     }
     pub fn bv_lit(val: u64, width: u64) -> Self {
-        Expr::Literal(Literal::Bv {val, width})
+        Expr::Literal(Literal::Bv { val, width })
     }
     pub fn bool_lit(val: bool) -> Self {
-        Expr::Literal(Literal::Bool {val})
+        Expr::Literal(Literal::Bool { val })
     }
     pub fn var(name: &str, typ: Type) -> Self {
-        Expr::Var(Var {name: name.to_string(), typ})
+        Expr::Var(Var {
+            name: name.to_string(),
+            typ,
+        })
     }
     pub fn const_var(name: &str, typ: Type) -> Self {
-        Expr::Const(Var {name: name.to_string(), typ})
+        Expr::Const(Var {
+            name: name.to_string(),
+            typ,
+        })
     }
     pub fn op_app(op: Op, operands: Vec<Self>) -> Self {
         Expr::OpApp(OpApp { op, operands })
     }
     pub fn func_app(func_name: String, operands: Vec<Self>) -> Self {
-        Expr::FuncApp(FuncApp{func_name, operands})
+        Expr::FuncApp(FuncApp {
+            func_name,
+            operands,
+        })
     }
 }
 /// Literals
@@ -189,7 +198,7 @@ impl Stmt {
             func_name,
             lhs,
             operands,
-        }   )
+        })
     }
     pub fn if_then_else(cond: Expr, then_stmt: Box<Stmt>, else_stmt: Option<Box<Stmt>>) -> Self {
         Stmt::IfThenElse(IfThenElse {
@@ -300,6 +309,20 @@ impl Spec {
             Spec::Requires(e) | Spec::Ensures(e) => e,
         }
     }
+    pub fn is_requires(&self) -> bool {
+        if let Spec::Requires(_e) = self {
+            true
+        } else {
+            false
+        }
+    }
+    pub fn is_ensures(&self) -> bool {
+        if let Spec::Ensures(_e) = self {
+            true
+        } else {
+            false
+        }
+    }
 }
 /// Verification Model
 #[derive(Debug)]
@@ -386,5 +409,9 @@ pub trait IRInterface: fmt::Debug {
     fn block_to_string(blk: &Vec<Box<Stmt>>) -> String;
     fn func_model_to_string(fm: &FuncModel) -> String;
     // IR to model string
-    fn model_to_string(model: &Model) -> String;
+    fn model_to_string(
+        model: &Model,
+        func_sigs: &Vec<DwarfVar>,
+        func_sigs: &HashMap<String, DwarfFuncSig>,
+    ) -> String;
 }

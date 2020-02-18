@@ -105,7 +105,8 @@ fn main() {
     let xlen = utils::dec_str_to_u64(matches.value_of("xlen").unwrap_or("64"))
         .expect("[main] Unable to parse numberic xlen.");
     if xlen != 64 {
-        warn!("[main] Non-64 bit XLEN is not yet tested. Use with caution.");
+        warn!("uclidinterface is hard-coded with 64 bit dependent definitions.");
+        panic!("[main] Non-64 bit XLEN is not yet implemented.");
     }
     // Parse function blocks from binary
     let binary_path = matches.value_of("binary").unwrap();
@@ -128,21 +129,14 @@ fn main() {
             lst.split(",").collect::<HashSet<&str>>()
         });
     // Initialize DWARF reader
-    let dwarf_reader: Option<DwarfReader<CDwarfInterface>> =
-        if matches.value_of("ignore-funcs").is_some()
-            || matches.value_of("struct-macros").is_some()
-            || matches.value_of("array-macros").is_some()
-        {
-            DwarfReader::new(&binary_paths).ok()
-        } else {
-            None
-        };
+    let dwarf_reader: Rc<DwarfReader<CDwarfInterface>> =
+        Rc::new(DwarfReader::new(&binary_paths).unwrap());
     // Function to generate
     let func_name = matches
         .value_of("function")
         .expect("[main] No function given to translate.");
     // Specification
-    let spec_reader = SpecReader::new();
+    let spec_reader = SpecReader::new(xlen);
     let mut specs_map = None;
     if let Some(spec_file) = matches.value_of("spec") {
         specs_map = spec_reader.process_specs_file(spec_file).ok();
@@ -156,7 +150,9 @@ fn main() {
         func_blks.insert(blk[0].function_name().to_string(), Rc::clone(&cfg));
     }
     let mut translator: Translator<Uclid5Interface, CDwarfInterface> =
-        Translator::new(&func_blks, &ignored_functions, &dwarf_reader);
-    translator.gen_func_model(&func_name);
-    // translator.print_model();
+        Translator::new(&func_blks, &ignored_functions, dwarf_reader, &specs_map);
+    translator
+        .gen_func_model(&func_name)
+        .expect("Unable to generate function model.");
+    translator.print_model();
 }
