@@ -45,7 +45,7 @@ bool_expr =  { comp_eval
 
 spec_type = @{ "requires" | "ensures" }
 
-spec_stmt = { spec_type ~ bool_expr }
+spec_stmt = { spec_type ~ bool_expr ~ ";"* }
 
 spec_end = _{ "end_spec" }
 spec_begin = _{ "begin_spec" }

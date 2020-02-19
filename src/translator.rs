@@ -16,12 +16,11 @@ const PC_VAR: &str = "pc";
 const MEM_VAR: &str = "mem";
 const PRIV_VAR: &str = "current_priv";
 const EXCEPT_VAR: &str = "exception";
-const BYTE_SIZE: u64 = 8;
 
 /// Translator
 pub struct Translator<'t, I, J>
 where
-    I: IRInterface,
+    I: IRInterface<DwarfReader=DwarfReader<J>>,
     J: DwarfInterface,
 {
     xlen: u64,
@@ -37,7 +36,7 @@ where
 
 impl<'t, I, J> Translator<'t, I, J>
 where
-    I: IRInterface,
+    I: IRInterface<DwarfReader=DwarfReader<J>>,
     J: DwarfInterface,
 {
     pub fn new(
@@ -142,15 +141,13 @@ where
             .as_ref()
             .and_then(|specs_map| Some(specs_map.get(func_name)))
             .and_then(|spec_vec| {
-                Some(
-                    spec_vec
-                        .unwrap()
-                        .iter()
-                        .cloned()
-                        .filter(|spec| spec.is_requires())
-                        .map(|spec| spec)
-                        .collect::<Vec<Spec>>(),
-                )
+                spec_vec.and_then(|v| {
+                    Some(v.iter()
+                    .cloned()
+                    .filter(|spec| spec.is_requires())
+                    .map(|spec| spec)
+                    .collect::<Vec<Spec>>())
+                })
             })
             .map_or(vec![], |v| v);
         let ensures = self
@@ -158,15 +155,13 @@ where
             .as_ref()
             .and_then(|specs_map| Some(specs_map.get(func_name)))
             .and_then(|spec_vec| {
-                Some(
-                    spec_vec
-                        .unwrap()
-                        .iter()
-                        .cloned()
-                        .filter(|spec| spec.is_ensures())
-                        .map(|spec| spec)
-                        .collect::<Vec<Spec>>(),
-                )
+                spec_vec.and_then(|v| {
+                    Some(v.iter()
+                    .cloned()
+                    .filter(|spec| spec.is_ensures())
+                    .map(|spec| spec)
+                    .collect::<Vec<Spec>>())
+                })
             })
             .map_or(vec![], |v| v);
         // Get the arguments
@@ -200,7 +195,7 @@ where
         let func_sigs = self.dwarf_reader.func_sigs();
         println!(
             "{}",
-            I::model_to_string(&self.model, &global_vars, &func_sigs)
+            I::model_to_string(&self.model, &global_vars, &func_sigs, Rc::clone(&self.dwarf_reader))
         );
     }
     /// Function model body
@@ -210,7 +205,9 @@ where
         // Add basic blocks in topological order
         let callees = self.get_callee_addrs(&cfg);
         for entry_addr in top_sort {
-            // Ignore callee function calls
+            // Ignore callee function calls and handle with 
+            // basic_blk_call (if jump is the last inst of
+            // the basic block)
             if callees.get(&entry_addr).is_some() {
                 continue;
             } else {
@@ -318,6 +315,7 @@ where
         }
         Stmt::Block(inst_vec)
     }
+    /// Assembly line to IR
     fn al_to_ir(&self, al: &Rc<AssemblyLine>) -> Stmt {
         let func_name = self.inst_proc_name(al.base_instruction_name());
         // outputs
@@ -353,7 +351,9 @@ where
             DwarfTypeDefn::Primitive { bytes } => {
                 Type::Bv { w: bytes * BYTE_SIZE }
             }
-            DwarfTypeDefn::Array { .. } | DwarfTypeDefn::Struct { .. } => {
+            DwarfTypeDefn::Array { .. } |
+                DwarfTypeDefn::Struct { .. } |
+                DwarfTypeDefn::Pointer { .. } => {
                 Type::Bv { w: self.xlen }
             }
         }

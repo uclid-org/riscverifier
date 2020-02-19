@@ -111,9 +111,8 @@ impl SpecReader {
                 Ok(ir::Expr::op_app(op, vec![v1, v2]))
             }
             Rule::bool_const => Ok(ir::Expr::bool_lit(pair_str == "true")),
-            // FIXME: integer can be negative but currently parsing unsigned int
             Rule::integer => Ok(ir::Expr::bv_lit(
-                utils::dec_str_to_u64(pair_str).unwrap(),
+                utils::dec_str_to_i64(pair_str).unwrap() as u64,
                 self.xlen,
             )),
             Rule::path => {

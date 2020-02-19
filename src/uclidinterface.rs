@@ -1,15 +1,21 @@
 use std::collections::HashMap;
 use std::fs;
 use std::rc::Rc;
+use std::marker::PhantomData;
 
-use crate::dwarfreader::{DwarfFuncSig, DwarfTypeDefn, DwarfVar};
+use crate::dwarfreader::{DwarfReader, DwarfInterface, DwarfFuncSig, DwarfTypeDefn, DwarfVar};
+use crate::cdwarfinterface::CDwarfInterface;
 use crate::ir::*;
 use crate::utils::*;
 
 #[derive(Debug)]
-pub struct Uclid5Interface;
+pub struct Uclid5Interface<D> {
+    _phantom_d: PhantomData<D>,
+}
 
-impl Uclid5Interface {
+impl<D> Uclid5Interface<D>
+    where D: DwarfInterface,
+{
     fn gen_var_defns(model: &Model) -> String {
         let mut sorted = model.vars.iter().collect::<Vec<_>>();
         sorted.sort();
@@ -47,7 +53,7 @@ impl Uclid5Interface {
         let mut defns = vec![];
         match &typ_defn {
             DwarfTypeDefn::Primitive { bytes } => defns.push(format!(
-                "define {}(index: bv64): bv64 = {};",
+                "define {}(base: bv64, index: bv64): bv64 = base + {};",
                 Self::array_index_macro_name(bytes),
                 Self::multiply_expr(bytes, "index")
             )),
@@ -55,11 +61,7 @@ impl Uclid5Interface {
                 defns.append(&mut Self::gen_array_defn(in_typ));
                 defns.append(&mut Self::gen_array_defn(out_typ));
             }
-            DwarfTypeDefn::Struct {
-                id: _,
-                fields,
-                bytes,
-            } => {
+            DwarfTypeDefn::Struct { id: _, fields, bytes } => {
                 let mut defns = vec![];
                 for (_, field) in fields {
                     defns.append(&mut Self::gen_array_defn(&field.typ));
@@ -69,6 +71,9 @@ impl Uclid5Interface {
                     Self::array_index_macro_name(bytes),
                     Self::multiply_expr(bytes, "index")
                 ))
+            }
+            DwarfTypeDefn::Pointer { value_typ } => {
+                defns.append(&mut Self::gen_array_defn(&value_typ))
             }
         };
         defns
@@ -164,11 +169,11 @@ impl Uclid5Interface {
     fn global_var_ptr_name(name: &str) -> String {
         format!("global_{}", name)
     }
-    fn gen_procs(model: &Model) -> String {
+    fn gen_procs(model: &Model, dwarf_reader: &Rc<DwarfReader<D>>) -> String {
         let procs_string = model
             .func_models
             .iter()
-            .map(|fm| Self::func_model_to_string(fm))
+            .map(|fm| Self::func_model_to_string(fm, dwarf_reader))
             .collect::<Vec<_>>()
             .join("\n\n");
         indent_text(procs_string, 4)
@@ -201,7 +206,11 @@ impl Uclid5Interface {
     }
 }
 
-impl IRInterface for Uclid5Interface {
+impl<D> IRInterface for Uclid5Interface<D>
+    where D: DwarfInterface,
+{
+    type DwarfReader = DwarfReader<D>;
+    /// IR translation functions
     fn lit_to_string(lit: &Literal) -> String {
         match lit {
             Literal::Bv { val, width } => format!("{}bv{}", *val as i64, width),
@@ -358,7 +367,7 @@ impl IRInterface for Uclid5Interface {
         let inner = indent_text(inner, 4);
         format!("{{\n{}\n}}", inner)
     }
-    fn func_model_to_string(fm: &FuncModel) -> String {
+    fn func_model_to_string(fm: &FuncModel, dwarf_reader: &Rc<Self::DwarfReader>) -> String {
         let args = fm
             .sig
             .arg_decls
@@ -375,14 +384,14 @@ impl IRInterface for Uclid5Interface {
             .sig
             .requires
             .iter()
-            .map(|spec| format!("\n    requires ({});", Self::spec_expr_to_string(spec.expr())))
+            .map(|spec| format!("\n    requires ({});", Self::spec_expr_to_string(&fm.sig.name[..], spec.expr(), dwarf_reader)))
             .collect::<Vec<_>>()
             .join("");
         let ensures = fm
             .sig
             .ensures
             .iter()
-            .map(|spec| format!("\n    ensures ({});", Self::spec_expr_to_string(spec.expr())))
+            .map(|spec| format!("\n    ensures ({});", Self::spec_expr_to_string(&fm.sig.name[..], spec.expr(), dwarf_reader)))
             .collect::<Vec<_>>()
             .join("");
         let modifies = if fm.sig.mod_set.len() > 0 {
@@ -412,6 +421,7 @@ impl IRInterface for Uclid5Interface {
         model: &Model,
         global_vars: &Vec<DwarfVar>,
         func_sigs: &HashMap<String, DwarfFuncSig>,
+        dwarf_reader: Rc<Self::DwarfReader>,
     ) -> String {
         // prelude
         let prelude = Self::prelude();
@@ -422,7 +432,7 @@ impl IRInterface for Uclid5Interface {
         let struct_defns = Self::gen_struct_defns(global_vars, func_sigs);
         let global_defns = Self::gen_global_defns(global_vars);
         // procedures
-        let procs = Self::gen_procs(model);
+        let procs = Self::gen_procs(model, &dwarf_reader);
         // control block
         let ctrl_blk = Self::control_blk(model);
         format!(
@@ -432,36 +442,51 @@ impl IRInterface for Uclid5Interface {
     }
 
     /// Specification langauge translation functions
-    fn spec_fapp_to_string(fapp: &FuncApp) -> String {
+    fn spec_fapp_to_string(name: &str, fapp: &FuncApp, dwarf_reader: &Rc<Self::DwarfReader>) -> String {
         format!(
             "{}({})",
             fapp.func_name,
             fapp.operands
                 .iter()
-                .map(|x| Self::spec_expr_to_string(&*x))
+                .map(|x| Self::spec_expr_to_string(name, &*x, dwarf_reader))
                 .collect::<Vec<String>>()
                 .join(", ")
         )
     }
-    fn spec_opapp_to_string(opapp: &OpApp) -> String {
+    fn spec_opapp_to_string(func_name: &str, opapp: &OpApp, dwarf_reader: &Rc<Self::DwarfReader>) -> String {
         let e1_str = opapp
             .operands
             .get(0)
-            .map_or(None, |e| Some(Self::spec_expr_to_string(e)));
+            .map_or(None, |e| Some(Self::spec_expr_to_string(func_name, e, dwarf_reader)));
         let e2_str = opapp
             .operands
             .get(1)
-            .map_or(None, |e| Some(Self::spec_expr_to_string(e)));
+            .map_or(None, |e| Some(Self::spec_expr_to_string(func_name, e, dwarf_reader)));
         match &opapp.op {
             Op::Comp(cop) => Self::comp_app_to_string(cop, e1_str, e2_str),
             Op::Bv(bvop) => Self::bv_app_to_string(bvop, e1_str, e2_str),
             Op::Bool(bop) => Self::bool_app_to_string(bop, e1_str, e2_str),
             Op::ArrayIndex => {
                 // Get expression expression type
-                let expr_type = 10;
+                let typ = Self::get_expr_type(func_name, opapp.operands.get(0).unwrap(), &dwarf_reader.typ_map());
+                let typ_size = match &*typ {
+                    DwarfTypeDefn::Array { in_typ: _, out_typ } | DwarfTypeDefn::Pointer { value_typ: out_typ } => {
+                        match out_typ.as_ref() {
+                            DwarfTypeDefn::Primitive { bytes } | DwarfTypeDefn::Struct { id: _, fields: _, bytes } => *bytes,
+                            DwarfTypeDefn::Array { .. } => 8,  // FIXME: XLEN
+                            DwarfTypeDefn::Pointer { .. } => 8,
+                        }
+                    }
+                    // FIXME: REMOVE CASE
+                    // DwarfTypeDefn::Primitive { bytes } => {
+                    //     assert!(bytes == 8);    // FIXME: Should be XLEN
+                    //     bytes
+                    // }, 
+                    _ => panic!("Should be array or pointer type!"),
+                };
                 let array = e1_str.unwrap();
                 let index = e2_str.unwrap();
-                format!("{}({}, {})", Self::array_index_macro_name(&10), array, index)
+                format!("{}({}, {})", Self::array_index_macro_name(&typ_size), array, index)
             },
             Op::GetField(field) => {
                 let struct_id = "SID";
@@ -470,19 +495,19 @@ impl IRInterface for Uclid5Interface {
         }
     }
 
-    fn spec_var_to_string(v: &Var) -> String {
-        // if true {
+    fn spec_var_to_string(v: &Var, dwarf_reader: &Rc<Self::DwarfReader>) -> String {
+        if dwarf_reader.global_vars().iter().find(|x| x.name == v.name).is_some() {
             format!("{}()", Self::global_var_ptr_name(&v.name[..]))
-        // } else {
-            // v.name.clone()
-        // }
+        } else {
+            v.name.clone()
+        }
     }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    type U5I = Uclid5Interface;
+    type U5I = Uclid5Interface<CDwarfInterface>;
 
     #[test]
     fn test_lit_to_string() {

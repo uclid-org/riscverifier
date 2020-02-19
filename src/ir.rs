@@ -3,7 +3,8 @@ use std::collections::{HashMap, HashSet};
 use std::fmt;
 use std::rc::Rc;
 
-use crate::dwarfreader::{DwarfFuncSig, DwarfVar};
+use crate::dwarfreader::{DwarfFuncSig, DwarfVar, DwarfTypeDefn};
+use crate::utils;
 
 /// Types
 #[allow(dead_code)]
@@ -359,6 +360,7 @@ impl Model {
 /// contains the function declarations to define for a
 /// verification engine
 pub trait IRInterface: fmt::Debug {
+    type DwarfReader;
     /// Expressions to string functions
     fn expr_to_string(expr: &Expr) -> String {
         match expr {
@@ -406,23 +408,68 @@ pub trait IRInterface: fmt::Debug {
     fn assign_to_string(assign: &Assign) -> String;
     fn ite_to_string(ite: &IfThenElse) -> String;
     fn block_to_string(blk: &Vec<Box<Stmt>>) -> String;
-    fn func_model_to_string(fm: &FuncModel) -> String;
+    fn func_model_to_string(fm: &FuncModel, dwarf_reader: &Rc<Self::DwarfReader>) -> String;
     // IR to model string
     fn model_to_string(
         model: &Model,
-        func_sigs: &Vec<DwarfVar>,
+        global_vars: &Vec<DwarfVar>,
         func_sigs: &HashMap<String, DwarfFuncSig>,
+        dwarf_reader: Rc<Self::DwarfReader>,
     ) -> String;
     // Specification langauge
-    fn spec_expr_to_string(expr: &Expr) -> String {
+    fn spec_expr_to_string(func_name: &str, expr: &Expr, dwarf_reader: &Rc<Self::DwarfReader>) -> String {
         match expr {
             Expr::Literal(l) => Self::lit_to_string(l),
-            Expr::FuncApp(fapp) => Self::spec_fapp_to_string(fapp),
-            Expr::OpApp(opapp) => Self::spec_opapp_to_string(opapp),
-            Expr::Var(v) | Expr::Const(v) => Self::spec_var_to_string(v),
+            Expr::FuncApp(fapp) => Self::spec_fapp_to_string(func_name, fapp, dwarf_reader),
+            Expr::OpApp(opapp) => Self::spec_opapp_to_string(func_name, opapp, dwarf_reader),
+            Expr::Var(v) | Expr::Const(v) => Self::spec_var_to_string(v, dwarf_reader),
         }
     }
-    fn spec_fapp_to_string(fapp: &FuncApp) -> String;
-    fn spec_opapp_to_string(opapp: &OpApp) -> String;
-    fn spec_var_to_string(v: &Var) -> String;
+    fn spec_fapp_to_string(func_name: &str, fapp: &FuncApp, dwarf_reader: &Rc<Self::DwarfReader>) -> String;
+    fn spec_opapp_to_string(func_name: &str, opapp: &OpApp, dwarf_reader: &Rc<Self::DwarfReader>) -> String;
+    fn spec_var_to_string(v: &Var, dwarf_reader: &Rc<Self::DwarfReader>) -> String;
+    fn get_expr_type(func_name: &str, expr: &Expr, typ_map: &HashMap<String, Rc<DwarfTypeDefn>>) -> Rc<DwarfTypeDefn> {
+        match expr {
+            Expr::Literal(l) => {
+                match l {
+                    Literal::Bv { val: _ , width } => Rc::new(DwarfTypeDefn::Primitive { bytes: width / utils::BYTE_SIZE }),
+                    Literal::Bool { val: _ } => Rc::new(DwarfTypeDefn::Primitive { bytes: 1 }),
+                }
+            },
+            Expr::Var(v) | Expr::Const(v) => {
+                // Try finding variable type as a global
+                if let Some(typ) = typ_map.get(&v.name) {
+                    Rc::clone(typ)
+                } else {
+                // Try finding variable type as function argument
+                    Rc::clone(typ_map.get(&format!("{}${}", func_name, v.name))
+                        .expect("Could not find type"))
+                }
+            },
+            Expr::OpApp(opapp) => {
+                match &opapp.op {
+                    Op::Comp(_) | Op::Bool(_) => Rc::new(DwarfTypeDefn::Primitive { bytes: 1 }),
+                    Op::Bv(bvop) => Self::get_expr_type(func_name, &opapp.operands[0], typ_map),
+                    Op::ArrayIndex => {
+                        let pred_typ = Self::get_expr_type(func_name, &opapp.operands[0], typ_map);
+                        match &*pred_typ {
+                            DwarfTypeDefn::Array { in_typ: _, out_typ } => Rc::clone(&out_typ),
+                            DwarfTypeDefn::Pointer { value_typ } => Rc::clone(&value_typ),
+                            _ => panic!("Should be an array type!"),
+                        }
+                    },
+                    Op::GetField(s) => {
+                        let pred_typ = Self::get_expr_type(func_name, &opapp.operands[0], typ_map);
+                        match &*pred_typ {
+                            DwarfTypeDefn::Struct { id: _, fields, bytes: _} => {
+                                Rc::clone(&fields.get(s).expect("Invalid stuct field").typ)
+                            }
+                            _ => panic!("Predecessor type should be struct."),
+                        }
+                    }
+                }
+            },
+            Expr::FuncApp(_) => panic!("Unimplemented!")
+        }
+    }
 }

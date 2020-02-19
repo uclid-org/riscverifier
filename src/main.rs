@@ -149,7 +149,7 @@ fn main() {
         func_blks.insert(format!("{}", k), Rc::clone(&cfg));
         func_blks.insert(blk[0].function_name().to_string(), Rc::clone(&cfg));
     }
-    let mut translator: Translator<Uclid5Interface, CDwarfInterface> =
+    let mut translator: Translator<Uclid5Interface<CDwarfInterface>, CDwarfInterface> =
         Translator::new(&func_blks, &ignored_functions, dwarf_reader, &specs_map);
     translator
         .gen_func_model(&func_name)

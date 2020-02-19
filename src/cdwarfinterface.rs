@@ -1,4 +1,5 @@
 use std::collections::HashMap;
+use std::{rc::Rc, cell::RefCell};
 
 use crate::dwarfreader::*;
 use crate::utils;
@@ -26,6 +27,7 @@ impl CDwarfInterface {
                     .clone();
                 let formal_type_index = child_dobj.get_attr("DW_AT_type")?.get_expect_num_val();
                 let formal_type = Self::get_type(formal_type_index, comp_unit)?;
+                // let formal_type = DwarfTypeDefn::Primitive { bytes: 0 };
                 Ok(DwarfVar::new(formal_name, formal_type, 0))
             })
             .filter(|res: &Result<DwarfVar, utils::Error>| res.is_ok())
@@ -41,6 +43,100 @@ impl CDwarfInterface {
         let type_defn = Self::get_type(type_defn_index, comp_unit)?;
         let memory_addr = *dobj.get_attr("DW_AT_location")?.get_expect_num_val();
         Ok(DwarfVar::new(name, type_defn, memory_addr))
+    }
+
+    fn _get_type(
+        dwarf_object_index: &u64,
+        comp_unit: &DwarfObject,
+        init_index: Option<u64>,
+        count: u64,
+        typ_map: &mut HashMap<u64, RefCell<Rc<DwarfTypeDefn>>>,
+    ) -> Result<Rc<DwarfTypeDefn>, utils::Error> {
+        if let Some(typ) = typ_map.get(dwarf_object_index) {
+            return Ok(Rc::clone(&typ.borrow()));
+        }
+        // Insert dummy
+        typ_map.insert(*dwarf_object_index, RefCell::new(Rc::new(DwarfTypeDefn::Primitive { bytes: 0 })));
+        debug!("getting.... {:#?} -- {:#?} -- count {:#?} -- typ_map.len(): {}", dwarf_object_index, init_index.unwrap_or(0), count, typ_map.len());
+        let doi_opt: Option<u64> = init_index.or_else(|| Some(*dwarf_object_index));
+        let dwarf_object = comp_unit.get_child(dwarf_object_index)?;
+        let typ = match &dwarf_object.tag_name[..] {
+            "DW_TAG_typedef" | "DW_TAG_volatile_type" => {
+                let next_type_index = dwarf_object.get_attr("DW_AT_type")?.get_expect_num_val();
+                Self::_get_type(next_type_index, comp_unit, doi_opt, count + 1, typ_map)?
+            }
+            // TODO: Check if enumeration type is encoded correctly
+            "DW_TAG_base_type" | "DW_TAG_enumeration_type" => {
+                let bytes = *dwarf_object
+                    .get_attr("DW_AT_byte_size")?
+                    .get_expect_num_val();
+                Rc::new(DwarfTypeDefn::Primitive { bytes })
+            }
+            "DW_TAG_pointer_type" => {
+                let value_typ_index = *dwarf_object
+                    .get_attr("DW_AT_type")?
+                    .get_expect_num_val();
+                let value_typ = Self::_get_type(&value_typ_index, comp_unit, doi_opt, count + 1, typ_map)?;
+                Rc::new(DwarfTypeDefn::Pointer { value_typ })
+            }
+            "DW_TAG_array_type" => {
+                let out_type_index = dwarf_object.get_attr("DW_AT_type")?.get_expect_num_val();
+                let out_typ = Self::_get_type(out_type_index, comp_unit, doi_opt, count + 1, typ_map)?;
+                let index_type_index = dwarf_object
+                    .get_child_named("DW_TAG_subrange_type")?
+                    .get_attr("DW_AT_type")?
+                    .get_expect_num_val();
+                let in_typ = Self::_get_type(index_type_index, comp_unit, doi_opt, count + 1, typ_map)?;
+                Rc::new(DwarfTypeDefn::Array { in_typ, out_typ })
+            }
+            "DW_TAG_structure_type" => {
+                let id = dwarf_object
+                    .get_attr("DW_AT_name")?
+                    .get_expect_str_val()
+                    .clone();
+                let bytes = *dwarf_object
+                    .get_attr("DW_AT_byte_size")?
+                    .get_expect_num_val();
+                let fields: HashMap<_, _> = dwarf_object
+                    .child_tags
+                    .iter()
+                    .filter(|(_os, child_dobj)| child_dobj.tag_name == "DW_TAG_member")
+                    .map(|(_os, child_dobj)| {
+                        let field_name = child_dobj
+                            .get_attr("DW_AT_name")?
+                            .get_expect_str_val();
+                        let type_index = child_dobj
+                            .get_attr("DW_AT_type")?
+                            .get_expect_num_val();
+                        let typ = Self::_get_type(type_index, comp_unit, doi_opt, count + 1, typ_map)?;
+                        let loc = *child_dobj
+                            .get_attr("DW_AT_data_member_location")?
+                            .get_expect_num_val();
+                        Ok((
+                            field_name.clone(),
+                            StructField {
+                                name: field_name.clone(),
+                                typ,
+                                loc,
+                            },
+                        ))
+                    })
+                    .filter(|res: &Result<(String, StructField), utils::Error>| res.is_ok())
+                    .map(|res| res.unwrap())
+                    .collect::<HashMap<String, StructField>>();
+                Rc::new(DwarfTypeDefn::Struct { id, fields, bytes })
+            }
+            _ => return Err(utils::Error::CouldNotFindType),
+        };
+        match typ_map.get(dwarf_object_index) {
+            Some(stub) => {
+                stub.replace(Rc::clone(&typ));
+            },
+            None => {
+                typ_map.insert(*dwarf_object_index, RefCell::new(Rc::clone(&typ)));
+            },
+        }
+        Ok(typ)
     }
 }
 
@@ -73,68 +169,7 @@ impl DwarfInterface for CDwarfInterface {
     fn get_type(
         dwarf_object_index: &u64,
         comp_unit: &DwarfObject,
-    ) -> Result<DwarfTypeDefn, utils::Error> {
-        let dwarf_object = comp_unit.get_child(dwarf_object_index)?;
-        match &dwarf_object.tag_name[..] {
-            "DW_TAG_typedef" | "DW_TAG_volatile_type" => {
-                let next_type_index = dwarf_object.get_attr("DW_AT_type")?.get_expect_num_val();
-                Self::get_type(next_type_index, comp_unit)
-            }
-            "DW_TAG_base_type" | "DW_TAG_enumeration_type" | "DW_TAG_pointer_type" => {
-                let bytes = *dwarf_object
-                    .get_attr("DW_AT_byte_size")?
-                    .get_expect_num_val();
-                Ok(DwarfTypeDefn::Primitive { bytes })
-            }
-            "DW_TAG_array_type" => {
-                let out_type_index = dwarf_object.get_attr("DW_AT_type")?.get_expect_num_val();
-                let out_typ = Box::new(Self::get_type(out_type_index, comp_unit)?);
-                let index_type_index = dwarf_object
-                    .get_child_named("DW_TAG_subrange_type")?
-                    .get_attr("DW_AT_type")?
-                    .get_expect_num_val();
-                let in_typ = Box::new(Self::get_type(index_type_index, comp_unit)?);
-                Ok(DwarfTypeDefn::Array { in_typ, out_typ })
-            }
-            "DW_TAG_structure_type" => {
-                let id = dwarf_object
-                    .get_attr("DW_AT_name")?
-                    .get_expect_str_val()
-                    .clone();
-                let bytes = *dwarf_object
-                    .get_attr("DW_AT_byte_size")?
-                    .get_expect_num_val();
-                let fields: HashMap<_, _> = dwarf_object
-                    .child_tags
-                    .iter()
-                    .filter(|(_os, child_dobj)| child_dobj.tag_name == "DW_TAG_member")
-                    .map(|(_os, child_dobj)| {
-                        let field_name = child_dobj
-                            .get_attr("DW_AT_name")
-                            .expect("Field doesn't have a name.")
-                            .get_expect_str_val();
-                        let type_index = child_dobj
-                            .get_attr("DW_AT_type")
-                            .expect("Field doesn't have a type.")
-                            .get_expect_num_val();
-                        let typ = Box::new(Self::get_type(type_index, comp_unit).unwrap());
-                        let loc = *child_dobj
-                            .get_attr("DW_AT_data_member_location")
-                            .expect("Field doesn't have a location.")
-                            .get_expect_num_val();
-                        (
-                            field_name.clone(),
-                            StructField {
-                                name: field_name.clone(),
-                                typ,
-                                loc,
-                            },
-                        )
-                    })
-                    .collect();
-                Ok(DwarfTypeDefn::Struct { id, fields, bytes })
-            }
-            _ => Err(utils::Error::NoSuchDwarfFieldError),
-        }
+    ) -> Result<Rc<DwarfTypeDefn>, utils::Error> {
+        Self::_get_type(dwarf_object_index, comp_unit, None, 0, &mut HashMap::new())
     }
 }

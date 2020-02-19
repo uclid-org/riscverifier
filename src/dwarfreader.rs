@@ -2,18 +2,18 @@ use object::Object;
 use std::collections::BTreeMap;
 use std::collections::HashMap;
 use std::marker::PhantomData;
-use std::{borrow, fs};
+use std::{borrow, fs, rc::Rc};
 
 use crate::utils;
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct DwarfVar {
     pub name: String,
-    pub typ_defn: DwarfTypeDefn,
+    pub typ_defn: Rc<DwarfTypeDefn>,
     pub memory_addr: u64,
 }
 impl DwarfVar {
-    pub fn new(name: String, typ_defn: DwarfTypeDefn, memory_addr: u64) -> Self {
+    pub fn new(name: String, typ_defn: Rc<DwarfTypeDefn>, memory_addr: u64) -> Self {
         DwarfVar {
             name,
             typ_defn,
@@ -26,10 +26,10 @@ impl DwarfVar {
 pub struct DwarfFuncSig {
     pub name: String,
     pub args: Vec<DwarfVar>,
-    pub ret_typ_defn: Option<DwarfTypeDefn>,
+    pub ret_typ_defn: Option<Rc<DwarfTypeDefn>>,
 }
 impl DwarfFuncSig {
-    pub fn new(name: String, args: Vec<DwarfVar>, ret_typ_defn: Option<DwarfTypeDefn>) -> Self {
+    pub fn new(name: String, args: Vec<DwarfVar>, ret_typ_defn: Option<Rc<DwarfTypeDefn>>) -> Self {
         DwarfFuncSig {
             name,
             args,
@@ -38,25 +38,28 @@ impl DwarfFuncSig {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum DwarfTypeDefn {
     Primitive {
         bytes: u64,
     },
     Array {
-        in_typ: Box<DwarfTypeDefn>,
-        out_typ: Box<DwarfTypeDefn>,
+        in_typ: Rc<DwarfTypeDefn>,
+        out_typ: Rc<DwarfTypeDefn>,
     },
     Struct {
         id: String,
         fields: HashMap<String, StructField>,
         bytes: u64,
     },
+    Pointer {
+        value_typ: Rc<DwarfTypeDefn>,
+    }
 }
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct StructField {
     pub name: String,
-    pub typ: Box<DwarfTypeDefn>,
+    pub typ: Rc<DwarfTypeDefn>,
     pub loc: u64,
 }
 
@@ -134,14 +137,14 @@ impl DwarfAttributeValue {
     }
 }
 
-pub trait DwarfInterface {
+pub trait DwarfInterface: std::fmt::Debug {
     /// ===================== DWARF Reader functions =================
     /// Process the function signatures from the DwarfObject
     fn process_func_sigs(dobj: &DwarfObject) -> Vec<DwarfFuncSig>;
     /// Process the list of global variables for the DwarfObject
     fn process_global_vars(dobj: &DwarfObject) -> Vec<DwarfVar>;
     /// Creates the type searching in comp_unit with the DwarfObject index
-    fn get_type(index: &u64, comp_unit: &DwarfObject) -> Result<DwarfTypeDefn, utils::Error>;
+    fn get_type(index: &u64, comp_unit: &DwarfObject) -> Result<Rc<DwarfTypeDefn>, utils::Error>;
     /// ====================== Helper functions ======================
     /// Parses the binary files in the paths and returns
     /// the corresponding DwarfObjects from the debugging information
@@ -375,5 +378,17 @@ where
     }
     pub fn func_sigs(&self) -> &HashMap<String, DwarfFuncSig> {
         &self.func_sigs
+    }
+    pub fn typ_map(&self) -> HashMap<String, Rc<DwarfTypeDefn>> {
+        let mut typ_map = HashMap::new();
+        for v in &self.global_vars {
+            typ_map.insert(v.name.clone(), Rc::clone(&v.typ_defn));
+        }
+        for (fun_name, fs) in &self.func_sigs {
+            for arg in &fs.args {
+                typ_map.insert(format!("{}${}", fun_name, arg.name), Rc::clone(&arg.typ_defn));
+            }
+        }
+        typ_map
     }
 }
