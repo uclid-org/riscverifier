@@ -20,6 +20,14 @@ pub enum Type {
         out_typ: Box<Type>,
     },
 }
+impl Type {
+    pub fn get_expect_bv_width(&self) -> u64 {
+        match self {
+            Type::Bv { w } => *w,
+            _ => panic!("Not a bitvector."), 
+        }
+    }
+}
 
 /// Expressions
 #[allow(dead_code)]
@@ -35,7 +43,7 @@ impl Expr {
     pub fn get_expect_var(&self) -> &Var {
         match self {
             Expr::Var(v) | Expr::Const(v) => v,
-            _ => panic!("Not a literal"),
+            _ => panic!("Not a variable/constant."),
         }
     }
     pub fn is_var(&self) -> bool {
@@ -149,6 +157,7 @@ pub enum BVOp {
     LeftShift,
     RightShift,
     ARightShift, // arithmetic right shift
+    Slice { l: u64, r: u64 },
 }
 /// Boolean operators
 #[allow(dead_code)]
@@ -389,7 +398,7 @@ pub trait IRInterface: fmt::Debug {
     }
     fn fapp_to_string(fapp: &FuncApp) -> String;
     fn var_to_string(v: &Var) -> String {
-        v.name.clone()
+        format!("{}", v.name)
     }
     fn lit_to_string(lit: &Literal) -> String;
     fn typ_to_string(typ: &Type) -> String;
@@ -411,9 +420,8 @@ pub trait IRInterface: fmt::Debug {
     fn func_model_to_string(fm: &FuncModel, dwarf_reader: &Rc<Self::DwarfReader>) -> String;
     // IR to model string
     fn model_to_string(
+        xlen: &u64,
         model: &Model,
-        global_vars: &Vec<DwarfVar>,
-        func_sigs: &HashMap<String, DwarfFuncSig>,
         dwarf_reader: Rc<Self::DwarfReader>,
     ) -> String;
     // Specification langauge

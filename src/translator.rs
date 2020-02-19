@@ -57,6 +57,12 @@ where
             _phantom_i: PhantomData,
         }
     }
+    pub fn print_model(&self) {
+        println!(
+            "{}",
+            I::model_to_string(&self.xlen, &self.model, Rc::clone(&self.dwarf_reader))
+        );
+    }
     pub fn gen_func_model_stub(&mut self, name: &str) {
         let stub_fm = FuncModel {
             sig: FuncSig::new(name, vec![], None, vec![], vec![], HashSet::new()),
@@ -80,7 +86,7 @@ where
         // Add system global variables
         self.model.add_vars(&self.sys_state_vars());
         // Generate procedure model for each basic block in the function
-        // Fixme: Compute modifies set to block
+        // Fixme: Compute modifies set to block (NOTE: What does this even mean?)
         let bb_fms = self
             .get_func_cfg(func_name)?
             .bbs()
@@ -165,15 +171,7 @@ where
             })
             .map_or(vec![], |v| v);
         // Get the arguments
-        let arg_decls = self.dwarf_reader
-            .func_sig(func_name)
-            .and_then(|fs| {
-                Some(fs.args
-                    .iter()
-                    .map(|x| Expr::var(&x.name[..], self.dwarf_typ_to_ir(&x.typ_defn)))
-                    .collect::<Vec<Expr>>())
-            })
-            .map_or(vec![], |v| v);
+        let arg_decls = self.func_args(func_name);
         let ret_decl = None;
         // Create the cfg
         let body = self.gen_func_body(self.get_func_cfg(func_name)?);
@@ -190,13 +188,17 @@ where
         ));
         Ok(())
     }
-    pub fn print_model(&self) {
-        let global_vars = self.dwarf_reader.global_vars();
-        let func_sigs = self.dwarf_reader.func_sigs();
-        println!(
-            "{}",
-            I::model_to_string(&self.model, &global_vars, &func_sigs, Rc::clone(&self.dwarf_reader))
-        );
+    /// Computes the arguments of a function from the DWARF info
+    fn func_args(&self, func_name: &str) -> Vec<Expr> {
+        self.dwarf_reader
+            .func_sig(func_name)
+            .and_then(|fs| {
+                Some(fs.args
+                    .iter()
+                    .map(|x| Expr::var(&x.name[..], self.dwarf_typ_to_ir(&x.typ_defn)))
+                    .collect::<Vec<Expr>>())
+            })
+            .map_or(vec![], |v| v)
     }
     /// Function model body
     fn gen_func_body(&self, cfg: &Rc<Cfg>) -> Stmt {
@@ -263,8 +265,23 @@ where
         // Add call statement to callee function
         if let Some(target_addr) = cfg.next_abs_jump_addr(entry_addr) {
             if self.is_func_entry(&target_addr.to_string()[..]) {
+                let func_name = self.get_func_name(target_addr).unwrap();
+                let args = self.dwarf_reader
+                    .func_sig(&func_name)
+                    .and_then(|fs| {
+                        Some(fs.args
+                                .iter()
+                                .enumerate()
+                                .map(|(i, dwarf_var)| {
+                                    let reg_var = Expr::var(&format!("a{}", i), Type::Unknown);
+                                    let typ = self.dwarf_typ_to_ir(&dwarf_var.typ_defn);
+                                    Expr::op_app(Op::Bv(BVOp::Slice{ l: typ.get_expect_bv_width(), r: 0 }), vec![reg_var])
+                                })
+                                .collect::<Vec<_>>())
+                    })
+                    .map_or(vec![], |v| v);
                 let call_stmt =
-                    Stmt::func_call(self.get_func_name(target_addr).unwrap(), vec![], vec![]);
+                    Stmt::func_call(func_name, vec![], args);
                 then_stmts_inner.push(Box::new(call_stmt));
                 then_stmts_inner.push(Box::new(Stmt::Assert(fallthru_guard.unwrap().clone())));
             }

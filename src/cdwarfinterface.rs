@@ -27,7 +27,6 @@ impl CDwarfInterface {
                     .clone();
                 let formal_type_index = child_dobj.get_attr("DW_AT_type")?.get_expect_num_val();
                 let formal_type = Self::get_type(formal_type_index, comp_unit)?;
-                // let formal_type = DwarfTypeDefn::Primitive { bytes: 0 };
                 Ok(DwarfVar::new(formal_name, formal_type, 0))
             })
             .filter(|res: &Result<DwarfVar, utils::Error>| res.is_ok())
@@ -48,22 +47,20 @@ impl CDwarfInterface {
     fn _get_type(
         dwarf_object_index: &u64,
         comp_unit: &DwarfObject,
-        init_index: Option<u64>,
-        count: u64,
         typ_map: &mut HashMap<u64, RefCell<Rc<DwarfTypeDefn>>>,
     ) -> Result<Rc<DwarfTypeDefn>, utils::Error> {
+        // Return type if it has been computed
         if let Some(typ) = typ_map.get(dwarf_object_index) {
             return Ok(Rc::clone(&typ.borrow()));
         }
-        // Insert dummy
+        // Insert dummy (to deal with cyclic types)
         typ_map.insert(*dwarf_object_index, RefCell::new(Rc::new(DwarfTypeDefn::Primitive { bytes: 0 })));
-        debug!("getting.... {:#?} -- {:#?} -- count {:#?} -- typ_map.len(): {}", dwarf_object_index, init_index.unwrap_or(0), count, typ_map.len());
-        let doi_opt: Option<u64> = init_index.or_else(|| Some(*dwarf_object_index));
+        // Construct dwarf object type
         let dwarf_object = comp_unit.get_child(dwarf_object_index)?;
         let typ = match &dwarf_object.tag_name[..] {
             "DW_TAG_typedef" | "DW_TAG_volatile_type" => {
                 let next_type_index = dwarf_object.get_attr("DW_AT_type")?.get_expect_num_val();
-                Self::_get_type(next_type_index, comp_unit, doi_opt, count + 1, typ_map)?
+                Self::_get_type(next_type_index, comp_unit, typ_map)?
             }
             // TODO: Check if enumeration type is encoded correctly
             "DW_TAG_base_type" | "DW_TAG_enumeration_type" => {
@@ -76,17 +73,17 @@ impl CDwarfInterface {
                 let value_typ_index = *dwarf_object
                     .get_attr("DW_AT_type")?
                     .get_expect_num_val();
-                let value_typ = Self::_get_type(&value_typ_index, comp_unit, doi_opt, count + 1, typ_map)?;
+                let value_typ = Self::_get_type(&value_typ_index, comp_unit, typ_map)?;
                 Rc::new(DwarfTypeDefn::Pointer { value_typ })
             }
             "DW_TAG_array_type" => {
                 let out_type_index = dwarf_object.get_attr("DW_AT_type")?.get_expect_num_val();
-                let out_typ = Self::_get_type(out_type_index, comp_unit, doi_opt, count + 1, typ_map)?;
+                let out_typ = Self::_get_type(out_type_index, comp_unit, typ_map)?;
                 let index_type_index = dwarf_object
                     .get_child_named("DW_TAG_subrange_type")?
                     .get_attr("DW_AT_type")?
                     .get_expect_num_val();
-                let in_typ = Self::_get_type(index_type_index, comp_unit, doi_opt, count + 1, typ_map)?;
+                let in_typ = Self::_get_type(index_type_index, comp_unit, typ_map)?;
                 Rc::new(DwarfTypeDefn::Array { in_typ, out_typ })
             }
             "DW_TAG_structure_type" => {
@@ -108,7 +105,7 @@ impl CDwarfInterface {
                         let type_index = child_dobj
                             .get_attr("DW_AT_type")?
                             .get_expect_num_val();
-                        let typ = Self::_get_type(type_index, comp_unit, doi_opt, count + 1, typ_map)?;
+                        let typ = Self::_get_type(type_index, comp_unit, typ_map)?;
                         let loc = *child_dobj
                             .get_attr("DW_AT_data_member_location")?
                             .get_expect_num_val();
@@ -170,6 +167,6 @@ impl DwarfInterface for CDwarfInterface {
         dwarf_object_index: &u64,
         comp_unit: &DwarfObject,
     ) -> Result<Rc<DwarfTypeDefn>, utils::Error> {
-        Self::_get_type(dwarf_object_index, comp_unit, None, 0, &mut HashMap::new())
+        Self::_get_type(dwarf_object_index, comp_unit, &mut HashMap::new())
     }
 }

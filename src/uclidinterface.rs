@@ -27,17 +27,15 @@ impl<D> Uclid5Interface<D>
         format!("// RISC-V system state variables\n{}", defns)
     }
     fn prelude() -> String {
+        // TODO: Put string in some config file
         fs::read_to_string("models/prelude.ucl").expect("Unable to read prelude.")
     }
-    fn gen_array_defns(
-        global_vars: &Vec<DwarfVar>,
-        func_sigs: &HashMap<String, DwarfFuncSig>,
-    ) -> String {
+    fn gen_array_defns(dwarf_reader: &Rc<DwarfReader<D>>) -> String {
         let mut defns: Vec<String> = vec![];
-        for var in global_vars {
+        for var in dwarf_reader.global_vars() {
             defns.append(&mut Self::gen_array_defn(&var.typ_defn));
         }
-        for (_, func_sig) in func_sigs {
+        for (_, func_sig) in dwarf_reader.func_sigs() {
             for var in &func_sig.args {
                 defns.append(&mut Self::gen_array_defn(&var.typ_defn));
             }
@@ -104,15 +102,12 @@ impl<D> Uclid5Interface<D>
             })
             .0
     }
-    fn gen_struct_defns(
-        global_vars: &Vec<DwarfVar>,
-        func_sigs: &HashMap<String, DwarfFuncSig>,
-    ) -> String {
+    fn gen_struct_defns(dwarf_reader: &Rc<DwarfReader<D>>) -> String {
         let mut defns = vec![];
-        for var in global_vars {
+        for var in dwarf_reader.global_vars() {
             defns.append(&mut Self::gen_struct_defn(&var.typ_defn));
         }
-        for (_, func_sig) in func_sigs {
+        for (_, func_sig) in dwarf_reader.func_sigs() {
             for var in &func_sig.args {
                 defns.append(&mut Self::gen_struct_defn(&var.typ_defn));
             }
@@ -151,9 +146,9 @@ impl<D> Uclid5Interface<D>
     fn get_field_macro_name(struct_id: &str, field_name: &String) -> String {
         format!("{}_{}", struct_id, field_name)
     }
-    fn gen_global_defns(global_vars: &Vec<DwarfVar>) -> String {
+    fn gen_global_defns(dwarf_reader: &Rc<DwarfReader<D>>) -> String {
         let mut defns = String::from("// Global variables\n");
-        for var in global_vars {
+        for var in dwarf_reader.global_vars() {
             defns = format!("{}{}\n", defns, Self::gen_global_defn(&var));
         }
         indent_text(defns, 4)
@@ -260,6 +255,7 @@ impl<D> IRInterface for Uclid5Interface<D>
             BVOp::SignExt => format!("bv_sign_ext({}, {})", e2.unwrap(), e1.unwrap()),
             BVOp::ZeroExt => format!("bv_zero_ext({}, {})", e2.unwrap(), e1.unwrap()),
             BVOp::LeftShift => format!("bv_l_shift()"),
+            BVOp::Slice { l, r } => format!("{}[{}:{}]", e1.unwrap(), l-1, r),
             _ => panic!("[bvop_to_string] Unimplemented."),
         }
     }
@@ -418,26 +414,26 @@ impl<D> IRInterface for Uclid5Interface<D>
     // Generate function model
     // NOTE: Replace string with write to file
     fn model_to_string(
+        xlen: &u64,
         model: &Model,
-        global_vars: &Vec<DwarfVar>,
-        func_sigs: &HashMap<String, DwarfFuncSig>,
         dwarf_reader: Rc<Self::DwarfReader>,
     ) -> String {
+        let xlen_defn = indent_text(format!("type xlen_t = bv{};", xlen), 4);
         // prelude
         let prelude = Self::prelude();
         // variables
         let var_defns = indent_text(Self::gen_var_defns(model), 4);
         // definitions
-        let array_defns = Self::gen_array_defns(global_vars, func_sigs);
-        let struct_defns = Self::gen_struct_defns(global_vars, func_sigs);
-        let global_defns = Self::gen_global_defns(global_vars);
+        let array_defns = Self::gen_array_defns(&dwarf_reader);
+        let struct_defns = Self::gen_struct_defns(&dwarf_reader);
+        let global_defns = Self::gen_global_defns(&dwarf_reader);
         // procedures
         let procs = Self::gen_procs(model, &dwarf_reader);
         // control block
         let ctrl_blk = Self::control_blk(model);
         format!(
-            "module main {{\n{}\n{}\n{}\n{}\n{}\n{}\n\n{}\n}}",
-            prelude, var_defns, array_defns, struct_defns, global_defns, procs, ctrl_blk
+            "module main {{\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n\n{}\n}}",
+            xlen_defn, prelude, var_defns, array_defns, struct_defns, global_defns, procs, ctrl_blk
         )
     }
 
