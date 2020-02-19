@@ -51,7 +51,7 @@ impl<D> Uclid5Interface<D>
         let mut defns = vec![];
         match &typ_defn {
             DwarfTypeDefn::Primitive { bytes } => defns.push(format!(
-                "define {}(base: bv64, index: bv64): bv64 = base + {};",
+                "define {}(base: xlen_t, index: xlen_t): xlen_t = base + {};",
                 Self::array_index_macro_name(bytes),
                 Self::multiply_expr(bytes, "index")
             )),
@@ -65,7 +65,7 @@ impl<D> Uclid5Interface<D>
                     defns.append(&mut Self::gen_array_defn(&field.typ));
                 }
                 defns.push(format!(
-                    "define {}(index: bv64): bv64 = {};",
+                    "define {}(index: xlen_t): xlen_t = {};",
                     Self::array_index_macro_name(bytes),
                     Self::multiply_expr(bytes, "index")
                 ))
@@ -89,7 +89,7 @@ impl<D> Uclid5Interface<D>
                     (
                         format!(
                             "bv_left_shift({}, {}){}{}",
-                            format!("{}bv64", acc.1),
+                            format!("to_xlen_t({}bv64)", acc.1),
                             expr,
                             if acc.0.len() == 0 { "" } else { " + " },
                             acc.0
@@ -130,7 +130,7 @@ impl<D> Uclid5Interface<D>
                 for (field_name, field) in fields {
                     defns.append(&mut Self::gen_struct_defn(&*field.typ));
                     defns.push(format!(
-                        "define {}(ptr: bv64): bv64 = ptr + {}bv64;",
+                        "define {}(ptr: xlen_t): xlen_t = ptr + to_xlen_t({}bv64);",
                         Self::get_field_macro_name(&id[..], field_name), field.loc
                     ));
                 }
@@ -155,10 +155,9 @@ impl<D> Uclid5Interface<D>
     }
     fn gen_global_defn(global_var: &DwarfVar) -> String {
         format!(
-            "define {}(): {} = {};",
+            "define {}(): xlen_t = {};",
             Self::global_var_ptr_name(&global_var.name[..]),
-            "bv64",
-            format!("{}bv64", global_var.memory_addr)
+            format!("to_xlen_t({}bv64)", global_var.memory_addr)
         )
     }
     fn global_var_ptr_name(name: &str) -> String {
@@ -173,10 +172,11 @@ impl<D> Uclid5Interface<D>
             .join("\n\n");
         indent_text(procs_string, 4)
     }
-    fn control_blk(model: &Model) -> String {
+    fn control_blk(model: &Model, dwarf_reader: &Rc<DwarfReader<D>>) -> String {
         let verif_fns_string = model
             .func_models
             .iter()
+            .filter(|fm| dwarf_reader.func_sig(&fm.sig.name).is_some())
             .map(|fm| {
                 format!(
                     "// f{} = verify({});",
@@ -418,7 +418,7 @@ impl<D> IRInterface for Uclid5Interface<D>
         model: &Model,
         dwarf_reader: Rc<Self::DwarfReader>,
     ) -> String {
-        let xlen_defn = indent_text(format!("type xlen_t = bv{};", xlen), 4);
+        let xlen_defn = indent_text(format!("type xlen_t = bv{};\ndefine to_xlen_t(x: bv64): xlen_t = x[{}:0];", xlen, xlen-1), 4);
         // prelude
         let prelude = Self::prelude();
         // variables
@@ -430,7 +430,7 @@ impl<D> IRInterface for Uclid5Interface<D>
         // procedures
         let procs = Self::gen_procs(model, &dwarf_reader);
         // control block
-        let ctrl_blk = Self::control_blk(model);
+        let ctrl_blk = Self::control_blk(model, &dwarf_reader);
         format!(
             "module main {{\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n\n{}\n}}",
             xlen_defn, prelude, var_defns, array_defns, struct_defns, global_defns, procs, ctrl_blk
