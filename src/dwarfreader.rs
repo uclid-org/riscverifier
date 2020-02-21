@@ -54,7 +54,7 @@ pub enum DwarfTypeDefn {
     },
     Pointer {
         value_typ: Rc<DwarfTypeDefn>,
-    }
+    },
 }
 #[derive(Debug, Clone)]
 pub struct StructField {
@@ -386,7 +386,10 @@ where
         }
         for (fun_name, fs) in &self.func_sigs {
             for arg in &fs.args {
-                typ_map.insert(format!("{}${}", fun_name, arg.name), Rc::clone(&arg.typ_defn));
+                typ_map.insert(
+                    format!("{}${}", fun_name, arg.name),
+                    Rc::clone(&arg.typ_defn),
+                );
             }
         }
         typ_map

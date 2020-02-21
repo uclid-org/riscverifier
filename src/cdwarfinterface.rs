@@ -1,5 +1,5 @@
 use std::collections::HashMap;
-use std::{rc::Rc, cell::RefCell};
+use std::{cell::RefCell, rc::Rc};
 
 use crate::dwarfreader::*;
 use crate::utils;
@@ -54,7 +54,10 @@ impl CDwarfInterface {
             return Ok(Rc::clone(&typ.borrow()));
         }
         // Insert dummy (to deal with cyclic types)
-        typ_map.insert(*dwarf_object_index, RefCell::new(Rc::new(DwarfTypeDefn::Primitive { bytes: 0 })));
+        typ_map.insert(
+            *dwarf_object_index,
+            RefCell::new(Rc::new(DwarfTypeDefn::Primitive { bytes: 0 })),
+        );
         // Construct dwarf object type
         let dwarf_object = comp_unit.get_child(dwarf_object_index)?;
         let typ = match &dwarf_object.tag_name[..] {
@@ -70,9 +73,7 @@ impl CDwarfInterface {
                 Rc::new(DwarfTypeDefn::Primitive { bytes })
             }
             "DW_TAG_pointer_type" => {
-                let value_typ_index = *dwarf_object
-                    .get_attr("DW_AT_type")?
-                    .get_expect_num_val();
+                let value_typ_index = *dwarf_object.get_attr("DW_AT_type")?.get_expect_num_val();
                 let value_typ = Self::_get_type(&value_typ_index, comp_unit, typ_map)?;
                 Rc::new(DwarfTypeDefn::Pointer { value_typ })
             }
@@ -99,12 +100,8 @@ impl CDwarfInterface {
                     .iter()
                     .filter(|(_os, child_dobj)| child_dobj.tag_name == "DW_TAG_member")
                     .map(|(_os, child_dobj)| {
-                        let field_name = child_dobj
-                            .get_attr("DW_AT_name")?
-                            .get_expect_str_val();
-                        let type_index = child_dobj
-                            .get_attr("DW_AT_type")?
-                            .get_expect_num_val();
+                        let field_name = child_dobj.get_attr("DW_AT_name")?.get_expect_str_val();
+                        let type_index = child_dobj.get_attr("DW_AT_type")?.get_expect_num_val();
                         let typ = Self::_get_type(type_index, comp_unit, typ_map)?;
                         let loc = *child_dobj
                             .get_attr("DW_AT_data_member_location")?
@@ -128,10 +125,10 @@ impl CDwarfInterface {
         match typ_map.get(dwarf_object_index) {
             Some(stub) => {
                 stub.replace(Rc::clone(&typ));
-            },
+            }
             None => {
                 typ_map.insert(*dwarf_object_index, RefCell::new(Rc::clone(&typ)));
-            },
+            }
         }
         Ok(typ)
     }

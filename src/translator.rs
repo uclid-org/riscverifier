@@ -20,7 +20,7 @@ const EXCEPT_VAR: &str = "exception";
 /// Translator
 pub struct Translator<'t, I, J>
 where
-    I: IRInterface<DwarfReader=DwarfReader<J>>,
+    I: IRInterface<DwarfReader = DwarfReader<J>>,
     J: DwarfInterface,
 {
     xlen: u64,
@@ -36,7 +36,7 @@ where
 
 impl<'t, I, J> Translator<'t, I, J>
 where
-    I: IRInterface<DwarfReader=DwarfReader<J>>,
+    I: IRInterface<DwarfReader = DwarfReader<J>>,
     J: DwarfInterface,
 {
     pub fn new(
@@ -148,11 +148,13 @@ where
             .and_then(|specs_map| Some(specs_map.get(func_name)))
             .and_then(|spec_vec| {
                 spec_vec.and_then(|v| {
-                    Some(v.iter()
-                    .cloned()
-                    .filter(|spec| spec.is_requires())
-                    .map(|spec| spec)
-                    .collect::<Vec<Spec>>())
+                    Some(
+                        v.iter()
+                            .cloned()
+                            .filter(|spec| spec.is_requires())
+                            .map(|spec| spec)
+                            .collect::<Vec<Spec>>(),
+                    )
                 })
             })
             .map_or(vec![], |v| v);
@@ -162,11 +164,13 @@ where
             .and_then(|specs_map| Some(specs_map.get(func_name)))
             .and_then(|spec_vec| {
                 spec_vec.and_then(|v| {
-                    Some(v.iter()
-                    .cloned()
-                    .filter(|spec| spec.is_ensures())
-                    .map(|spec| spec)
-                    .collect::<Vec<Spec>>())
+                    Some(
+                        v.iter()
+                            .cloned()
+                            .filter(|spec| spec.is_ensures())
+                            .map(|spec| spec)
+                            .collect::<Vec<Spec>>(),
+                    )
                 })
             })
             .map_or(vec![], |v| v);
@@ -193,10 +197,12 @@ where
         self.dwarf_reader
             .func_sig(func_name)
             .and_then(|fs| {
-                Some(fs.args
-                    .iter()
-                    .map(|x| Expr::var(&x.name[..], self.dwarf_typ_to_ir(&x.typ_defn)))
-                    .collect::<Vec<Expr>>())
+                Some(
+                    fs.args
+                        .iter()
+                        .map(|x| Expr::var(&x.name[..], self.dwarf_typ_to_ir(&x.typ_defn)))
+                        .collect::<Vec<Expr>>(),
+                )
             })
             .map_or(vec![], |v| v)
     }
@@ -207,7 +213,7 @@ where
         // Add basic blocks in topological order
         let callees = self.get_callee_addrs(&cfg);
         for entry_addr in top_sort {
-            // Ignore callee function calls and handle with 
+            // Ignore callee function calls and handle with
             // basic_blk_call (if jump is the last inst of
             // the basic block)
             if callees.get(&entry_addr).is_some() {
@@ -266,22 +272,30 @@ where
         if let Some(target_addr) = cfg.next_abs_jump_addr(entry_addr) {
             if self.is_func_entry(&target_addr.to_string()[..]) {
                 let func_name = self.get_func_name(target_addr).unwrap();
-                let args = self.dwarf_reader
+                let args = self
+                    .dwarf_reader
                     .func_sig(&func_name)
                     .and_then(|fs| {
-                        Some(fs.args
+                        Some(
+                            fs.args
                                 .iter()
                                 .enumerate()
                                 .map(|(i, dwarf_var)| {
                                     let reg_var = Expr::var(&format!("a{}", i), Type::Unknown);
                                     let typ = self.dwarf_typ_to_ir(&dwarf_var.typ_defn);
-                                    Expr::op_app(Op::Bv(BVOp::Slice{ l: typ.get_expect_bv_width(), r: 0 }), vec![reg_var])
+                                    Expr::op_app(
+                                        Op::Bv(BVOp::Slice {
+                                            l: typ.get_expect_bv_width(),
+                                            r: 0,
+                                        }),
+                                        vec![reg_var],
+                                    )
                                 })
-                                .collect::<Vec<_>>())
+                                .collect::<Vec<_>>(),
+                        )
                     })
                     .map_or(vec![], |v| v);
-                let call_stmt =
-                    Stmt::func_call(func_name, vec![], args);
+                let call_stmt = Stmt::func_call(func_name, vec![], args);
                 then_stmts_inner.push(Box::new(call_stmt));
                 then_stmts_inner.push(Box::new(Stmt::Assert(fallthru_guard.unwrap().clone())));
             }
@@ -365,14 +379,12 @@ where
     /// Translates DwarfTypeDefn to Type
     fn dwarf_typ_to_ir(&self, typ: &DwarfTypeDefn) -> Type {
         match &typ {
-            DwarfTypeDefn::Primitive { bytes } => {
-                Type::Bv { w: bytes * BYTE_SIZE }
-            }
-            DwarfTypeDefn::Array { .. } |
-                DwarfTypeDefn::Struct { .. } |
-                DwarfTypeDefn::Pointer { .. } => {
-                Type::Bv { w: self.xlen }
-            }
+            DwarfTypeDefn::Primitive { bytes } => Type::Bv {
+                w: bytes * BYTE_SIZE,
+            },
+            DwarfTypeDefn::Array { .. }
+            | DwarfTypeDefn::Struct { .. }
+            | DwarfTypeDefn::Pointer { .. } => Type::Bv { w: self.xlen },
         }
     }
     /// Compute modifies set for a basic block

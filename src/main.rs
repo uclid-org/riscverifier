@@ -139,7 +139,11 @@ fn main() {
     let spec_reader = SpecReader::new(xlen);
     let mut specs_map = None;
     if let Some(spec_file) = matches.value_of("spec") {
-        specs_map = spec_reader.process_specs_file(spec_file).ok();
+        specs_map = Some(
+            spec_reader
+                .process_specs_file(spec_file)
+                .expect("Could not read spec."),
+        );
     }
     // Translate and write to output file
     let mut func_blks = HashMap::new();

@@ -47,7 +47,8 @@ impl SpecReader {
                     let func_name = SpecReader::get_func_name(spec_pair)?;
                     let mut function_specs_vec = vec![];
                     while let Some(spec_stmt_pair) = spec_inner.next() {
-                        function_specs_vec.push(self.translate_spec_stmt(spec_stmt_pair)?);
+                        let spec_stmt = self.translate_spec_stmt(spec_stmt_pair)?;
+                        function_specs_vec.push(spec_stmt);
                     }
                     function_specs_map.insert(func_name, function_specs_vec);
                 }

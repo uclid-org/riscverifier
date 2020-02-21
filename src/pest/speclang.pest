@@ -4,7 +4,7 @@ COMMENT = _{ ("/*" ~ (!"*/" ~ ANY)* ~ "*/") | ("//" ~ (!NEWLINE ~ ANY)* ~ NEWLIN
 char = { ASCII_ALPHANUMERIC | "_" }
 
 integer = @{ "-"? ~ ASCII_DIGIT+ }
-identifier = @{ ASCII_ALPHA ~ char* }
+identifier = @{ "$"? ~ ASCII_ALPHA ~ char* }
 
 old = @{ "old" }
 
