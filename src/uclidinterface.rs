@@ -237,41 +237,41 @@ where
     }
     fn comp_app_to_string(compop: &CompOp, e1: Option<String>, e2: Option<String>) -> String {
         match compop {
-            CompOp::Equality => format!("{} == {}", e1.unwrap(), e2.unwrap()),
-            CompOp::Inequality => format!("{} != {}", e1.unwrap(), e2.unwrap()),
-            CompOp::Lt => format!("{} < {}", e1.unwrap(), e2.unwrap()),
-            CompOp::Le => format!("{} <= {}", e1.unwrap(), e2.unwrap()),
-            CompOp::Gt => format!("{} > {}", e1.unwrap(), e2.unwrap()),
-            CompOp::Ge => format!("{} >= {}", e1.unwrap(), e2.unwrap()),
-            CompOp::Ltu => format!("{} <_u {}", e1.unwrap(), e2.unwrap()),
-            CompOp::Leu => format!("{} <=_u {}", e1.unwrap(), e2.unwrap()),
-            CompOp::Gtu => format!("{} >_u {}", e1.unwrap(), e2.unwrap()),
-            CompOp::Geu => format!("{} >=_u {}", e1.unwrap(), e2.unwrap()),
+            CompOp::Equality => format!("({} == {})", e1.unwrap(), e2.unwrap()),
+            CompOp::Inequality => format!("({} != {})", e1.unwrap(), e2.unwrap()),
+            CompOp::Lt => format!("({} < {})", e1.unwrap(), e2.unwrap()),
+            CompOp::Le => format!("({} <= {})", e1.unwrap(), e2.unwrap()),
+            CompOp::Gt => format!("({} > {})", e1.unwrap(), e2.unwrap()),
+            CompOp::Ge => format!("({} >= {})", e1.unwrap(), e2.unwrap()),
+            CompOp::Ltu => format!("({} <_u {})", e1.unwrap(), e2.unwrap()),
+            CompOp::Leu => format!("({} <=_u {})", e1.unwrap(), e2.unwrap()),
+            CompOp::Gtu => format!("({} >_u {})", e1.unwrap(), e2.unwrap()),
+            CompOp::Geu => format!("({} >=_u {})", e1.unwrap(), e2.unwrap()),
         }
     }
     fn bv_app_to_string(bvop: &BVOp, e1: Option<String>, e2: Option<String>) -> String {
         match bvop {
-            BVOp::Add => format!("{} + {}", e1.unwrap(), e2.unwrap()),
-            BVOp::Sub => format!("{} - {}", e1.unwrap(), e2.unwrap()),
-            BVOp::Mul => format!("{} * {}", e1.unwrap(), e2.unwrap()),
-            BVOp::And => format!("{} & {}", e1.unwrap(), e2.unwrap()),
-            BVOp::Or => format!("{} | {}", e1.unwrap(), e2.unwrap()),
-            BVOp::Xor => format!("{} ^ {}", e1.unwrap(), e2.unwrap()),
+            BVOp::Add => format!("({} + {})", e1.unwrap(), e2.unwrap()),
+            BVOp::Sub => format!("({} - {})", e1.unwrap(), e2.unwrap()),
+            BVOp::Mul => format!("({} * {})", e1.unwrap(), e2.unwrap()),
+            BVOp::And => format!("({} & {})", e1.unwrap(), e2.unwrap()),
+            BVOp::Or => format!("({} | {})", e1.unwrap(), e2.unwrap()),
+            BVOp::Xor => format!("({} ^ {})", e1.unwrap(), e2.unwrap()),
             BVOp::Not => format!("~{}", e1.unwrap()),
             BVOp::UnaryMinus => format!("-{}", e1.unwrap()),
             BVOp::SignExt => format!("bv_sign_ext({}, {})", e2.unwrap(), e1.unwrap()),
             BVOp::ZeroExt => format!("bv_zero_ext({}, {})", e2.unwrap(), e1.unwrap()),
-            BVOp::LeftShift => format!("bv_l_shift()"),
+            BVOp::LeftShift => format!("bv_l_shift({}, {})", e2.unwrap(), e2.unwrap()),
             BVOp::Slice { l, r } => format!("{}[{}:{}]", e1.unwrap(), l - 1, r),
             _ => panic!("[bvop_to_string] Unimplemented."),
         }
     }
     fn bool_app_to_string(bop: &BoolOp, e1: Option<String>, e2: Option<String>) -> String {
         match bop {
-            BoolOp::Conj => format!("{} && {}", e1.unwrap(), e2.unwrap()),
-            BoolOp::Disj => format!("{} || {}", e1.unwrap(), e2.unwrap()),
-            BoolOp::Iff => format!("{} <==> {}", e1.unwrap(), e2.unwrap()),
-            BoolOp::Impl => format!("{} ==> {}", e1.unwrap(), e2.unwrap()),
+            BoolOp::Conj => format!("({} && {})", e1.unwrap(), e2.unwrap()),
+            BoolOp::Disj => format!("({} || {})", e1.unwrap(), e2.unwrap()),
+            BoolOp::Iff => format!("({} <==> {})", e1.unwrap(), e2.unwrap()),
+            BoolOp::Impl => format!("({} ==> {})", e1.unwrap(), e2.unwrap()),
             BoolOp::Neg => format!("!{}", e1.unwrap()),
         }
     }
