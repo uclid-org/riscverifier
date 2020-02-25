@@ -117,6 +117,11 @@ impl<'s> SpecReader<'s> {
                 let v2 = self.translate_expr(inner.next().unwrap())?;
                 Ok(ir::Expr::op_app(op, vec![v1, v2]))
             }
+            Rule::unary_bool_eval => {
+                let op = self.translate_op(inner.next().unwrap())?;
+                let v = self.translate_expr(inner.next().unwrap())?;
+                Ok(ir::Expr::op_app(op, vec![v]))
+            }
             Rule::bool_const => Ok(ir::Expr::bool_lit(pair_str == "true")),
             Rule::integer => Ok(ir::Expr::bv_lit(
                 utils::dec_str_to_i64(pair_str).unwrap() as u64,
@@ -189,11 +194,16 @@ impl<'s> SpecReader<'s> {
                 "<==>" => Ok(ir::Op::Bool(ir::BoolOp::Iff)),
                 "&&" => Ok(ir::Op::Bool(ir::BoolOp::Conj)),
                 "||" => Ok(ir::Op::Bool(ir::BoolOp::Disj)),
-                "!" => Ok(ir::Op::Bool(ir::BoolOp::Neg)),
                 _ => Err(utils::Error::SpecParseError(
                     "Invalid bool operation.".to_string(),
                 )),
             },
+            Rule::unary_bool_op => match pair_str {
+                "!" => Ok(ir::Op::Bool(ir::BoolOp::Neg)),
+                _ => Err(utils::Error::SpecParseError(
+                    "Invalid unary bool operation.".to_string(),
+                )),
+            }
             Rule::bit_op => match pair_str {
                 "-" => Ok(ir::Op::Bv(ir::BVOp::Sub)),
                 "+" => Ok(ir::Op::Bv(ir::BVOp::Add)),

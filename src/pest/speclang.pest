@@ -9,7 +9,8 @@ identifier = @{ "$"? ~ ASCII_ALPHA ~ char* }
 old = @{ "old" }
 
 comp_op = @{ "<=_u" | ">=_u" | "<=" | ">=" | "<_u" | ">_u" | "==" | "<" | ">" }
-bool_op = @{ "||" | "&&" | "==>" | "<==>" | "!" }
+bool_op = @{ "||" | "&&" | "==>" | "<==>" }
+unary_bool_op = @{ "!" }
 bit_op = @{ "|" | "&" | "+" | "-" }
 
 array_index = { "[" ~ value_expr ~ "]" }
@@ -19,6 +20,7 @@ get_field = { "." ~ identifier }
 comp_eval = { "(" ~ value_expr ~ comp_op ~ value_expr ~ ")" }
 
 bool_eval = { "(" ~ bool_expr ~ bool_op ~ bool_expr ~ ")" }
+unary_bool_eval = { unary_bool_op ~ bool_expr }
 
 bv_eval = { "(" ~ value_expr ~ bit_op ~ value_expr ~ ")" }
 
@@ -40,6 +42,7 @@ value_expr = { bv_eval
 p_bool_expr = _{ "(" ~ bool_expr ~ ")"}
 bool_expr =  { comp_eval
 			 | bool_eval
+			 | unary_bool_eval
 			 | bool_const
 		     | p_bool_expr
 			 }
