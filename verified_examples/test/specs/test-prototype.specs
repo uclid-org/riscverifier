@@ -1,0 +1,4 @@
+begin_spec(max_int)
+ensures (((($exception == 0) && (x > y))) ==> ($ret == x))
+//ensures (((($exception == 0) && !(x > y))) ==> ($ret == y))
+end_spec

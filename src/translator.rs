@@ -12,10 +12,10 @@ use crate::objectdumpreader::*;
 use crate::utils::*;
 
 /// Constants
-const PC_VAR: &str = "pc";
-const MEM_VAR: &str = "mem";
-const PRIV_VAR: &str = "current_priv";
-const EXCEPT_VAR: &str = "exception";
+pub const PC_VAR: &str = "pc";
+pub const MEM_VAR: &str = "mem";
+pub const PRIV_VAR: &str = "current_priv";
+pub const EXCEPT_VAR: &str = "exception";
 
 /// Translator
 pub struct Translator<'t, I, J>
@@ -142,7 +142,7 @@ where
         self.mod_set_map
             .insert(func_name.to_string(), func_mod_set.clone());
         // Find translate the specification
-        let requires = self
+        let mut requires = self
             .specs_map
             .as_ref()
             .and_then(|specs_map| Some(specs_map.get(func_name)))
@@ -174,9 +174,32 @@ where
                 })
             })
             .map_or(vec![], |v| v);
+        // Add pc entry requirement
+        requires.push(Spec::Requires(Expr::op_app(
+            Op::Comp(CompOp::Equality),
+            vec![
+                Expr::Var(self.pc_var()),
+                Expr::bv_lit(*self.get_func_entry_addr(func_name)?, self.xlen),
+            ],
+        )));
         // Get the arguments
         let arg_decls = self.func_args(func_name);
         let ret_decl = None;
+        // Add argument constraints
+        for (i, arg) in arg_decls.iter().enumerate() {
+            let var = arg.get_expect_var();
+            let extend_width = self.xlen - var.typ.get_expect_bv_width();
+            requires.push(Spec::Requires(Expr::op_app(
+                Op::Comp(CompOp::Equality),
+                vec![
+                    Expr::var(&format!("$a{}", i), Type::Bv { w: self.xlen }),
+                    Expr::op_app(
+                        Op::Bv(BVOp::ZeroExt),
+                        vec![arg.clone(), Expr::bv_lit(extend_width, var.typ.get_expect_bv_width())],
+                    ),
+                ],
+            )));
+        }
         // Create the cfg
         let body = self.gen_func_body(self.get_func_cfg(func_name)?);
         // Add function model
@@ -518,6 +541,10 @@ where
                 )
             })
     }
+    fn get_func_entry_addr(&self, func_name: &str) -> Result<&u64, Error> {
+        Ok(self.get_func_cfg(func_name)?.get_entry_addr())
+    }
+    #[allow(dead_code)]
     fn get_func_cfg_addr(&self, addr: &str) -> Result<&Rc<Cfg>, Error> {
         self.func_cfg_map.get(addr).map_or(
             Err(Error::TErr {

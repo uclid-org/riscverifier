@@ -3,7 +3,7 @@ use std::collections::{HashMap, HashSet};
 use std::fmt;
 use std::rc::Rc;
 
-use crate::dwarfreader::{DwarfFuncSig, DwarfTypeDefn, DwarfVar};
+use crate::dwarfreader::DwarfTypeDefn;
 use crate::utils;
 
 /// Types
@@ -65,6 +65,7 @@ impl Expr {
             typ,
         })
     }
+    #[allow(dead_code)]
     pub fn const_var(name: &str, typ: Type) -> Self {
         Expr::Const(Var {
             name: name.to_string(),
@@ -74,6 +75,7 @@ impl Expr {
     pub fn op_app(op: Op, operands: Vec<Self>) -> Self {
         Expr::OpApp(OpApp { op, operands })
     }
+    #[allow(dead_code)]
     pub fn func_app(func_name: String, operands: Vec<Self>) -> Self {
         Expr::FuncApp(FuncApp {
             func_name,
@@ -119,6 +121,8 @@ pub struct OpApp {
 #[allow(dead_code)]
 #[derive(Debug, PartialEq, Eq, Hash, Clone)]
 pub enum Op {
+    Deref,
+    Old,
     Comp(CompOp),
     Bv(BVOp),
     Bool(BoolOp),
@@ -389,6 +393,8 @@ pub trait IRInterface: fmt::Debug {
             .get(1)
             .map_or(None, |e| Some(Self::expr_to_string(e)));
         match &opapp.op {
+            Op::Deref => panic!("Deref is only supported in the specification."),
+            Op::Old => panic!("Old operator is only supported in the specification."),
             Op::Comp(cop) => Self::comp_app_to_string(cop, e1_str, e2_str),
             Op::Bv(bvop) => Self::bv_app_to_string(bvop, e1_str, e2_str),
             Op::Bool(bop) => Self::bool_app_to_string(bop, e1_str, e2_str),
@@ -402,6 +408,8 @@ pub trait IRInterface: fmt::Debug {
     }
     fn lit_to_string(lit: &Literal) -> String;
     fn typ_to_string(typ: &Type) -> String;
+    fn deref_app_to_string(bytes: u64, e1: String) -> String;
+    fn old_app_to_string(e1: String) -> String;
     fn comp_app_to_string(compop: &CompOp, e1: Option<String>, e2: Option<String>) -> String;
     fn bv_app_to_string(bvop: &BVOp, e1: Option<String>, e2: Option<String>) -> String;
     fn bool_app_to_string(bop: &BoolOp, e1: Option<String>, e2: Option<String>) -> String;
@@ -430,7 +438,7 @@ pub trait IRInterface: fmt::Debug {
             Expr::Literal(l) => Self::lit_to_string(l),
             Expr::FuncApp(fapp) => Self::spec_fapp_to_string(func_name, fapp, dwarf_reader),
             Expr::OpApp(opapp) => Self::spec_opapp_to_string(func_name, opapp, dwarf_reader),
-            Expr::Var(v) | Expr::Const(v) => Self::spec_var_to_string(v, dwarf_reader),
+            Expr::Var(v) | Expr::Const(v) => Self::spec_var_to_string(func_name, v, dwarf_reader),
         }
     }
     fn spec_fapp_to_string(
@@ -443,7 +451,8 @@ pub trait IRInterface: fmt::Debug {
         opapp: &OpApp,
         dwarf_reader: &Rc<Self::DwarfReader>,
     ) -> String;
-    fn spec_var_to_string(v: &Var, dwarf_reader: &Rc<Self::DwarfReader>) -> String;
+    fn spec_var_to_string(func_name: &str, v: &Var, dwarf_reader: &Rc<Self::DwarfReader>)
+        -> String;
     fn get_expr_type(
         func_name: &str,
         expr: &Expr,
@@ -462,16 +471,19 @@ pub trait IRInterface: fmt::Debug {
                     Rc::clone(typ)
                 } else {
                     // Try finding variable type as function argument
-                    Rc::clone(
-                        typ_map
-                            .get(&format!("{}${}", func_name, v.name))
-                            .expect("Could not find type"),
-                    )
+                    Rc::clone(typ_map.get(&format!("{}${}", func_name, v.name)).expect(
+                        &format!(
+                            "Could not find type for {} in function {}.",
+                            v.name, func_name
+                        )[..],
+                    ))
                 }
             }
             Expr::OpApp(opapp) => match &opapp.op {
                 Op::Comp(_) | Op::Bool(_) => Rc::new(DwarfTypeDefn::Primitive { bytes: 1 }),
-                Op::Bv(bvop) => Self::get_expr_type(func_name, &opapp.operands[0], typ_map),
+                Op::Bv(_) | Op::Old | Op::Deref => {
+                    Self::get_expr_type(func_name, &opapp.operands[0], typ_map)
+                }
                 Op::ArrayIndex => {
                     let pred_typ = Self::get_expr_type(func_name, &opapp.operands[0], typ_map);
                     match &*pred_typ {

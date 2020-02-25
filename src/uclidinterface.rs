@@ -1,11 +1,10 @@
-use std::collections::HashMap;
 use std::fs;
 use std::marker::PhantomData;
 use std::rc::Rc;
 
-use crate::cdwarfinterface::CDwarfInterface;
-use crate::dwarfreader::{DwarfFuncSig, DwarfInterface, DwarfReader, DwarfTypeDefn, DwarfVar};
+use crate::dwarfreader::{DwarfInterface, DwarfReader, DwarfTypeDefn, DwarfVar};
 use crate::ir::*;
+use crate::translator;
 use crate::utils::*;
 
 #[derive(Debug)]
@@ -235,6 +234,12 @@ where
             ), // FIXME
         }
     }
+    fn deref_app_to_string(bytes: u64, ptr: String) -> String {
+        format!("deref_{}({})", bytes, ptr)
+    }
+    fn old_app_to_string(expr: String) -> String {
+        format!("old({})", expr)
+    }
     fn comp_app_to_string(compop: &CompOp, e1: Option<String>, e2: Option<String>) -> String {
         match compop {
             CompOp::Equality => format!("({} == {})", e1.unwrap(), e2.unwrap()),
@@ -259,9 +264,9 @@ where
             BVOp::Xor => format!("({} ^ {})", e1.unwrap(), e2.unwrap()),
             BVOp::Not => format!("~{}", e1.unwrap()),
             BVOp::UnaryMinus => format!("-{}", e1.unwrap()),
-            BVOp::SignExt => format!("bv_sign_ext({}, {})", e2.unwrap(), e1.unwrap()),
-            BVOp::ZeroExt => format!("bv_zero_ext({}, {})", e2.unwrap(), e1.unwrap()),
-            BVOp::LeftShift => format!("bv_l_shift({}, {})", e2.unwrap(), e2.unwrap()),
+            BVOp::SignExt => format!("bv_sign_extend({}, {})", e2.unwrap().split("bv").next().unwrap(), e1.unwrap()),
+            BVOp::ZeroExt => format!("bv_zero_extend({}, {})", e2.unwrap().split("bv").next().unwrap(), e1.unwrap()),
+            BVOp::LeftShift => format!("bv_l_shift({}, {})", e2.unwrap(), e1.unwrap()),
             BVOp::Slice { l, r } => format!("{}[{}:{}]", e1.unwrap(), l - 1, r),
             _ => panic!("[bvop_to_string] Unimplemented."),
         }
@@ -485,6 +490,16 @@ where
             Some(Self::spec_expr_to_string(func_name, e, dwarf_reader))
         });
         match &opapp.op {
+            Op::Deref => {
+                let typ = Self::get_expr_type(
+                    func_name,
+                    opapp.operands.get(0).unwrap(),
+                    &dwarf_reader.typ_map(),
+                );
+                let bytes = typ.to_bytes();
+                Self::deref_app_to_string(bytes, e1_str.unwrap())
+            }
+            Op::Old => Self::old_app_to_string(e1_str.unwrap()),
             Op::Comp(cop) => Self::comp_app_to_string(cop, e1_str, e2_str),
             Op::Bv(bvop) => Self::bv_app_to_string(bvop, e1_str, e2_str),
             Op::Bool(bop) => Self::bool_app_to_string(bop, e1_str, e2_str),
@@ -497,23 +512,9 @@ where
                 );
                 let typ_size = match &*typ {
                     DwarfTypeDefn::Array { in_typ: _, out_typ }
-                    | DwarfTypeDefn::Pointer { value_typ: out_typ } => {
-                        match out_typ.as_ref() {
-                            DwarfTypeDefn::Primitive { bytes }
-                            | DwarfTypeDefn::Struct {
-                                id: _,
-                                fields: _,
-                                bytes,
-                            } => *bytes,
-                            DwarfTypeDefn::Array { .. } => 8, // FIXME: XLEN
-                            DwarfTypeDefn::Pointer { .. } => 8,
-                        }
-                    }
+                    | DwarfTypeDefn::Pointer { value_typ: out_typ } => out_typ.as_ref().to_bytes(),
                     // FIXME: REMOVE CASE
-                    // DwarfTypeDefn::Primitive { bytes } => {
-                    //     assert!(bytes == 8);    // FIXME: Should be XLEN
-                    //     bytes
-                    // },
+                    // DwarfTypeDefn::Primitive { bytes } => bytes,
                     _ => panic!("Should be array or pointer type!"),
                 };
                 let array = e1_str.unwrap();
@@ -538,14 +539,35 @@ where
 
     /// Specification variable to Uclid5 variable
     /// Globals are shadowed by function variables
-    fn spec_var_to_string(v: &Var, dwarf_reader: &Rc<Self::DwarfReader>) -> String {
+    fn spec_var_to_string(
+        func_name: &str,
+        v: &Var,
+        dwarf_reader: &Rc<Self::DwarfReader>,
+    ) -> String {
         if v.name.chars().next().unwrap() == '$' {
-            v.name.replace("$", "")
+            let name = v.name.replace("$", "");
+            if name == "ret" {
+                let typ = Self::get_expr_type(
+                    func_name,
+                    &Expr::var(&v.name, Type::Unknown),
+                    &dwarf_reader.typ_map(),
+                );
+                format!("a0[{}:0]", BYTE_SIZE * typ.to_bytes() - 1)
+            } else {
+                name
+            }
         } else if dwarf_reader
             .func_sigs()
             .iter()
             .find(|(_, fs)| fs.args.iter().find(|arg| arg.name == v.name).is_some())
             .is_some()
+            || vec![
+                translator::PC_VAR,
+                translator::MEM_VAR,
+                translator::PRIV_VAR,
+                translator::EXCEPT_VAR,
+            ]
+            .contains(&&v.name[..])
         {
             v.name.clone()
         } else if dwarf_reader

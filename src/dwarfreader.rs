@@ -4,6 +4,7 @@ use std::collections::HashMap;
 use std::marker::PhantomData;
 use std::{borrow, fs, rc::Rc};
 
+use crate::translator;
 use crate::utils;
 
 #[derive(Debug, Clone)]
@@ -55,6 +56,20 @@ pub enum DwarfTypeDefn {
     Pointer {
         value_typ: Rc<DwarfTypeDefn>,
     },
+}
+impl DwarfTypeDefn {
+    pub fn to_bytes(&self) -> u64 {
+        match self {
+            DwarfTypeDefn::Primitive { bytes }
+            | DwarfTypeDefn::Struct {
+                id: _,
+                fields: _,
+                bytes,
+            } => *bytes,
+            DwarfTypeDefn::Array { .. } => 8, // FIXME: XLEN
+            DwarfTypeDefn::Pointer { .. } => 8,
+        }
+    }
 }
 #[derive(Debug, Clone)]
 pub struct StructField {
@@ -367,6 +382,7 @@ where
             _phantom_data: PhantomData,
         })
     }
+    #[allow(dead_code)]
     pub fn is_global_var(&self, name: &str) -> bool {
         self.global_vars.iter().find(|v| v.name == name).is_some()
     }
@@ -391,7 +407,15 @@ where
                     Rc::clone(&arg.typ_defn),
                 );
             }
+            if let Some(ret_typ) = &fs.ret_typ_defn {
+                typ_map.insert(format!("{}$$ret", fun_name), Rc::clone(ret_typ));
+            }
         }
+        // Add system variable types
+        typ_map.insert(
+            format!("${}", translator::EXCEPT_VAR),
+            Rc::new(DwarfTypeDefn::Primitive { bytes: 64 }),
+        ); // FIXME: Replace with xlen
         typ_map
     }
 }

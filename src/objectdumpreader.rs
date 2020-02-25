@@ -144,7 +144,10 @@ impl ObjectDumpReader {
     }
 
     pub fn get_cfg(func_blk: Vec<Rc<AssemblyLine>>) -> Cfg {
-        let mut cfg = Cfg::new();
+        if func_blk.len() == 0 {
+            return Cfg::new(0);
+        }
+        let mut cfg = Cfg::new(func_blk[0].address);
         // Stores basic block ENTRY point addresses
         let mut marked = HashSet::new();
         let mut blk_entry_addr = None;
@@ -198,18 +201,24 @@ impl ObjectDumpReader {
 
 #[derive(Debug)]
 pub struct Cfg {
+    entry_addr: u64,
     basic_blks_map: HashMap<u64, BasicBlock>,
     abs_jump_map: HashMap<u64, u64>,
     next_blk_addr_map: HashMap<u64, u64>,
 }
 impl Cfg {
-    pub fn new() -> Self {
+    pub fn new(entry_addr: u64) -> Self {
         Cfg {
+            entry_addr,
             basic_blks_map: HashMap::new(),
             abs_jump_map: HashMap::new(),
             next_blk_addr_map: HashMap::new(),
         }
     }
+    pub fn get_entry_addr(&self) -> &u64 {
+        &self.entry_addr
+    }
+    #[allow(dead_code)]
     pub fn get_basic_blk(&self, addr: u64) -> Option<&BasicBlock> {
         self.basic_blks_map.get(&addr)
     }
@@ -319,6 +328,7 @@ impl AssemblyLine {
         }
     }
 
+    #[allow(dead_code)]
     pub fn offset(&self) -> Option<i64> {
         match &self.op_code[..] {
             "jalr" | "lb" | "lh" | "lw" | "lbu" | "lhu" | "lwu" | "ld" | "sb" | "sh" | "sw"

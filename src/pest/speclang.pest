@@ -32,6 +32,7 @@ path_ref = @{ "&" }
 p_value_expr = _{ "(" ~ value_expr ~ ")" }
 value_expr = { bv_eval
 			 | path
+			 | old ~ "(" ~ path ~ ")"
  			 | integer
  			 | p_value_expr
  			 }

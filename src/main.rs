@@ -136,7 +136,7 @@ fn main() {
         .value_of("function")
         .expect("[main] No function given to translate.");
     // Specification
-    let spec_reader = SpecReader::new(xlen);
+    let spec_reader = SpecReader::new(xlen, &dwarf_reader.global_vars());
     let mut specs_map = None;
     if let Some(spec_file) = matches.value_of("spec") {
         specs_map = Some(

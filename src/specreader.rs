@@ -4,18 +4,20 @@ use std::fs;
 use pest::iterators::Pair;
 use pest::Parser;
 
+use crate::dwarfreader::DwarfVar;
 use crate::ir;
 use crate::utils;
 
 #[derive(Parser)]
 #[grammar = "pest/speclang.pest"]
-pub struct SpecReader {
+pub struct SpecReader<'s> {
     xlen: u64,
+    global_vars: &'s Vec<DwarfVar>,
 }
 
-impl SpecReader {
-    pub fn new(xlen: u64) -> SpecReader {
-        SpecReader { xlen }
+impl<'s> SpecReader<'s> {
+    pub fn new(xlen: u64, global_vars: &'s Vec<DwarfVar>) -> SpecReader<'s> {
+        SpecReader { xlen, global_vars }
     }
 
     pub fn process_specs_file(
@@ -102,6 +104,10 @@ impl SpecReader {
         let pair_str = pair.as_str();
         let mut inner = pair.into_inner();
         match rule {
+            Rule::old => {
+                let inner_expr = self.translate_expr(inner.next().unwrap())?;
+                Ok(ir::Expr::op_app(ir::Op::Old, vec![inner_expr]))
+            }
             Rule::value_expr | Rule::bool_expr | Rule::get_field | Rule::array_index => {
                 self.translate_expr(inner.next().unwrap())
             }
@@ -119,6 +125,14 @@ impl SpecReader {
             Rule::path => {
                 let mut path_ref = false;
                 let mut path = self.translate_expr(inner.next().unwrap())?;
+                let is_global_var = if path.is_var() {
+                    self.global_vars
+                        .iter()
+                        .find(|v| v.name == path.get_expect_var().name)
+                        .is_some()
+                } else {
+                    false
+                };
                 while let Some(e) = inner.next() {
                     match e.as_rule() {
                         Rule::path_ref => {
@@ -140,6 +154,9 @@ impl SpecReader {
                         }
                         _ => panic!("[translate_expr] Not a valid path."),
                     }
+                }
+                if !path_ref && is_global_var {
+                    path = ir::Expr::op_app(ir::Op::Deref, vec![path]);
                 }
                 Ok(path)
             }
