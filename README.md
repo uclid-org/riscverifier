@@ -42,6 +42,9 @@ UPDATE: Currently, the SMTLIB interface in Uclid5 is broken and the models will 
 * Write spec language (syntax and semantics) document
 * Support for floating point registers
 
+Stretch goals:
+* Reimplement the dissasembler (after my PhD :-)).
+
 ## Notes
 
 Feb 24 2020

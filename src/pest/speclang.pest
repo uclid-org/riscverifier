@@ -6,7 +6,7 @@ char = { ASCII_ALPHANUMERIC | "_" }
 integer = @{ "-"? ~ ASCII_DIGIT+ }
 identifier = @{ "$"? ~ ASCII_ALPHA ~ char* }
 
-old = @{ "old" }
+old = { "old" ~ "(" ~ path ~ ")" }
 
 comp_op = @{ "<=_u" | ">=_u" | "<=" | ">=" | "<_u" | ">_u" | "==" | "<" | ">" }
 bool_op = @{ "||" | "&&" | "==>" | "<==>" }
@@ -33,8 +33,8 @@ path_ref = @{ "&" }
 
 p_value_expr = _{ "(" ~ value_expr ~ ")" }
 value_expr = { bv_eval
+			 | old
 			 | path
-			 | old ~ "(" ~ path ~ ")"
  			 | integer
  			 | p_value_expr
  			 }

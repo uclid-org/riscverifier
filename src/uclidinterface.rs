@@ -184,7 +184,7 @@ where
             .filter(|fm| dwarf_reader.func_sig(&fm.sig.name).is_some())
             .map(|fm| {
                 format!(
-                    "// f{} = verify({});",
+                    "f{} = verify({});",
                     fm.sig.name.clone(),
                     fm.sig.name.clone()
                 )
@@ -234,8 +234,8 @@ where
             ), // FIXME
         }
     }
-    fn deref_app_to_string(bytes: u64, ptr: String) -> String {
-        format!("deref_{}({})", bytes, ptr)
+    fn deref_app_to_string(bytes: u64, ptr: String, old: bool) -> String {
+        format!("deref_{}({}(mem), {})", bytes, if old {"old"} else {""}, ptr)
     }
     fn old_app_to_string(expr: String) -> String {
         format!("old({})", expr)
@@ -264,8 +264,18 @@ where
             BVOp::Xor => format!("({} ^ {})", e1.unwrap(), e2.unwrap()),
             BVOp::Not => format!("~{}", e1.unwrap()),
             BVOp::UnaryMinus => format!("-{}", e1.unwrap()),
-            BVOp::SignExt => format!("bv_sign_extend({}, {})", e2.unwrap().split("bv").next().unwrap(), e1.unwrap()),
-            BVOp::ZeroExt => format!("bv_zero_extend({}, {})", e2.unwrap().split("bv").next().unwrap(), e1.unwrap()),
+            BVOp::SignExt => {
+                match e2.unwrap().split("bv").next().unwrap() {
+                    width if width != "0" => format!("bv_sign_extend({}, {})", width, e1.unwrap()),
+                    _ => format!("{}", e1.unwrap()),
+                }
+            },
+            BVOp::ZeroExt => {
+                match e2.unwrap().split("bv").next().unwrap() {
+                    width if width != "0" => format!("bv_zero_extend({}, {})", width, e1.unwrap()),
+                    _ => format!("{}", e1.unwrap()),
+                }
+            },
             BVOp::LeftShift => format!("bv_l_shift({}, {})", e2.unwrap(), e1.unwrap()),
             BVOp::Slice { l, r } => format!("{}[{}:{}]", e1.unwrap(), l - 1, r),
             _ => panic!("[bvop_to_string] Unimplemented."),
@@ -395,7 +405,7 @@ where
             .map(|spec| {
                 format!(
                     "\n    requires ({});",
-                    Self::spec_expr_to_string(&fm.sig.name[..], spec.expr(), dwarf_reader)
+                    Self::spec_expr_to_string(&fm.sig.name[..], spec.expr(), dwarf_reader, spec.expr().contains_old())
                 )
             })
             .collect::<Vec<_>>()
@@ -407,7 +417,7 @@ where
             .map(|spec| {
                 format!(
                     "\n    ensures ({});",
-                    Self::spec_expr_to_string(&fm.sig.name[..], spec.expr(), dwarf_reader)
+                    Self::spec_expr_to_string(&fm.sig.name[..], spec.expr(), dwarf_reader, spec.expr().contains_old())
                 )
             })
             .collect::<Vec<_>>()
@@ -473,7 +483,7 @@ where
             fapp.func_name,
             fapp.operands
                 .iter()
-                .map(|x| Self::spec_expr_to_string(name, &*x, dwarf_reader))
+                .map(|x| Self::spec_expr_to_string(name, &*x, dwarf_reader, false))
                 .collect::<Vec<String>>()
                 .join(", ")
         )
@@ -482,12 +492,13 @@ where
         func_name: &str,
         opapp: &OpApp,
         dwarf_reader: &Rc<Self::DwarfReader>,
+        old: bool,
     ) -> String {
         let e1_str = opapp.operands.get(0).map_or(None, |e| {
-            Some(Self::spec_expr_to_string(func_name, e, dwarf_reader))
+            Some(Self::spec_expr_to_string(func_name, e, dwarf_reader, old))
         });
         let e2_str = opapp.operands.get(1).map_or(None, |e| {
-            Some(Self::spec_expr_to_string(func_name, e, dwarf_reader))
+            Some(Self::spec_expr_to_string(func_name, e, dwarf_reader, old))
         });
         match &opapp.op {
             Op::Deref => {
@@ -497,9 +508,11 @@ where
                     &dwarf_reader.typ_map(),
                 );
                 let bytes = typ.to_bytes();
-                Self::deref_app_to_string(bytes, e1_str.unwrap())
+                Self::deref_app_to_string(bytes, e1_str.unwrap(), old)
             }
-            Op::Old => Self::old_app_to_string(e1_str.unwrap()),
+            // FIXME: Add old flag to all spec functions and wrap "old"
+            // around the base identifier or memory variable if it's a global
+            Op::Old => Self::spec_expr_to_string(func_name, opapp.operands.get(0).expect("Old operator is missing an expression."), dwarf_reader, true),
             Op::Comp(cop) => Self::comp_app_to_string(cop, e1_str, e2_str),
             Op::Bv(bvop) => Self::bv_app_to_string(bvop, e1_str, e2_str),
             Op::Bool(bop) => Self::bool_app_to_string(bop, e1_str, e2_str),
@@ -543,6 +556,7 @@ where
         func_name: &str,
         v: &Var,
         dwarf_reader: &Rc<Self::DwarfReader>,
+        old: bool,
     ) -> String {
         if v.name.chars().next().unwrap() == '$' {
             let name = v.name.replace("$", "");
@@ -552,9 +566,9 @@ where
                     &Expr::var(&v.name, Type::Unknown),
                     &dwarf_reader.typ_map(),
                 );
-                format!("a0[{}:0]", BYTE_SIZE * typ.to_bytes() - 1)
+                format!("{}(a0)[{}:0]", if old {"old"} else {""}, BYTE_SIZE * typ.to_bytes() - 1)
             } else {
-                name
+                format!("{}({})", if old {"old"} else {""}, name)
             }
         } else if dwarf_reader
             .func_sigs()
@@ -569,7 +583,7 @@ where
             ]
             .contains(&&v.name[..])
         {
-            v.name.clone()
+            format!("{}({})", if old {"old"} else {""}, v.name.clone())
         } else if dwarf_reader
             .global_vars()
             .iter()

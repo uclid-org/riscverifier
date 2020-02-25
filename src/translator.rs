@@ -338,6 +338,7 @@ where
     fn topological_sort(&self, cfg: &Rc<Cfg>) -> Vec<u64> {
         let mut sorted = vec![];
         let mut ts = TopologicalSort::<&u64>::new();
+        ts.insert(cfg.get_entry_addr());
         for (entry_addr, _bb) in cfg.bbs() {
             if let Some(target) = cfg.next_blk_addr(*entry_addr) {
                 ts.add_dependency(entry_addr, target);

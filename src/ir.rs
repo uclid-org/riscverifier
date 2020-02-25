@@ -40,6 +40,14 @@ pub enum Expr {
     FuncApp(FuncApp),
 }
 impl Expr {
+    pub fn contains_old(&self) -> bool {
+        match self {
+            Expr::OpApp(opapp) => {
+                opapp.operands.iter().fold(false, |acc, operand| acc || operand.contains_old())
+            },
+            _ => false
+        }
+    }
     pub fn get_expect_var(&self) -> &Var {
         match self {
             Expr::Var(v) | Expr::Const(v) => v,
@@ -408,7 +416,7 @@ pub trait IRInterface: fmt::Debug {
     }
     fn lit_to_string(lit: &Literal) -> String;
     fn typ_to_string(typ: &Type) -> String;
-    fn deref_app_to_string(bytes: u64, e1: String) -> String;
+    fn deref_app_to_string(bytes: u64, e1: String, old: bool) -> String;
     fn old_app_to_string(e1: String) -> String;
     fn comp_app_to_string(compop: &CompOp, e1: Option<String>, e2: Option<String>) -> String;
     fn bv_app_to_string(bvop: &BVOp, e1: Option<String>, e2: Option<String>) -> String;
@@ -433,12 +441,13 @@ pub trait IRInterface: fmt::Debug {
         func_name: &str,
         expr: &Expr,
         dwarf_reader: &Rc<Self::DwarfReader>,
+        old: bool,
     ) -> String {
         match expr {
             Expr::Literal(l) => Self::lit_to_string(l),
             Expr::FuncApp(fapp) => Self::spec_fapp_to_string(func_name, fapp, dwarf_reader),
-            Expr::OpApp(opapp) => Self::spec_opapp_to_string(func_name, opapp, dwarf_reader),
-            Expr::Var(v) | Expr::Const(v) => Self::spec_var_to_string(func_name, v, dwarf_reader),
+            Expr::OpApp(opapp) => Self::spec_opapp_to_string(func_name, opapp, dwarf_reader, old),
+            Expr::Var(v) | Expr::Const(v) => Self::spec_var_to_string(func_name, v, dwarf_reader, old),
         }
     }
     fn spec_fapp_to_string(
@@ -450,8 +459,9 @@ pub trait IRInterface: fmt::Debug {
         func_name: &str,
         opapp: &OpApp,
         dwarf_reader: &Rc<Self::DwarfReader>,
+        old: bool,
     ) -> String;
-    fn spec_var_to_string(func_name: &str, v: &Var, dwarf_reader: &Rc<Self::DwarfReader>)
+    fn spec_var_to_string(func_name: &str, v: &Var, dwarf_reader: &Rc<Self::DwarfReader>, old: bool)
         -> String;
     fn get_expr_type(
         func_name: &str,

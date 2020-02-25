@@ -68,7 +68,7 @@ fn main() {
         )
         .arg(
             Arg::with_name("function")
-                .help("Specify a function to verify.")
+                .help("Specify a list of functions to verify.")
                 .short("f")
                 .long("function")
                 .takes_value(true),
@@ -132,9 +132,11 @@ fn main() {
     let dwarf_reader: Rc<DwarfReader<CDwarfInterface>> =
         Rc::new(DwarfReader::new(&binary_paths).unwrap());
     // Function to generate
-    let func_name = matches
+    let func_names = matches
         .value_of("function")
-        .expect("[main] No function given to translate.");
+        .map_or(vec![], |lst| {
+            lst.split(",").collect::<Vec<&str>>()
+        });
     // Specification
     let spec_reader = SpecReader::new(xlen, &dwarf_reader.global_vars());
     let mut specs_map = None;
@@ -155,8 +157,10 @@ fn main() {
     }
     let mut translator: Translator<Uclid5Interface<CDwarfInterface>, CDwarfInterface> =
         Translator::new(&func_blks, &ignored_functions, dwarf_reader, &specs_map);
-    translator
-        .gen_func_model(&func_name)
-        .expect("Unable to generate function model.");
+    for func_name in func_names {
+        translator
+            .gen_func_model(&func_name)
+            .expect("Unable to generate function model.");
+    }
     translator.print_model();
 }
