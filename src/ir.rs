@@ -417,7 +417,6 @@ pub trait IRInterface: fmt::Debug {
     fn lit_to_string(lit: &Literal) -> String;
     fn typ_to_string(typ: &Type) -> String;
     fn deref_app_to_string(bytes: u64, e1: String, old: bool) -> String;
-    fn old_app_to_string(e1: String) -> String;
     fn comp_app_to_string(compop: &CompOp, e1: Option<String>, e2: Option<String>) -> String;
     fn bv_app_to_string(bvop: &BVOp, e1: Option<String>, e2: Option<String>) -> String;
     fn bool_app_to_string(bop: &BoolOp, e1: Option<String>, e2: Option<String>) -> String;

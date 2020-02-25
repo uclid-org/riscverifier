@@ -237,9 +237,6 @@ where
     fn deref_app_to_string(bytes: u64, ptr: String, old: bool) -> String {
         format!("deref_{}({}(mem), {})", bytes, if old {"old"} else {""}, ptr)
     }
-    fn old_app_to_string(expr: String) -> String {
-        format!("old({})", expr)
-    }
     fn comp_app_to_string(compop: &CompOp, e1: Option<String>, e2: Option<String>) -> String {
         match compop {
             CompOp::Equality => format!("({} == {})", e1.unwrap(), e2.unwrap()),
