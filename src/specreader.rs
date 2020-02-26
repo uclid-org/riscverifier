@@ -127,6 +127,14 @@ impl<'s> SpecReader<'s> {
                 utils::dec_str_to_i64(pair_str).unwrap() as u64,
                 self.xlen,
             )),
+            Rule::bitvec => {
+                let mut iter = pair_str.split("bv");
+                let val = iter.next().unwrap();
+                let width = iter.next().unwrap();
+                Ok(ir::Expr::bv_lit(
+                utils::dec_str_to_u64(val).unwrap(),
+                utils::dec_str_to_u64(width).unwrap()))
+            },
             Rule::path => {
                 let mut path_ref = false;
                 let mut path = self.translate_expr(inner.next().unwrap())?;
@@ -203,7 +211,7 @@ impl<'s> SpecReader<'s> {
                 _ => Err(utils::Error::SpecParseError(
                     "Invalid unary bool operation.".to_string(),
                 )),
-            }
+            },
             Rule::bit_op => match pair_str {
                 "-" => Ok(ir::Op::Bv(ir::BVOp::Sub)),
                 "+" => Ok(ir::Op::Bv(ir::BVOp::Add)),

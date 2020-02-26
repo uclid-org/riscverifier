@@ -195,7 +195,10 @@ where
                     Expr::var(&format!("$a{}", i), Type::Bv { w: self.xlen }),
                     Expr::op_app(
                         Op::Bv(BVOp::ZeroExt),
-                        vec![arg.clone(), Expr::bv_lit(extend_width, var.typ.get_expect_bv_width())],
+                        vec![
+                            arg.clone(),
+                            Expr::bv_lit(extend_width, var.typ.get_expect_bv_width()),
+                        ],
                     ),
                 ],
             )));

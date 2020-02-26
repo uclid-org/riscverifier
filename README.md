@@ -32,38 +32,41 @@ Running with Boolector or CVC4 is best. Note that there are no quantifiers in an
 
 Example:
 
-`RUST_BACKTRACE=1 RUST_LOG="debug" ./target/debug/riscverifier ~/workspace/uclid5/riscvtest/test_bin/test-struct-2.out -f main -s Foo,Bar -a Foo,int -o /Users/kcheang/workspace/riscverifier/testingoutput2 2>&1 | less`
+`RUST_BACKTRACE=1 RUST_LOG="debug" ./target/debug/riscverifier ~/workspace/uclid5/riscvtest/test_bin/test-struct-2.out -f main -o /Users/kcheang/workspace/riscverifier/testingoutput2 2>&1 | less`
 
 UPDATE: Currently, the SMTLIB interface in Uclid5 is broken and the models will not run due to a stack overflow bug.
 
 ## TODO
 
-* Add deref and ref in specification language
-* Write spec language (syntax and semantics) document
-* Support for floating point registers
+* [ ] Add deref and ref in specification language
+* [ ] Write spec language (syntax and semantics) document
+* [ ] Support for floating point registers
 
 Stretch goals:
-* Reimplement the dissasembler (after my PhD :-)).
+* [ ] Reimplement the dissasembler (after my PhD :-)).
 
 ## Notes
 
+Feb 25 2020
+* [ ] Verify pmp\_set in the security monitor
+
 Feb 24 2020
-* Re-factored the code; there is a general translator for all DWARF formats and verification IRs/languages. Implemented a C DWARF parser and Uclid5 interface.
-* Automatically inferrs the global variables and macro helper functions for array indexing and struct field operations via globals and function arguments.
-* Implemented a specification language that is automatically translated.
+* [x] Re-factored the code; there is a general translator for all DWARF formats and verification IRs/languages. Implemented a C DWARF parser and Uclid5 interface.
+* [x] Automatically inferrs the global variables and macro helper functions for array indexing and struct field operations via globals and function arguments.
+* [x] Implemented a specification language that is automatically translated.
 
 Jan 6th 2020
-* Adding support for global variables including primitive, array, and struct types
-* Adding support for specification language
+* [x] Adding support for global variables including primitive, array, and struct types
+* [x] Adding support for specification language
 
 Jan 4th 2020
-* Added condition for correct return "ensures (pc == old(ra)[63:1] ++ 0bv1);"
-* Moved old\_mem == mem constraint to assumption at the beginning of functions
-* Added verify for each procedure in control block (commented out), e.g.
+* [x] Added condition for correct return "ensures (pc == old(ra)[63:1] ++ 0bv1);"
+* [x] Moved old\_mem == mem constraint to assumption at the beginning of functions
+* [x] Added verify for each procedure in control block (commented out), e.g.
     * f1 = verify(function1);
 	* fn = verify(functionn);
 	* check;
 	* print\_results;
-* Assumptions added: ensures (pc == old(ra)[63:1] ++ 0bv1) if ra is modified or (pc == ra[63:1] ++ 0bv1) if it isn't. 
+* [x] Assumptions added: ensures (pc == old(ra)[63:1] ++ 0bv1) if ra is modified or (pc == ra[63:1] ++ 0bv1) if it isn't. 
 
 

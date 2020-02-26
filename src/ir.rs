@@ -42,10 +42,11 @@ pub enum Expr {
 impl Expr {
     pub fn contains_old(&self) -> bool {
         match self {
-            Expr::OpApp(opapp) => {
-                opapp.operands.iter().fold(false, |acc, operand| acc || operand.contains_old())
-            },
-            _ => false
+            Expr::OpApp(opapp) => opapp
+                .operands
+                .iter()
+                .fold(false, |acc, operand| acc || operand.contains_old()),
+            _ => false,
         }
     }
     pub fn get_expect_var(&self) -> &Var {
@@ -446,7 +447,9 @@ pub trait IRInterface: fmt::Debug {
             Expr::Literal(l) => Self::lit_to_string(l),
             Expr::FuncApp(fapp) => Self::spec_fapp_to_string(func_name, fapp, dwarf_reader),
             Expr::OpApp(opapp) => Self::spec_opapp_to_string(func_name, opapp, dwarf_reader, old),
-            Expr::Var(v) | Expr::Const(v) => Self::spec_var_to_string(func_name, v, dwarf_reader, old),
+            Expr::Var(v) | Expr::Const(v) => {
+                Self::spec_var_to_string(func_name, v, dwarf_reader, old)
+            }
         }
     }
     fn spec_fapp_to_string(
@@ -460,8 +463,12 @@ pub trait IRInterface: fmt::Debug {
         dwarf_reader: &Rc<Self::DwarfReader>,
         old: bool,
     ) -> String;
-    fn spec_var_to_string(func_name: &str, v: &Var, dwarf_reader: &Rc<Self::DwarfReader>, old: bool)
-        -> String;
+    fn spec_var_to_string(
+        func_name: &str,
+        v: &Var,
+        dwarf_reader: &Rc<Self::DwarfReader>,
+        old: bool,
+    ) -> String;
     fn get_expr_type(
         func_name: &str,
         expr: &Expr,

@@ -4,11 +4,12 @@ COMMENT = _{ ("/*" ~ (!"*/" ~ ANY)* ~ "*/") | ("//" ~ (!NEWLINE ~ ANY)* ~ NEWLIN
 char = { ASCII_ALPHANUMERIC | "_" }
 
 integer = @{ "-"? ~ ASCII_DIGIT+ }
+bitvec = @{ ASCII_DIGIT+ ~ "bv" ~ ASCII_DIGIT+ }
 identifier = @{ "$"? ~ ASCII_ALPHA ~ char* }
 
 old = { "old" ~ "(" ~ path ~ ")" }
 
-comp_op = @{ "<=_u" | ">=_u" | "<=" | ">=" | "<_u" | ">_u" | "==" | "<" | ">" }
+comp_op = @{ "<=_u" | ">=_u" | "<=" | ">=" | "<_u" | ">_u" | "==" | "!=" | "<" | ">" }
 bool_op = @{ "||" | "&&" | "==>" | "<==>" }
 unary_bool_op = @{ "!" }
 bit_op = @{ "|" | "&" | "+" | "-" }
@@ -35,6 +36,7 @@ p_value_expr = _{ "(" ~ value_expr ~ ")" }
 value_expr = { bv_eval
 			 | old
 			 | path
+ 			 | bitvec
  			 | integer
  			 | p_value_expr
  			 }

@@ -70,6 +70,7 @@ impl CDwarfInterface {
                 let bytes = *dwarf_object
                     .get_attr("DW_AT_byte_size")?
                     .get_expect_num_val();
+                assert!(bytes <= 8);
                 Rc::new(DwarfTypeDefn::Primitive { bytes })
             }
             "DW_TAG_pointer_type" => {

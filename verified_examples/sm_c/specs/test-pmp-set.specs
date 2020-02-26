@@ -1,0 +1,40 @@
+begin_spec(region_get_addr)
+requires ((0bv32 <= i) && (i < 16bv32))
+ensures (($exception == 0bv64) ==> ($ret == regions[i].addr))
+end_spec
+
+begin_spec(is_pmp_region_valid)
+ensures true
+end_spec
+
+begin_spec(region_pmpcfg_val)
+ensures true
+end_spec
+
+begin_spec(region_register_idx)
+ensures true
+end_spec
+
+begin_spec(region_is_tor)
+ensures true
+end_spec
+
+begin_spec(region_needs_two_entries)
+ensures true
+end_spec
+
+begin_spec(region_is_napot)
+ensures true
+end_spec
+
+begin_spec(region_is_napot_all)
+ensures true
+end_spec
+
+begin_spec(region_pmpaddr_val)
+ensures true
+end_spec
+
+begin_spec(pmp_set)
+ensures true
+end_spec

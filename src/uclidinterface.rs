@@ -50,11 +50,15 @@ where
     fn gen_array_defn(typ_defn: &DwarfTypeDefn) -> Vec<String> {
         let mut defns = vec![];
         match &typ_defn {
-            DwarfTypeDefn::Primitive { bytes } => defns.push(format!(
-                "define {}(base: xlen_t, index: xlen_t): xlen_t = base + {};",
-                Self::array_index_macro_name(bytes),
-                Self::multiply_expr(bytes, "index")
-            )),
+            DwarfTypeDefn::Primitive { bytes } => {
+                if *bytes > 0 {
+                    defns.push(format!(
+                        "define {}(base: xlen_t, index: xlen_t): xlen_t = base + {};",
+                        Self::array_index_macro_name(bytes),
+                        Self::multiply_expr(bytes, "index")
+                    ))
+                }
+            }
             DwarfTypeDefn::Array { in_typ, out_typ } => {
                 defns.append(&mut Self::gen_array_defn(in_typ));
                 defns.append(&mut Self::gen_array_defn(out_typ));
@@ -64,15 +68,16 @@ where
                 fields,
                 bytes,
             } => {
-                let mut defns = vec![];
                 for (_, field) in fields {
                     defns.append(&mut Self::gen_array_defn(&field.typ));
                 }
-                defns.push(format!(
-                    "define {}(index: xlen_t): xlen_t = {};",
-                    Self::array_index_macro_name(bytes),
-                    Self::multiply_expr(bytes, "index")
-                ))
+                if *bytes > 0 {
+                    defns.push(format!(
+                        "define {}(base: xlen_t, index: xlen_t): xlen_t = base + {};",
+                        Self::array_index_macro_name(bytes),
+                        Self::multiply_expr(bytes, "index")
+                    ))
+                }
             }
             DwarfTypeDefn::Pointer { value_typ } => {
                 defns.append(&mut Self::gen_array_defn(&value_typ))
@@ -204,6 +209,13 @@ where
             Self::typ_to_string(&var.typ)
         )
     }
+    fn extend_to_match_width(expr: &str, from: u64, to: u64) -> String {
+        if to > from {
+            format!("bv_zero_extend({}, {})", to - from, expr)
+        } else {
+            expr.to_string()
+        }
+    }
 }
 
 impl<D> IRInterface for Uclid5Interface<D>
@@ -235,7 +247,12 @@ where
         }
     }
     fn deref_app_to_string(bytes: u64, ptr: String, old: bool) -> String {
-        format!("deref_{}({}(mem), {})", bytes, if old {"old"} else {""}, ptr)
+        format!(
+            "deref_{}({}(mem), {})",
+            bytes,
+            if old { "old" } else { "" },
+            ptr
+        )
     }
     fn comp_app_to_string(compop: &CompOp, e1: Option<String>, e2: Option<String>) -> String {
         match compop {
@@ -261,17 +278,13 @@ where
             BVOp::Xor => format!("({} ^ {})", e1.unwrap(), e2.unwrap()),
             BVOp::Not => format!("~{}", e1.unwrap()),
             BVOp::UnaryMinus => format!("-{}", e1.unwrap()),
-            BVOp::SignExt => {
-                match e2.unwrap().split("bv").next().unwrap() {
-                    width if width != "0" => format!("bv_sign_extend({}, {})", width, e1.unwrap()),
-                    _ => format!("{}", e1.unwrap()),
-                }
+            BVOp::SignExt => match e2.unwrap().split("bv").next().unwrap() {
+                width if width != "0" => format!("bv_sign_extend({}, {})", width, e1.unwrap()),
+                _ => format!("{}", e1.unwrap()),
             },
-            BVOp::ZeroExt => {
-                match e2.unwrap().split("bv").next().unwrap() {
-                    width if width != "0" => format!("bv_zero_extend({}, {})", width, e1.unwrap()),
-                    _ => format!("{}", e1.unwrap()),
-                }
+            BVOp::ZeroExt => match e2.unwrap().split("bv").next().unwrap() {
+                width if width != "0" => format!("bv_zero_extend({}, {})", width, e1.unwrap()),
+                _ => format!("{}", e1.unwrap()),
             },
             BVOp::LeftShift => format!("bv_l_shift({}, {})", e2.unwrap(), e1.unwrap()),
             BVOp::Slice { l, r } => format!("{}[{}:{}]", e1.unwrap(), l - 1, r),
@@ -402,7 +415,12 @@ where
             .map(|spec| {
                 format!(
                     "\n    requires ({});",
-                    Self::spec_expr_to_string(&fm.sig.name[..], spec.expr(), dwarf_reader, spec.expr().contains_old())
+                    Self::spec_expr_to_string(
+                        &fm.sig.name[..],
+                        spec.expr(),
+                        dwarf_reader,
+                        spec.expr().contains_old()
+                    )
                 )
             })
             .collect::<Vec<_>>()
@@ -414,7 +432,12 @@ where
             .map(|spec| {
                 format!(
                     "\n    ensures ({});",
-                    Self::spec_expr_to_string(&fm.sig.name[..], spec.expr(), dwarf_reader, spec.expr().contains_old())
+                    Self::spec_expr_to_string(
+                        &fm.sig.name[..],
+                        spec.expr(),
+                        dwarf_reader,
+                        spec.expr().contains_old()
+                    )
                 )
             })
             .collect::<Vec<_>>()
@@ -509,7 +532,15 @@ where
             }
             // FIXME: Add old flag to all spec functions and wrap "old"
             // around the base identifier or memory variable if it's a global
-            Op::Old => Self::spec_expr_to_string(func_name, opapp.operands.get(0).expect("Old operator is missing an expression."), dwarf_reader, true),
+            Op::Old => Self::spec_expr_to_string(
+                func_name,
+                opapp
+                    .operands
+                    .get(0)
+                    .expect("Old operator is missing an expression."),
+                dwarf_reader,
+                true,
+            ),
             Op::Comp(cop) => Self::comp_app_to_string(cop, e1_str, e2_str),
             Op::Bv(bvop) => Self::bv_app_to_string(bvop, e1_str, e2_str),
             Op::Bool(bop) => Self::bool_app_to_string(bop, e1_str, e2_str),
@@ -523,24 +554,32 @@ where
                 let typ_size = match &*typ {
                     DwarfTypeDefn::Array { in_typ: _, out_typ }
                     | DwarfTypeDefn::Pointer { value_typ: out_typ } => out_typ.as_ref().to_bytes(),
-                    // FIXME: REMOVE CASE
-                    // DwarfTypeDefn::Primitive { bytes } => bytes,
                     _ => panic!("Should be array or pointer type!"),
                 };
                 let array = e1_str.unwrap();
                 let index = e2_str.unwrap();
+                let index_val_typ = Self::get_expr_type(
+                    func_name,
+                    opapp.operands.get(1).unwrap(),
+                    &dwarf_reader.typ_map(),
+                );
                 format!(
                     "{}({}, {})",
                     Self::array_index_macro_name(&typ_size),
                     array,
-                    index
+                    Self::extend_to_match_width(&index, index_val_typ.to_bytes() * BYTE_SIZE, typ.to_bytes() * BYTE_SIZE)
                 )
             }
             Op::GetField(field) => {
-                let struct_id = "SID";
+                let typ = Self::get_expr_type(
+                    func_name,
+                    opapp.operands.get(0).unwrap(),
+                    &dwarf_reader.typ_map(),
+                );
+                let struct_id = typ.get_expect_struct_id();
                 format!(
                     "{}({})",
-                    Self::get_field_macro_name(struct_id, field),
+                    Self::get_field_macro_name(&struct_id, field),
                     e1_str.unwrap()
                 )
             }
@@ -563,9 +602,13 @@ where
                     &Expr::var(&v.name, Type::Unknown),
                     &dwarf_reader.typ_map(),
                 );
-                format!("{}(a0)[{}:0]", if old {"old"} else {""}, BYTE_SIZE * typ.to_bytes() - 1)
+                format!(
+                    "{}(a0)[{}:0]",
+                    if old { "old" } else { "" },
+                    BYTE_SIZE * typ.to_bytes() - 1
+                )
             } else {
-                format!("{}({})", if old {"old"} else {""}, name)
+                format!("{}({})", if old { "old" } else { "" }, name)
             }
         } else if dwarf_reader
             .func_sigs()
@@ -580,7 +623,7 @@ where
             ]
             .contains(&&v.name[..])
         {
-            format!("{}({})", if old {"old"} else {""}, v.name.clone())
+            format!("{}({})", if old { "old" } else { "" }, v.name.clone())
         } else if dwarf_reader
             .global_vars()
             .iter()

@@ -58,6 +58,16 @@ pub enum DwarfTypeDefn {
     },
 }
 impl DwarfTypeDefn {
+    pub fn get_expect_struct_id(&self) -> String {
+        match self {
+            DwarfTypeDefn::Struct {
+                id,
+                fields: _,
+                bytes: _,
+            } => id.clone(),
+            _ => panic!("Not a struct; could not obtain struct id."),
+        }
+    }
     pub fn to_bytes(&self) -> u64 {
         match self {
             DwarfTypeDefn::Primitive { bytes }
@@ -66,8 +76,8 @@ impl DwarfTypeDefn {
                 fields: _,
                 bytes,
             } => *bytes,
-            DwarfTypeDefn::Array { .. } => 8, // FIXME: XLEN
-            DwarfTypeDefn::Pointer { .. } => 8,
+            DwarfTypeDefn::Array { .. } => 64 / utils::BYTE_SIZE, // FIXME: XLEN
+            DwarfTypeDefn::Pointer { .. } => 64 / utils::BYTE_SIZE,
         }
     }
 }
@@ -397,9 +407,11 @@ where
     }
     pub fn typ_map(&self) -> HashMap<String, Rc<DwarfTypeDefn>> {
         let mut typ_map = HashMap::new();
+        // Add globals to type map
         for v in &self.global_vars {
             typ_map.insert(v.name.clone(), Rc::clone(&v.typ_defn));
         }
+        // Add function arguments and return "variable" to type map
         for (fun_name, fs) in &self.func_sigs {
             for arg in &fs.args {
                 typ_map.insert(
@@ -408,13 +420,16 @@ where
                 );
             }
             if let Some(ret_typ) = &fs.ret_typ_defn {
+                // FIXME: remove magic string $ret
                 typ_map.insert(format!("{}$$ret", fun_name), Rc::clone(ret_typ));
             }
         }
         // Add system variable types
         typ_map.insert(
             format!("${}", translator::EXCEPT_VAR),
-            Rc::new(DwarfTypeDefn::Primitive { bytes: 64 }),
+            Rc::new(DwarfTypeDefn::Primitive {
+                bytes: 64 / utils::BYTE_SIZE,
+            }),
         ); // FIXME: Replace with xlen
         typ_map
     }

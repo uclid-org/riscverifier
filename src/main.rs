@@ -134,9 +134,7 @@ fn main() {
     // Function to generate
     let func_names = matches
         .value_of("function")
-        .map_or(vec![], |lst| {
-            lst.split(",").collect::<Vec<&str>>()
-        });
+        .map_or(vec![], |lst| lst.split(",").collect::<Vec<&str>>());
     // Specification
     let spec_reader = SpecReader::new(xlen, &dwarf_reader.global_vars());
     let mut specs_map = None;
