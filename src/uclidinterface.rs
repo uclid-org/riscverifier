@@ -306,7 +306,7 @@ where
             fapp.func_name,
             fapp.operands
                 .iter()
-                .map(|x| Self::expr_to_string(&*x))
+                .map(|x| { Self::expr_to_string(&*x) })
                 .collect::<Vec<String>>()
                 .join(", ")
         )
@@ -353,7 +353,14 @@ where
         let args = func_call
             .operands
             .iter()
-            .map(|rc_expr| Self::expr_to_string(&*rc_expr))
+            .map(|rc_expr| {
+                let expr_str = Self::expr_to_string(&*rc_expr);
+                if expr_str == "zero" {
+                    format!("to_xlen_t(0bv64)")
+                } else {
+                    expr_str
+                }
+            })
             .collect::<Vec<_>>()
             .join(", ");
         format!("call ({}) = {}({});", lhs, func_call.func_name, args)
@@ -567,7 +574,11 @@ where
                     "{}({}, {})",
                     Self::array_index_macro_name(&typ_size),
                     array,
-                    Self::extend_to_match_width(&index, index_val_typ.to_bytes() * BYTE_SIZE, typ.to_bytes() * BYTE_SIZE)
+                    Self::extend_to_match_width(
+                        &index,
+                        index_val_typ.to_bytes() * BYTE_SIZE,
+                        typ.to_bytes() * BYTE_SIZE
+                    )
                 )
             }
             Op::GetField(field) => {

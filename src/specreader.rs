@@ -132,9 +132,10 @@ impl<'s> SpecReader<'s> {
                 let val = iter.next().unwrap();
                 let width = iter.next().unwrap();
                 Ok(ir::Expr::bv_lit(
-                utils::dec_str_to_u64(val).unwrap(),
-                utils::dec_str_to_u64(width).unwrap()))
-            },
+                    utils::dec_str_to_u64(val).unwrap(),
+                    utils::dec_str_to_u64(width).unwrap(),
+                ))
+            }
             Rule::path => {
                 let mut path_ref = false;
                 let mut path = self.translate_expr(inner.next().unwrap())?;
