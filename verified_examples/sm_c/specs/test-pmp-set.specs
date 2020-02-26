@@ -26,11 +26,15 @@ ensures true
 end_spec
 
 begin_spec(region_is_napot)
-ensures true
+requires ((0bv32 <= i) && (i < 16bv32));
+ensures ((($exception == 0bv64) && (regions[i].addrmode == 24bv8)) ==> ($ret == 1bv32));
+ensures ((($exception == 0bv64) && (regions[i].addrmode != 24bv8)) ==> ($ret == 0bv32));
 end_spec
 
 begin_spec(region_is_napot_all)
-ensures true
+requires ((0bv32 <= i) && (i < 16bv32));
+//ensures ((($exception == 0bv64) && ((regions[i].addr == 0bv64) && (regions[i].size == -1))) ==> ($ret == 1bv32));
+//ensures ((($exception == 0bv64) && (regions[i].addr != 24bv8)) ==> ($ret == 0bv32));
 end_spec
 
 begin_spec(region_pmpaddr_val)
