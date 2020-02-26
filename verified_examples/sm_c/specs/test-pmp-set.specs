@@ -16,7 +16,9 @@ ensures true
 end_spec
 
 begin_spec(region_is_tor)
-ensures true
+requires ((0bv32 <= i) && (i < 16bv32));
+ensures ((($exception == 0bv64) && (regions[i].addrmode == 8bv8)) ==> ($ret == 1bv32));
+ensures ((($exception == 0bv64) && (regions[i].addrmode != 8bv8)) ==> ($ret == 0bv32));
 end_spec
 
 begin_spec(region_needs_two_entries)
