@@ -169,6 +169,10 @@ impl<'s> SpecReader<'s> {
                         _ => panic!("[translate_expr] Not a valid path."),
                     }
                 }
+                // FIXME: Currently only dereference global variables
+                // But it should deference a variable if it's a pointer/struct as well
+                // Maybe we should create syntax for dereferencing because it will
+                // depend on the compiler
                 if !path_ref && is_global_var {
                     path = ir::Expr::op_app(ir::Op::Deref, vec![path]);
                 }
