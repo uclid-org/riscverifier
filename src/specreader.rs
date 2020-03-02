@@ -1,10 +1,11 @@
 use std::collections::HashMap;
 use std::fs;
+use std::rc::Rc;
 
 use pest::iterators::Pair;
 use pest::Parser;
 
-use crate::dwarfreader::DwarfVar;
+use crate::dwarfreader::DwarfCtx;
 use crate::ir;
 use crate::utils;
 
@@ -12,12 +13,12 @@ use crate::utils;
 #[grammar = "pest/speclang.pest"]
 pub struct SpecReader<'s> {
     xlen: u64,
-    global_vars: &'s Vec<DwarfVar>,
+    dwarf_ctx: &'s DwarfCtx,
 }
 
 impl<'s> SpecReader<'s> {
-    pub fn new(xlen: u64, global_vars: &'s Vec<DwarfVar>) -> SpecReader<'s> {
-        SpecReader { xlen, global_vars }
+    pub fn new(xlen: u64, dwarf_ctx: &'s DwarfCtx) -> SpecReader {
+        SpecReader { xlen, dwarf_ctx }
     }
 
     pub fn process_specs_file(
@@ -139,14 +140,7 @@ impl<'s> SpecReader<'s> {
             Rule::path => {
                 let mut path_ref = false;
                 let mut path = self.translate_expr(inner.next().unwrap())?;
-                let is_global_var = if path.is_var() {
-                    self.global_vars
-                        .iter()
-                        .find(|v| v.name == path.get_expect_var().name)
-                        .is_some()
-                } else {
-                    false
-                };
+                let is_global_var = self.dwarf_ctx.global_var(&path.get_expect_var().name).is_some();
                 while let Some(e) = inner.next() {
                     match e.as_rule() {
                         Rule::path_ref => {

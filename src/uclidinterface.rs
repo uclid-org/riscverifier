@@ -2,20 +2,15 @@ use std::fs;
 use std::marker::PhantomData;
 use std::rc::Rc;
 
-use crate::dwarfreader::{DwarfInterface, DwarfReader, DwarfTypeDefn, DwarfVar};
+use crate::dwarfreader::{DwarfInterface, DwarfCtx, DwarfTypeDefn, DwarfVar};
 use crate::ir::*;
 use crate::translator;
 use crate::utils::*;
 
 #[derive(Debug)]
-pub struct Uclid5Interface<D> {
-    _phantom_d: PhantomData<D>,
-}
+pub struct Uclid5Interface;
 
-impl<D> Uclid5Interface<D>
-where
-    D: DwarfInterface,
-{
+impl Uclid5Interface {
     fn gen_var_defns(model: &Model) -> String {
         let mut sorted = model.vars.iter().collect::<Vec<_>>();
         sorted.sort();
@@ -30,12 +25,12 @@ where
         // TODO: Put string in some config file
         fs::read_to_string("models/prelude.ucl").expect("Unable to read prelude.")
     }
-    fn gen_array_defns(dwarf_reader: &Rc<DwarfReader<D>>) -> String {
+    fn gen_array_defns(dwarf_ctx: &DwarfCtx) -> String {
         let mut defns: Vec<String> = vec![];
-        for var in dwarf_reader.global_vars() {
+        for var in dwarf_ctx.global_vars() {
             defns.append(&mut Self::gen_array_defn(&var.typ_defn));
         }
-        for (_, func_sig) in dwarf_reader.func_sigs() {
+        for (_, func_sig) in dwarf_ctx.func_sigs() {
             for var in &func_sig.args {
                 defns.append(&mut Self::gen_array_defn(&var.typ_defn));
             }
@@ -111,12 +106,12 @@ where
             })
             .0
     }
-    fn gen_struct_defns(dwarf_reader: &Rc<DwarfReader<D>>) -> String {
+    fn gen_struct_defns(dwarf_ctx: &DwarfCtx) -> String {
         let mut defns = vec![];
-        for var in dwarf_reader.global_vars() {
+        for var in dwarf_ctx.global_vars() {
             defns.append(&mut Self::gen_struct_defn(&var.typ_defn));
         }
-        for (_, func_sig) in dwarf_reader.func_sigs() {
+        for (_, func_sig) in dwarf_ctx.func_sigs() {
             for var in &func_sig.args {
                 defns.append(&mut Self::gen_struct_defn(&var.typ_defn));
             }
@@ -156,9 +151,9 @@ where
     fn get_field_macro_name(struct_id: &str, field_name: &String) -> String {
         format!("{}_{}", struct_id, field_name)
     }
-    fn gen_global_defns(dwarf_reader: &Rc<DwarfReader<D>>) -> String {
+    fn gen_global_defns(dwarf_ctx: &DwarfCtx) -> String {
         let mut defns = String::from("// Global variables\n");
-        for var in dwarf_reader.global_vars() {
+        for var in dwarf_ctx.global_vars() {
             defns = format!("{}{}\n", defns, Self::gen_global_defn(&var));
         }
         indent_text(defns, 4)
@@ -173,20 +168,20 @@ where
     fn global_var_ptr_name(name: &str) -> String {
         format!("global_{}", name)
     }
-    fn gen_procs(model: &Model, dwarf_reader: &Rc<DwarfReader<D>>) -> String {
+    fn gen_procs(model: &Model, dwarf_ctx: &DwarfCtx) -> String {
         let procs_string = model
             .func_models
             .iter()
-            .map(|fm| Self::func_model_to_string(fm, dwarf_reader))
+            .map(|fm| Self::func_model_to_string(fm, dwarf_ctx))
             .collect::<Vec<_>>()
             .join("\n\n");
         indent_text(procs_string, 4)
     }
-    fn control_blk(model: &Model, dwarf_reader: &Rc<DwarfReader<D>>) -> String {
+    fn control_blk(model: &Model, dwarf_ctx: &DwarfCtx) -> String {
         let verif_fns_string = model
             .func_models
             .iter()
-            .filter(|fm| dwarf_reader.func_sig(&fm.sig.name).is_some())
+            .filter(|fm| dwarf_ctx.func_sig(&fm.sig.name).is_some())
             .map(|fm| {
                 format!(
                     "f{} = verify({});",
@@ -218,11 +213,7 @@ where
     }
 }
 
-impl<D> IRInterface for Uclid5Interface<D>
-where
-    D: DwarfInterface,
-{
-    type DwarfReader = DwarfReader<D>;
+impl IRInterface for Uclid5Interface {
     /// IR translation functions
     fn lit_to_string(lit: &Literal) -> String {
         match lit {
@@ -402,7 +393,7 @@ where
         let inner = indent_text(inner, 4);
         format!("{{\n{}\n}}", inner)
     }
-    fn func_model_to_string(fm: &FuncModel, dwarf_reader: &Rc<Self::DwarfReader>) -> String {
+    fn func_model_to_string(fm: &FuncModel, dwarf_ctx: &DwarfCtx) -> String {
         let args = fm
             .sig
             .arg_decls
@@ -425,7 +416,7 @@ where
                     Self::spec_expr_to_string(
                         &fm.sig.name[..],
                         spec.expr(),
-                        dwarf_reader,
+                        dwarf_ctx,
                         spec.expr().contains_old()
                     )
                 )
@@ -442,7 +433,7 @@ where
                     Self::spec_expr_to_string(
                         &fm.sig.name[..],
                         spec.expr(),
-                        dwarf_reader,
+                        dwarf_ctx,
                         spec.expr().contains_old()
                     )
                 )
@@ -472,7 +463,7 @@ where
 
     // Generate function model
     // NOTE: Replace string with write to file
-    fn model_to_string(xlen: &u64, model: &Model, dwarf_reader: Rc<Self::DwarfReader>) -> String {
+    fn model_to_string(xlen: &u64, model: &Model, dwarf_ctx: &DwarfCtx) -> String {
         let xlen_defn = indent_text(
             format!(
                 "type xlen_t = bv{};\ndefine to_xlen_t(x: bv64): xlen_t = x[{}:0];",
@@ -486,13 +477,13 @@ where
         // variables
         let var_defns = indent_text(Self::gen_var_defns(model), 4);
         // definitions
-        let array_defns = Self::gen_array_defns(&dwarf_reader);
-        let struct_defns = Self::gen_struct_defns(&dwarf_reader);
-        let global_defns = Self::gen_global_defns(&dwarf_reader);
+        let array_defns = Self::gen_array_defns(&dwarf_ctx);
+        let struct_defns = Self::gen_struct_defns(&dwarf_ctx);
+        let global_defns = Self::gen_global_defns(&dwarf_ctx);
         // procedures
-        let procs = Self::gen_procs(model, &dwarf_reader);
+        let procs = Self::gen_procs(model, &dwarf_ctx);
         // control block
-        let ctrl_blk = Self::control_blk(model, &dwarf_reader);
+        let ctrl_blk = Self::control_blk(model, &dwarf_ctx);
         format!(
             "module main {{\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n\n{}\n}}",
             xlen_defn, prelude, var_defns, array_defns, struct_defns, global_defns, procs, ctrl_blk
@@ -503,14 +494,14 @@ where
     fn spec_fapp_to_string(
         name: &str,
         fapp: &FuncApp,
-        dwarf_reader: &Rc<Self::DwarfReader>,
+        dwarf_ctx: &DwarfCtx,
     ) -> String {
         format!(
             "{}({})",
             fapp.func_name,
             fapp.operands
                 .iter()
-                .map(|x| Self::spec_expr_to_string(name, &*x, dwarf_reader, false))
+                .map(|x| Self::spec_expr_to_string(name, &*x, dwarf_ctx, false))
                 .collect::<Vec<String>>()
                 .join(", ")
         )
@@ -518,21 +509,21 @@ where
     fn spec_opapp_to_string(
         func_name: &str,
         opapp: &OpApp,
-        dwarf_reader: &Rc<Self::DwarfReader>,
+        dwarf_ctx: &DwarfCtx,
         old: bool,
     ) -> String {
         let e1_str = opapp.operands.get(0).map_or(None, |e| {
-            Some(Self::spec_expr_to_string(func_name, e, dwarf_reader, old))
+            Some(Self::spec_expr_to_string(func_name, e, dwarf_ctx, old))
         });
         let e2_str = opapp.operands.get(1).map_or(None, |e| {
-            Some(Self::spec_expr_to_string(func_name, e, dwarf_reader, old))
+            Some(Self::spec_expr_to_string(func_name, e, dwarf_ctx, old))
         });
         match &opapp.op {
             Op::Deref => {
                 let typ = Self::get_expr_type(
                     func_name,
                     opapp.operands.get(0).unwrap(),
-                    &dwarf_reader.typ_map(),
+                    &dwarf_ctx.typ_map(),
                 );
                 let bytes = typ.to_bytes();
                 Self::deref_app_to_string(bytes, e1_str.unwrap(), old)
@@ -545,7 +536,7 @@ where
                     .operands
                     .get(0)
                     .expect("Old operator is missing an expression."),
-                dwarf_reader,
+                dwarf_ctx,
                 true,
             ),
             Op::Comp(cop) => Self::comp_app_to_string(cop, e1_str, e2_str),
@@ -556,7 +547,7 @@ where
                 let typ = Self::get_expr_type(
                     func_name,
                     opapp.operands.get(0).unwrap(),
-                    &dwarf_reader.typ_map(),
+                    &dwarf_ctx.typ_map(),
                 );
                 let typ_size = match &*typ {
                     DwarfTypeDefn::Array { in_typ: _, out_typ }
@@ -568,7 +559,7 @@ where
                 let index_val_typ = Self::get_expr_type(
                     func_name,
                     opapp.operands.get(1).unwrap(),
-                    &dwarf_reader.typ_map(),
+                    &dwarf_ctx.typ_map(),
                 );
                 format!(
                     "{}({}, {})",
@@ -585,7 +576,7 @@ where
                 let typ = Self::get_expr_type(
                     func_name,
                     opapp.operands.get(0).unwrap(),
-                    &dwarf_reader.typ_map(),
+                    &dwarf_ctx.typ_map(),
                 );
                 let struct_id = typ.get_expect_struct_id();
                 format!(
@@ -602,7 +593,7 @@ where
     fn spec_var_to_string(
         func_name: &str,
         v: &Var,
-        dwarf_reader: &Rc<Self::DwarfReader>,
+        dwarf_ctx: &DwarfCtx,
         old: bool,
     ) -> String {
         if v.name.chars().next().unwrap() == '$' {
@@ -611,7 +602,7 @@ where
                 let typ = Self::get_expr_type(
                     func_name,
                     &Expr::var(&v.name, Type::Unknown),
-                    &dwarf_reader.typ_map(),
+                    &dwarf_ctx.typ_map(),
                 );
                 format!(
                     "{}(a0)[{}:0]",
@@ -621,7 +612,7 @@ where
             } else {
                 format!("{}({})", if old { "old" } else { "" }, name)
             }
-        } else if dwarf_reader
+        } else if dwarf_ctx
             .func_sigs()
             .iter()
             .find(|(_, fs)| fs.args.iter().find(|arg| arg.name == v.name).is_some())
@@ -635,7 +626,7 @@ where
             .contains(&&v.name[..])
         {
             format!("{}({})", if old { "old" } else { "" }, v.name.clone())
-        } else if dwarf_reader
+        } else if dwarf_ctx
             .global_vars()
             .iter()
             .find(|x| x.name == v.name)

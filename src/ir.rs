@@ -3,7 +3,7 @@ use std::collections::{HashMap, HashSet};
 use std::fmt;
 use std::rc::Rc;
 
-use crate::dwarfreader::DwarfTypeDefn;
+use crate::dwarfreader::{DwarfTypeDefn, DwarfCtx};
 use crate::utils;
 
 /// Types
@@ -382,7 +382,6 @@ impl Model {
 /// contains the function declarations to define for a
 /// verification engine
 pub trait IRInterface: fmt::Debug {
-    type DwarfReader;
     /// Expressions to string functions
     fn expr_to_string(expr: &Expr) -> String {
         match expr {
@@ -433,40 +432,40 @@ pub trait IRInterface: fmt::Debug {
     fn assign_to_string(assign: &Assign) -> String;
     fn ite_to_string(ite: &IfThenElse) -> String;
     fn block_to_string(blk: &Vec<Box<Stmt>>) -> String;
-    fn func_model_to_string(fm: &FuncModel, dwarf_reader: &Rc<Self::DwarfReader>) -> String;
+    fn func_model_to_string(fm: &FuncModel, dwarf_ctx: &DwarfCtx) -> String;
     // IR to model string
-    fn model_to_string(xlen: &u64, model: &Model, dwarf_reader: Rc<Self::DwarfReader>) -> String;
+    fn model_to_string(xlen: &u64, model: &Model, dwarf_ctx: &DwarfCtx) -> String;
     // Specification langauge
     fn spec_expr_to_string(
         func_name: &str,
         expr: &Expr,
-        dwarf_reader: &Rc<Self::DwarfReader>,
+        dwarf_ctx: &DwarfCtx,
         old: bool,
     ) -> String {
         match expr {
             Expr::Literal(l) => Self::lit_to_string(l),
-            Expr::FuncApp(fapp) => Self::spec_fapp_to_string(func_name, fapp, dwarf_reader),
-            Expr::OpApp(opapp) => Self::spec_opapp_to_string(func_name, opapp, dwarf_reader, old),
+            Expr::FuncApp(fapp) => Self::spec_fapp_to_string(func_name, fapp, dwarf_ctx),
+            Expr::OpApp(opapp) => Self::spec_opapp_to_string(func_name, opapp, dwarf_ctx, old),
             Expr::Var(v) | Expr::Const(v) => {
-                Self::spec_var_to_string(func_name, v, dwarf_reader, old)
+                Self::spec_var_to_string(func_name, v, dwarf_ctx, old)
             }
         }
     }
     fn spec_fapp_to_string(
         func_name: &str,
         fapp: &FuncApp,
-        dwarf_reader: &Rc<Self::DwarfReader>,
+        dwarf_ctx: &DwarfCtx,
     ) -> String;
     fn spec_opapp_to_string(
         func_name: &str,
         opapp: &OpApp,
-        dwarf_reader: &Rc<Self::DwarfReader>,
+        dwarf_ctx: &DwarfCtx,
         old: bool,
     ) -> String;
     fn spec_var_to_string(
         func_name: &str,
         v: &Var,
-        dwarf_reader: &Rc<Self::DwarfReader>,
+        dwarf_ctx: &DwarfCtx,
         old: bool,
     ) -> String;
     fn get_expr_type(

@@ -358,12 +358,35 @@ pub trait DwarfInterface: std::fmt::Debug {
     }
 }
 
+pub struct DwarfCtx {
+    func_sigs: HashMap<String, DwarfFuncSig>,
+    global_vars: Vec<DwarfVar>,
+    typ_map: HashMap<String, Rc<DwarfTypeDefn>>,
+}
+
+impl DwarfCtx {
+    pub fn global_var(&self, name: &str) -> Option<&DwarfVar> {
+        self.global_vars.iter().find(|v| v.name == name)
+    }
+    pub fn global_vars(&self) -> &Vec<DwarfVar> {
+        &self.global_vars
+    }
+    pub fn func_sig(&self, func_name: &str) -> Option<&DwarfFuncSig> {
+        self.func_sigs.get(func_name)
+    }
+    pub fn func_sigs(&self) -> &HashMap<String, DwarfFuncSig> {
+        &self.func_sigs
+    }
+    pub fn typ_map(&self) -> &HashMap<String, Rc<DwarfTypeDefn>> {
+        &self.typ_map
+    }
+}
+
 pub struct DwarfReader<I>
 where
     I: DwarfInterface,
 {
-    func_sigs: HashMap<String, DwarfFuncSig>,
-    global_vars: Vec<DwarfVar>,
+    ctx: DwarfCtx,
     _phantom_data: PhantomData<I>,
 }
 
@@ -384,35 +407,21 @@ where
             .map(|comp_unit| I::process_global_vars(comp_unit))
             .flatten()
             .collect();
-        // info!("[new] Global Variables: {:#?}", global_vars);
-        // info!("[new] Func Sigs: {:#?}", func_sigs);
+        let typ_map = Self::compute_typ_map(&func_sigs, &global_vars);
+        let ctx = DwarfCtx{ func_sigs, global_vars, typ_map };
         Ok(DwarfReader {
-            func_sigs,
-            global_vars,
+            ctx,
             _phantom_data: PhantomData,
         })
     }
-    #[allow(dead_code)]
-    pub fn is_global_var(&self, name: &str) -> bool {
-        self.global_vars.iter().find(|v| v.name == name).is_some()
-    }
-    pub fn global_vars(&self) -> &Vec<DwarfVar> {
-        &self.global_vars
-    }
-    pub fn func_sig(&self, func_name: &str) -> Option<&DwarfFuncSig> {
-        self.func_sigs.get(func_name)
-    }
-    pub fn func_sigs(&self) -> &HashMap<String, DwarfFuncSig> {
-        &self.func_sigs
-    }
-    pub fn typ_map(&self) -> HashMap<String, Rc<DwarfTypeDefn>> {
+    pub fn compute_typ_map(func_sigs: &HashMap<String, DwarfFuncSig>, global_vars: &Vec<DwarfVar>) -> HashMap<String, Rc<DwarfTypeDefn>> {
         let mut typ_map = HashMap::new();
         // Add globals to type map
-        for v in &self.global_vars {
+        for v in global_vars {
             typ_map.insert(v.name.clone(), Rc::clone(&v.typ_defn));
         }
         // Add function arguments and return "variable" to type map
-        for (fun_name, fs) in &self.func_sigs {
+        for (fun_name, fs) in func_sigs {
             for arg in &fs.args {
                 typ_map.insert(
                     format!("{}${}", fun_name, arg.name),
@@ -432,5 +441,8 @@ where
             }),
         ); // FIXME: Replace with xlen
         typ_map
+    }
+    pub fn ctx(&self) -> &DwarfCtx {
+        &self.ctx
     }
 }

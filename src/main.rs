@@ -34,8 +34,6 @@ use uclidinterface::Uclid5Interface;
 
 mod ir;
 
-mod context;
-
 mod utils;
 
 fn main() {
@@ -136,7 +134,7 @@ fn main() {
         .value_of("function")
         .map_or(vec![], |lst| lst.split(",").collect::<Vec<&str>>());
     // Specification
-    let spec_reader = SpecReader::new(xlen, &dwarf_reader.global_vars());
+    let spec_reader = SpecReader::new(xlen, dwarf_reader.ctx());
     let mut specs_map = None;
     if let Some(spec_file) = matches.value_of("spec") {
         specs_map = Some(
@@ -153,8 +151,8 @@ fn main() {
         func_blks.insert(format!("{}", k), Rc::clone(&cfg));
         func_blks.insert(blk[0].function_name().to_string(), Rc::clone(&cfg));
     }
-    let mut translator: Translator<Uclid5Interface<CDwarfInterface>, CDwarfInterface> =
-        Translator::new(&func_blks, &ignored_functions, dwarf_reader, &specs_map);
+    let mut translator: Translator<Uclid5Interface> =
+        Translator::new(&func_blks, &ignored_functions, dwarf_reader.ctx(), &specs_map);
     for func_name in func_names {
         translator
             .gen_func_model(&func_name)

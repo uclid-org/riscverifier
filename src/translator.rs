@@ -6,7 +6,7 @@ use std::rc::Rc;
 
 use topological_sort::TopologicalSort;
 
-use crate::dwarfreader::{DwarfInterface, DwarfReader, DwarfTypeDefn};
+use crate::dwarfreader::{DwarfInterface, DwarfReader, DwarfCtx, DwarfTypeDefn};
 use crate::ir::*;
 use crate::objectdumpreader::*;
 use crate::utils::*;
@@ -18,10 +18,9 @@ pub const PRIV_VAR: &str = "current_priv";
 pub const EXCEPT_VAR: &str = "exception";
 
 /// Translator
-pub struct Translator<'t, I, J>
+pub struct Translator<'t, I>
 where
-    I: IRInterface<DwarfReader = DwarfReader<J>>,
-    J: DwarfInterface,
+    I: IRInterface,
 {
     xlen: u64,
     model: Model,
@@ -29,20 +28,19 @@ where
     generated_funcs: HashSet<String>,
     ignored_funcs: &'t HashSet<&'t str>,
     mod_set_map: HashMap<String, HashSet<String>>,
-    dwarf_reader: Rc<DwarfReader<J>>,
+    dwarf_ctx: &'t DwarfCtx,
     specs_map: &'t Option<HashMap<String, Vec<Spec>>>,
     _phantom_i: PhantomData<I>,
 }
 
-impl<'t, I, J> Translator<'t, I, J>
+impl<'t, I> Translator<'t, I>
 where
-    I: IRInterface<DwarfReader = DwarfReader<J>>,
-    J: DwarfInterface,
+    I: IRInterface,
 {
     pub fn new(
         func_cfg_map: &'t HashMap<String, Rc<Cfg>>,
         ignored_funcs: &'t HashSet<&'t str>,
-        dwarf_reader: Rc<DwarfReader<J>>,
+        dwarf_ctx: &'t DwarfCtx,
         specs_map: &'t Option<HashMap<String, Vec<Spec>>>,
     ) -> Self {
         Translator {
@@ -52,7 +50,7 @@ where
             generated_funcs: HashSet::new(),
             ignored_funcs,
             mod_set_map: HashMap::new(),
-            dwarf_reader,
+            dwarf_ctx,
             specs_map,
             _phantom_i: PhantomData,
         }
@@ -60,7 +58,7 @@ where
     pub fn print_model(&self) {
         println!(
             "{}",
-            I::model_to_string(&self.xlen, &self.model, Rc::clone(&self.dwarf_reader))
+            I::model_to_string(&self.xlen, &self.model, &self.dwarf_ctx)
         );
     }
     pub fn gen_func_model_stub(&mut self, name: &str) {
@@ -220,7 +218,7 @@ where
     }
     /// Computes the arguments of a function from the DWARF info
     fn func_args(&self, func_name: &str) -> Vec<Expr> {
-        self.dwarf_reader
+        self.dwarf_ctx
             .func_sig(func_name)
             .and_then(|fs| {
                 Some(
@@ -299,7 +297,7 @@ where
             if self.is_func_entry(&target_addr.to_string()[..]) {
                 let func_name = self.get_func_name(target_addr).unwrap();
                 let args = self
-                    .dwarf_reader
+                    .dwarf_ctx
                     .func_sig(&func_name)
                     .and_then(|fs| {
                         Some(
@@ -525,9 +523,7 @@ where
     }
     fn get_func_cfg(&self, func_name: &str) -> Result<&Rc<Cfg>, Error> {
         self.func_cfg_map.get(func_name).map_or(
-            Err(Error::TErr {
-                msg: format!("Could not find function {}.", func_name),
-            }),
+            Err(Error::TranslatorErr(format!("Could not find function {} cfg.", func_name))),
             |rc| Ok(rc),
         )
     }
@@ -551,9 +547,7 @@ where
     #[allow(dead_code)]
     fn get_func_cfg_addr(&self, addr: &str) -> Result<&Rc<Cfg>, Error> {
         self.func_cfg_map.get(addr).map_or(
-            Err(Error::TErr {
-                msg: format!("Could not find function at addr {}.", addr),
-            }),
+            Err(Error::TranslatorErr(format!("Could not find function cfg with entry address {}.", addr))),
             |rc| Ok(rc),
         )
     }
