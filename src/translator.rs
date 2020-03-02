@@ -11,40 +11,51 @@ use crate::ir::*;
 use crate::objectdumpreader::*;
 use crate::utils;
 
-/// Constants
+/// ========== Constants ==========================================
 pub const PC_VAR: &str = "pc";
 pub const MEM_VAR: &str = "mem";
 pub const PRIV_VAR: &str = "current_priv";
 pub const EXCEPT_VAR: &str = "exception";
 
-/// Translator
+/// ========== Translator ==========================================
+/// Instruction level translator from RISC-V to verification IR
 pub struct Translator<'t, I>
 where
     I: IRInterface,
 {
+    /// Width of integer register in bits (FIXME: also currently used for address length)
     xlen: u64,
+    /// Verification model
     model: Model,
+    /// Map of function names to thier CFGs
     func_cfg_map: &'t HashMap<String, Rc<Cfg>>,
+    /// A set that memoizes all the functions already generated
     generated_funcs: HashSet<String>,
+    /// A set of the functions to ignore
     ignored_funcs: &'t HashSet<&'t str>,
+    /// Map of procedure name to thier modifies set
     mod_set_map: HashMap<String, HashSet<String>>,
+    /// DWARF debugging information
     dwarf_ctx: &'t DwarfCtx,
+    /// Map of specs from function name to a list of pre/post conditions
     specs_map: &'t Option<HashMap<String, Vec<Spec>>>,
+    /// Don't touch this
     _phantom_i: PhantomData<I>,
 }
-
 impl<'t, I> Translator<'t, I>
 where
     I: IRInterface,
 {
+    /// Translator constructor
     pub fn new(
+        xlen: u64,
         func_cfg_map: &'t HashMap<String, Rc<Cfg>>,
         ignored_funcs: &'t HashSet<&'t str>,
         dwarf_ctx: &'t DwarfCtx,
         specs_map: &'t Option<HashMap<String, Vec<Spec>>>,
     ) -> Self {
         Translator {
-            xlen: 64, // TODO: Support for other architecture widths
+            xlen,
             model: Model::new(),
             func_cfg_map,
             generated_funcs: HashSet::new(),
@@ -463,24 +474,28 @@ where
             typ: self.bv_type(self.xlen),
         }
     }
+    /// Memory state variable
     fn mem_var(&self) -> Var {
         Var {
             name: MEM_VAR.to_string(),
             typ: self.mem_type(),
         }
     }
+    /// Privilege state variable
     fn priv_var(&self) -> Var {
         Var {
             name: PRIV_VAR.to_string(),
             typ: self.bv_type(2),
         }
     }
+    /// Expection state variable
     fn except_var(&self) -> Var {
         Var {
             name: EXCEPT_VAR.to_string(),
             typ: self.bv_type(self.xlen),
         }
     }
+    /// A vector of the state variables
     fn sys_state_vars(&self) -> Vec<Var> {
         let mut vec_var = vec![];
         vec_var.push(self.pc_var());
@@ -523,6 +538,7 @@ where
             })
             .collect::<Vec<Var>>()
     }
+    /// Returns the CFG of the function named `func_name`
     fn get_func_cfg(&self, func_name: &str) -> Result<&Rc<Cfg>, utils::Error> {
         self.func_cfg_map.get(func_name).map_or(
             Err(utils::Error::TranslatorErr(format!(
@@ -532,9 +548,11 @@ where
             |rc| Ok(rc),
         )
     }
+    /// Retuns true if and only if the addr is a function entry address
     fn is_func_entry(&self, addr: &str) -> bool {
         self.func_cfg_map.get(addr).is_some()
     }
+    /// Returns the function name with entry address `addr`
     fn get_func_name(&self, addr: &u64) -> Option<String> {
         self.func_cfg_map
             .get(&addr.to_string()[..])
@@ -546,9 +564,11 @@ where
                 )
             })
     }
+    /// Returns the entry address of the function named `func_name`
     fn get_func_entry_addr(&self, func_name: &str) -> Result<&u64, utils::Error> {
         Ok(self.get_func_cfg(func_name)?.get_entry_addr())
     }
+    /// Returns the CFG for the function with entry address `addr`
     #[allow(dead_code)]
     fn get_func_cfg_addr(&self, addr: &str) -> Result<&Rc<Cfg>, utils::Error> {
         self.func_cfg_map.get(addr).map_or(

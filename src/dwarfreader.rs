@@ -6,10 +6,14 @@ use std::{borrow, fs, rc::Rc};
 
 use crate::utils;
 
+/// Variable from the DWARF debugging information
 #[derive(Debug, Clone)]
 pub struct DwarfVar {
+    /// Name of the variable
     pub name: String,
+    /// Type of the variable
     pub typ_defn: Rc<DwarfTypeDefn>,
+    /// If it is a global variable, memory_addr stores the memory address of the variable
     pub memory_addr: u64,
 }
 impl DwarfVar {
@@ -22,10 +26,14 @@ impl DwarfVar {
     }
 }
 
+/// Function signature from the DWARF degbugging information
 #[derive(Debug)]
 pub struct DwarfFuncSig {
+    /// Name of the function
     pub name: String,
+    /// Arguments to the function
     pub args: Vec<DwarfVar>,
+    /// Return type of the function if it has one
     pub ret_typ_defn: Option<Rc<DwarfTypeDefn>>,
 }
 impl DwarfFuncSig {
@@ -38,33 +46,45 @@ impl DwarfFuncSig {
     }
 }
 
+/// Represents a type from the DWARF debugging information
 #[derive(Debug, Clone)]
 pub enum DwarfTypeDefn {
-    Primitive {
-        bytes: u64,
-    },
+    /// A primitive type that does not discern between names of types; only the size
+    Primitive { bytes: u64 },
+    /// Array type
     Array {
+        /// Index type (currently only support single index arrays)
         in_typ: Rc<DwarfTypeDefn>,
+        /// Output type
         out_typ: Rc<DwarfTypeDefn>,
+        /// Number of bytes used to represent the address to that array (usually just xlen)
         bytes: u64,
     },
+    /// Structure type
     Struct {
+        /// Name of the structure
         id: String,
+        /// Map of field names to fields of the structure
         fields: HashMap<String, StructField>,
+        /// Size of the structure
         bytes: u64,
     },
     Pointer {
+        /// Dereferenced pointer type
         value_typ: Rc<DwarfTypeDefn>,
+        /// Number of bytes for a pointer (usually just xlen)
         bytes: u64,
     },
 }
 impl DwarfTypeDefn {
+    /// Returns true iff the type is a pointer type
     pub fn is_ptr_type(&self) -> bool {
         match self {
             DwarfTypeDefn::Array { .. } | DwarfTypeDefn::Pointer { .. } => true,
             _ => false,
         }
     }
+    /// Returns the structure name and panics if it's not a structure
     pub fn get_expect_struct_id(&self) -> String {
         match self {
             DwarfTypeDefn::Struct {
@@ -75,6 +95,7 @@ impl DwarfTypeDefn {
             _ => panic!("Not a struct; could not obtain struct id."),
         }
     }
+    /// Returns the number of bytes of the type
     pub fn to_bytes(&self) -> u64 {
         match self {
             DwarfTypeDefn::Primitive { bytes }
@@ -95,21 +116,32 @@ impl DwarfTypeDefn {
         }
     }
 }
+
+/// Field of a structure type
 #[derive(Debug, Clone)]
 pub struct StructField {
+    /// Name of the field
     pub name: String,
+    /// Type definition
     pub typ: Rc<DwarfTypeDefn>,
+    /// Relative offset from the base struct address
     pub loc: u64,
 }
 
+/// Representation for a DWARF debugging information entry
 #[derive(Debug)]
 pub struct DwarfObject {
+    /// Name of the tag
     pub tag_name: String,
+    /// Offset of the tag
     pub offset: u64,
+    /// Attributes of the tag
     pub attrs: BTreeMap<String, DwarfAttributeValue>,
+    /// Children tags
     pub child_tags: BTreeMap<u64, DwarfObject>,
 }
 impl DwarfObject {
+    /// Constructor for DwarfObject
     pub fn create(
         tag_name: String,
         offset: u64,
@@ -123,54 +155,64 @@ impl DwarfObject {
             child_tags,
         }
     }
+    /// Adds a child tag to the DwarfObject
     pub fn add_child_tag(&mut self, dwarf_object: DwarfObject) {
         self.child_tags.insert(dwarf_object.offset, dwarf_object);
     }
+    /// Returns the last child of the DwarfObject
     pub fn last_child(&mut self) -> DwarfObject {
         let last_child_key = self.child_tags.values_mut().last().unwrap().offset;
         self.child_tags.remove(&last_child_key).unwrap()
     }
+    /// Returns the child of the given offset
     pub fn get_child(&self, index: &u64) -> Result<&DwarfObject, utils::Error> {
         self.child_tags
             .get(index)
             .map_or_else(|| Err(utils::Error::CouldNotFindDwarfChild), |v| Ok(v))
     }
+    /// Returns the child with the name tag_name
     pub fn get_child_named(&self, tag_name: &str) -> Result<&DwarfObject, utils::Error> {
         self.child_tags
             .iter()
             .find(|(_os, dobj)| dobj.tag_name == tag_name)
             .map_or_else(|| Err(utils::Error::CouldNotFindDwarfChild), |v| Ok(v.1))
     }
+    /// Returns the attribute named attr
     pub fn get_attr(&self, attr: &str) -> Result<&DwarfAttributeValue, utils::Error> {
         self.attrs
             .get(attr)
             .map_or_else(|| Err(utils::Error::NoSuchDwarfFieldError), |v| Ok(v))
     }
+    /// Adds the attribute attr to the DwarfObject
     pub fn add_attr(&mut self, id: &str, attr: DwarfAttributeValue) {
         self.attrs.insert(String::from(id), attr);
     }
 }
 
+/// Represents a value in the DWARF debugging information
 #[derive(Debug)]
 pub enum DwarfAttributeValue {
     NumericAttr(u64),
     StringAttr(String),
     BooleanAttr(bool),
 }
+#[allow(dead_code)]
 impl DwarfAttributeValue {
+    /// Returns the numeric value if it's a NumericAttr
     pub fn get_expect_num_val(&self) -> &u64 {
         match self {
             DwarfAttributeValue::NumericAttr(v) => v,
             _ => panic!("[get_expect_num_val] Not a numeric attribute."),
         }
     }
+    /// Returns the string value if it's a StringAttr  
     pub fn get_expect_str_val(&self) -> &String {
         match self {
             DwarfAttributeValue::StringAttr(v) => v,
             _ => panic!("[get_expect_num_val] Not a numeric attribute."),
         }
     }
-    #[allow(dead_code)]
+    /// Returns the boolean value if it's a BooleanAttr
     pub fn get_expect_bool_val(&self) -> &bool {
         match self {
             DwarfAttributeValue::BooleanAttr(v) => v,
@@ -179,6 +221,9 @@ impl DwarfAttributeValue {
     }
 }
 
+/// An interface for reading DWARF debugging information.
+/// For every compiler and new language used, there will need to be a new interface
+/// for that compiler that extend this trait (refer to cdwarfinterface.rs)
 pub trait DwarfInterface: std::fmt::Debug {
     /// ===================== DWARF Reader functions =================
     /// Process the function signatures from the DwarfObject
@@ -187,6 +232,7 @@ pub trait DwarfInterface: std::fmt::Debug {
     fn process_global_vars(dobj: &DwarfObject) -> Vec<DwarfVar>;
     /// Creates the type searching in comp_unit with the DwarfObject index
     fn get_type(index: &u64, comp_unit: &DwarfObject) -> Result<Rc<DwarfTypeDefn>, utils::Error>;
+
     /// ====================== Helper functions ======================
     /// Parses the binary files in the paths and returns
     /// the corresponding DwarfObjects from the debugging information
@@ -252,7 +298,10 @@ pub trait DwarfInterface: std::fmt::Debug {
             if let Some(mut dwarf_object) =
                 Self::entries_to_dwarf_object(&unit, &dwarf, &mut entries_cursor)?
             {
-                dwarf_object.add_attr("pointer_size", DwarfAttributeValue::NumericAttr(*xlen / utils::BYTE_SIZE));
+                dwarf_object.add_attr(
+                    "pointer_size",
+                    DwarfAttributeValue::NumericAttr(*xlen / utils::BYTE_SIZE),
+                );
                 dwarf_objects.push(dwarf_object);
             }
         }
@@ -378,39 +427,50 @@ pub trait DwarfInterface: std::fmt::Debug {
     }
 }
 
+/// Stores the relevant debugging information for automatically
+/// translating specifications
 pub struct DwarfCtx {
+    /// Function signatures from the DWARF debugging information
     func_sigs: HashMap<String, DwarfFuncSig>,
+    /// Global variables from the DWARF debugging information
     global_vars: Vec<DwarfVar>,
+    /// A type map computed from the arguments of the function signatures and global variables
     typ_map: HashMap<String, Rc<DwarfTypeDefn>>,
 }
-
 impl DwarfCtx {
+    /// Returns the DwarfVar of the given global variable named `name`
     pub fn global_var(&self, name: &str) -> Result<&DwarfVar, utils::Error> {
         self.global_vars
             .iter()
             .find(|v| v.name == name)
             .ok_or(utils::Error::MissingVar)
     }
+    /// Returns all the global variables
     pub fn global_vars(&self) -> &Vec<DwarfVar> {
         &self.global_vars
     }
+    /// Returns the function signature of the function named `func_name`
     pub fn func_sig(&self, func_name: &str) -> Result<&DwarfFuncSig, utils::Error> {
         self.func_sigs
             .get(func_name)
             .ok_or(utils::Error::MissingFuncSig)
     }
+    /// Returns a map of all the function signatures
     pub fn func_sigs(&self) -> &HashMap<String, DwarfFuncSig> {
         &self.func_sigs
     }
+    /// Returns the type map
     pub fn typ_map(&self) -> &HashMap<String, Rc<DwarfTypeDefn>> {
         &self.typ_map
     }
 }
 
+/// A reader for reading the DWARF debugging information
 pub struct DwarfReader<I>
 where
     I: DwarfInterface,
 {
+    /// The processed DWARF debugging information
     ctx: DwarfCtx,
     _phantom_data: PhantomData<I>,
 }

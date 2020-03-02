@@ -152,6 +152,7 @@ fn main() {
         func_blks.insert(blk[0].function_name().to_string(), Rc::clone(&cfg));
     }
     let mut translator: Translator<Uclid5Interface> = Translator::new(
+        xlen,
         &func_blks,
         &ignored_functions,
         dwarf_reader.ctx(),
