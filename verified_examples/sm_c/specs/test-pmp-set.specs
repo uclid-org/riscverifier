@@ -42,5 +42,6 @@ ensures true;
 end_spec
 
 begin_spec(pmp_set)
+ensures($mtvec != old($mtvec));
 ensures true;
 end_spec

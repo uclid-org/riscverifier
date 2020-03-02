@@ -6,10 +6,10 @@ use std::rc::Rc;
 
 use topological_sort::TopologicalSort;
 
-use crate::dwarfreader::{DwarfInterface, DwarfReader, DwarfCtx, DwarfTypeDefn};
+use crate::dwarfreader::{DwarfCtx, DwarfTypeDefn};
 use crate::ir::*;
 use crate::objectdumpreader::*;
-use crate::utils::*;
+use crate::utils;
 
 /// Constants
 pub const PC_VAR: &str = "pc";
@@ -69,7 +69,7 @@ where
         };
         self.model.add_func_model(stub_fm);
     }
-    pub fn gen_func_model(&mut self, func_name: &str) -> Result<(), Error> {
+    pub fn gen_func_model(&mut self, func_name: &str) -> Result<(), utils::Error> {
         if self.ignored_funcs.get(func_name).is_some() {
             self.gen_func_model_stub(func_name);
             return Ok(());
@@ -220,6 +220,7 @@ where
     fn func_args(&self, func_name: &str) -> Vec<Expr> {
         self.dwarf_ctx
             .func_sig(func_name)
+            .ok()
             .and_then(|fs| {
                 Some(
                     fs.args
@@ -299,6 +300,7 @@ where
                 let args = self
                     .dwarf_ctx
                     .func_sig(&func_name)
+                    .ok()
                     .and_then(|fs| {
                         Some(
                             fs.args
@@ -405,7 +407,7 @@ where
     fn dwarf_typ_to_ir(&self, typ: &DwarfTypeDefn) -> Type {
         match &typ {
             DwarfTypeDefn::Primitive { bytes } => Type::Bv {
-                w: bytes * BYTE_SIZE,
+                w: bytes * utils::BYTE_SIZE,
             },
             DwarfTypeDefn::Array { .. }
             | DwarfTypeDefn::Struct { .. }
@@ -491,7 +493,7 @@ where
     fn mem_type(&self) -> Type {
         Type::Array {
             in_typs: vec![Box::new(self.bv_type(self.xlen))],
-            out_typ: Box::new(self.bv_type(BYTE_SIZE)),
+            out_typ: Box::new(self.bv_type(utils::BYTE_SIZE)),
         }
     }
     /// Returns a bitvector type of specified width
@@ -521,9 +523,9 @@ where
             })
             .collect::<Vec<Var>>()
     }
-    fn get_func_cfg(&self, func_name: &str) -> Result<&Rc<Cfg>, Error> {
+    fn get_func_cfg(&self, func_name: &str) -> Result<&Rc<Cfg>, utils::Error> {
         self.func_cfg_map.get(func_name).map_or(
-            Err(Error::TranslatorErr(format!("Could not find function {} cfg.", func_name))),
+            Err(utils::Error::TranslatorErr(format!("Could not find function {} cfg.", func_name))),
             |rc| Ok(rc),
         )
     }
@@ -541,13 +543,13 @@ where
                 )
             })
     }
-    fn get_func_entry_addr(&self, func_name: &str) -> Result<&u64, Error> {
+    fn get_func_entry_addr(&self, func_name: &str) -> Result<&u64, utils::Error> {
         Ok(self.get_func_cfg(func_name)?.get_entry_addr())
     }
     #[allow(dead_code)]
-    fn get_func_cfg_addr(&self, addr: &str) -> Result<&Rc<Cfg>, Error> {
+    fn get_func_cfg_addr(&self, addr: &str) -> Result<&Rc<Cfg>, utils::Error> {
         self.func_cfg_map.get(addr).map_or(
-            Err(Error::TranslatorErr(format!("Could not find function cfg with entry address {}.", addr))),
+            Err(utils::Error::TranslatorErr(format!("Could not find function cfg with entry address {}.", addr))),
             |rc| Ok(rc),
         )
     }

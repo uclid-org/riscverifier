@@ -47,6 +47,7 @@ pub enum DwarfTypeDefn {
     Array {
         in_typ: Rc<DwarfTypeDefn>,
         out_typ: Rc<DwarfTypeDefn>,
+        bytes: u64,
     },
     Struct {
         id: String,
@@ -55,9 +56,16 @@ pub enum DwarfTypeDefn {
     },
     Pointer {
         value_typ: Rc<DwarfTypeDefn>,
+        bytes: u64,
     },
 }
 impl DwarfTypeDefn {
+    pub fn is_ptr_type(&self) -> bool {
+        match self {
+            DwarfTypeDefn::Array {..} | DwarfTypeDefn::Pointer {..} => true,
+            _ => false,
+        }
+    }
     pub fn get_expect_struct_id(&self) -> String {
         match self {
             DwarfTypeDefn::Struct {
@@ -76,8 +84,8 @@ impl DwarfTypeDefn {
                 fields: _,
                 bytes,
             } => *bytes,
-            DwarfTypeDefn::Array { .. } => 64 / utils::BYTE_SIZE, // FIXME: XLEN
-            DwarfTypeDefn::Pointer { .. } => 64 / utils::BYTE_SIZE,
+            DwarfTypeDefn::Array { in_typ:_, out_typ:_, bytes } => *bytes,
+            DwarfTypeDefn::Pointer { value_typ: _, bytes } => *bytes,
         }
     }
 }
@@ -132,6 +140,9 @@ impl DwarfObject {
             .get(attr)
             .map_or_else(|| Err(utils::Error::NoSuchDwarfFieldError), |v| Ok(v))
     }
+    pub fn add_attr(&mut self, id: &str, attr: DwarfAttributeValue) {
+        self.attrs.insert(String::from(id), attr);
+    }
 }
 
 #[derive(Debug)]
@@ -173,19 +184,18 @@ pub trait DwarfInterface: std::fmt::Debug {
     /// ====================== Helper functions ======================
     /// Parses the binary files in the paths and returns
     /// the corresponding DwarfObjects from the debugging information
-    fn process_dwarf_files(paths: &Vec<String>) -> Result<Vec<DwarfObject>, gimli::Error> {
+    fn process_dwarf_files(xlen: &u64, paths: &Vec<String>) -> Result<Vec<DwarfObject>, gimli::Error> {
         let mut dwarf_objects = vec![];
         for path in paths {
-            let mut dwarf_object = Self::process_dwarf_file(path)?;
+            let mut dwarf_object = Self::process_dwarf_file(xlen, path)?;
             dwarf_objects.append(&mut dwarf_object);
         }
-        // debug!("[process_dwarf_files] dwarf_objects: {:#?}", dwarf_objects);
         Ok(dwarf_objects)
     }
 
     /// Parses the specified binary file in the path and returns
     /// the corresponding DwarfObjects from the debugging information
-    fn process_dwarf_file(path: &String) -> Result<Vec<DwarfObject>, gimli::Error> {
+    fn process_dwarf_file(xlen: &u64, path: &String) -> Result<Vec<DwarfObject>, gimli::Error> {
         info!("[process_dwarf_file] Processing dwarf file {:?}.", path);
         let file = fs::File::open(&path[..]).unwrap();
         let mmap = unsafe { memmap::Mmap::map(&file).unwrap() };
@@ -195,11 +205,12 @@ pub trait DwarfInterface: std::fmt::Debug {
         } else {
             gimli::RunTimeEndian::Big
         };
-        Ok(Self::process_dwarf_file_object(&object, endian)?)
+        Ok(Self::process_dwarf_file_object(xlen, &object, endian)?)
     }
 
     /// Converts an object file into a vector of DwarfObjects
     fn process_dwarf_file_object(
+        xlen: &u64,
         object: &object::File,
         endian: gimli::RunTimeEndian,
     ) -> Result<Vec<DwarfObject>, gimli::Error> {
@@ -229,10 +240,10 @@ pub trait DwarfInterface: std::fmt::Debug {
             let unit = dwarf.unit(header)?;
             // Iterate over the Debugging Information Entries (DIEs) in the unit.
             let mut entries_cursor = unit.entries();
-            if let Some(dwarf_object) =
+            if let Some(mut dwarf_object) =
                 Self::entries_to_dwarf_object(&unit, &dwarf, &mut entries_cursor)?
             {
-                // info!("Compilation unit: \n{:#?}", &dwarf_object);
+                dwarf_object.add_attr("pointer_size", DwarfAttributeValue::NumericAttr(*xlen));
                 dwarf_objects.push(dwarf_object);
             }
         }
@@ -365,14 +376,14 @@ pub struct DwarfCtx {
 }
 
 impl DwarfCtx {
-    pub fn global_var(&self, name: &str) -> Option<&DwarfVar> {
-        self.global_vars.iter().find(|v| v.name == name)
+    pub fn global_var(&self, name: &str) -> Result<&DwarfVar, utils::Error> {
+        self.global_vars.iter().find(|v| v.name == name).ok_or(utils::Error::MissingVar)
     }
     pub fn global_vars(&self) -> &Vec<DwarfVar> {
         &self.global_vars
     }
-    pub fn func_sig(&self, func_name: &str) -> Option<&DwarfFuncSig> {
-        self.func_sigs.get(func_name)
+    pub fn func_sig(&self, func_name: &str) -> Result<&DwarfFuncSig, utils::Error> {
+        self.func_sigs.get(func_name).ok_or(utils::Error::MissingFuncSig)
     }
     pub fn func_sigs(&self) -> &HashMap<String, DwarfFuncSig> {
         &self.func_sigs
@@ -394,8 +405,8 @@ impl<I> DwarfReader<I>
 where
     I: DwarfInterface,
 {
-    pub fn new(binary_paths: &Vec<String>) -> Result<DwarfReader<I>, gimli::Error> {
-        let dwarf_obj_vec = I::process_dwarf_files(binary_paths)?;
+    pub fn new(xlen: &u64, binary_paths: &Vec<String>) -> Result<DwarfReader<I>, gimli::Error> {
+        let dwarf_obj_vec = I::process_dwarf_files(xlen, binary_paths)?;
         let func_sigs = dwarf_obj_vec
             .iter()
             .map(|comp_unit| I::process_func_sigs(comp_unit))
@@ -437,9 +448,9 @@ where
         typ_map.insert(
             format!("${}", translator::EXCEPT_VAR),
             Rc::new(DwarfTypeDefn::Primitive {
-                bytes: 64 / utils::BYTE_SIZE,
+                bytes: 8,
             }),
-        ); // FIXME: Replace with xlen
+        );
         typ_map
     }
     pub fn ctx(&self) -> &DwarfCtx {

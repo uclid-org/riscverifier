@@ -76,7 +76,8 @@ impl CDwarfInterface {
             "DW_TAG_pointer_type" => {
                 let value_typ_index = *dwarf_object.get_attr("DW_AT_type")?.get_expect_num_val();
                 let value_typ = Self::_get_type(&value_typ_index, comp_unit, typ_map)?;
-                Rc::new(DwarfTypeDefn::Pointer { value_typ })
+                let bytes = *dwarf_object.get_attr("DW_AT_byte_size")?.get_expect_num_val();
+                Rc::new(DwarfTypeDefn::Pointer { value_typ, bytes })
             }
             "DW_TAG_array_type" => {
                 let out_type_index = dwarf_object.get_attr("DW_AT_type")?.get_expect_num_val();
@@ -86,7 +87,8 @@ impl CDwarfInterface {
                     .get_attr("DW_AT_type")?
                     .get_expect_num_val();
                 let in_typ = Self::_get_type(index_type_index, comp_unit, typ_map)?;
-                Rc::new(DwarfTypeDefn::Array { in_typ, out_typ })
+                let bytes = *comp_unit.get_attr("pointer_size")?.get_expect_num_val();
+                Rc::new(DwarfTypeDefn::Array { in_typ, out_typ, bytes })
             }
             "DW_TAG_structure_type" => {
                 let id = dwarf_object

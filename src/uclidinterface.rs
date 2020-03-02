@@ -1,11 +1,10 @@
 use std::fs;
-use std::marker::PhantomData;
 use std::rc::Rc;
 
-use crate::dwarfreader::{DwarfInterface, DwarfCtx, DwarfTypeDefn, DwarfVar};
+use crate::dwarfreader::{DwarfCtx, DwarfTypeDefn, DwarfVar};
 use crate::ir::*;
 use crate::translator;
-use crate::utils::*;
+use crate::utils;
 
 #[derive(Debug)]
 pub struct Uclid5Interface;
@@ -22,8 +21,7 @@ impl Uclid5Interface {
         format!("// RISC-V system state variables\n{}", defns)
     }
     fn prelude() -> String {
-        // TODO: Put string in some config file
-        fs::read_to_string("models/prelude.ucl").expect("Unable to read prelude.")
+        fs::read_to_string(utils::PRELUDE_PATH).expect("Unable to read prelude.")
     }
     fn gen_array_defns(dwarf_ctx: &DwarfCtx) -> String {
         let mut defns: Vec<String> = vec![];
@@ -40,7 +38,7 @@ impl Uclid5Interface {
         }
         defns.sort();
         defns.dedup();
-        indent_text(format!("// Array helpers\n{}", defns.join("\n")), 4)
+        utils::indent_text(format!("// Array helpers\n{}", defns.join("\n")), 4)
     }
     fn gen_array_defn(typ_defn: &DwarfTypeDefn) -> Vec<String> {
         let mut defns = vec![];
@@ -54,7 +52,7 @@ impl Uclid5Interface {
                     ))
                 }
             }
-            DwarfTypeDefn::Array { in_typ, out_typ } => {
+            DwarfTypeDefn::Array { in_typ, out_typ, bytes:_ } => {
                 defns.append(&mut Self::gen_array_defn(in_typ));
                 defns.append(&mut Self::gen_array_defn(out_typ));
             }
@@ -74,7 +72,7 @@ impl Uclid5Interface {
                     ))
                 }
             }
-            DwarfTypeDefn::Pointer { value_typ } => {
+            DwarfTypeDefn::Pointer { value_typ, bytes:_ } => {
                 defns.append(&mut Self::gen_array_defn(&value_typ))
             }
         };
@@ -121,7 +119,7 @@ impl Uclid5Interface {
         }
         defns.sort();
         defns.dedup();
-        indent_text(format!("// Struct helpers\n{}", defns.join("\n")), 4)
+        utils::indent_text(format!("// Struct helpers\n{}", defns.join("\n")), 4)
     }
     fn gen_struct_defn(typ: &DwarfTypeDefn) -> Vec<String> {
         let mut defns = vec![];
@@ -140,7 +138,7 @@ impl Uclid5Interface {
                     ));
                 }
             }
-            DwarfTypeDefn::Array { in_typ, out_typ } => {
+            DwarfTypeDefn::Array { in_typ, out_typ, bytes:_ } => {
                 defns.append(&mut Self::gen_struct_defn(&in_typ));
                 defns.append(&mut Self::gen_struct_defn(&out_typ));
             }
@@ -156,7 +154,7 @@ impl Uclid5Interface {
         for var in dwarf_ctx.global_vars() {
             defns = format!("{}{}\n", defns, Self::gen_global_defn(&var));
         }
-        indent_text(defns, 4)
+        utils::indent_text(defns, 4)
     }
     fn gen_global_defn(global_var: &DwarfVar) -> String {
         format!(
@@ -175,13 +173,13 @@ impl Uclid5Interface {
             .map(|fm| Self::func_model_to_string(fm, dwarf_ctx))
             .collect::<Vec<_>>()
             .join("\n\n");
-        indent_text(procs_string, 4)
+        utils::indent_text(procs_string, 4)
     }
     fn control_blk(model: &Model, dwarf_ctx: &DwarfCtx) -> String {
         let verif_fns_string = model
             .func_models
             .iter()
-            .filter(|fm| dwarf_ctx.func_sig(&fm.sig.name).is_some())
+            .filter(|fm| dwarf_ctx.func_sig(&fm.sig.name).is_ok())
             .map(|fm| {
                 format!(
                     "f{} = verify({});",
@@ -192,9 +190,9 @@ impl Uclid5Interface {
             .collect::<Vec<_>>()
             .join("\n");
         let verif_fns_string = format!("{}\ncheck;\nprint_results;", verif_fns_string);
-        let verif_fns_string = indent_text(verif_fns_string, 4);
+        let verif_fns_string = utils::indent_text(verif_fns_string, 4);
         let control_string = format!("control {{\n{}\n}}", verif_fns_string);
-        indent_text(control_string, 4)
+        utils::indent_text(control_string, 4)
     }
     /// Helper functions
     fn var_decl(var: &Var) -> String {
@@ -234,7 +232,7 @@ impl IRInterface for Uclid5Interface {
                     .collect::<Vec<_>>()
                     .join(", "),
                 Self::typ_to_string(out_typ)
-            ), // FIXME
+            ),
         }
     }
     fn deref_app_to_string(bytes: u64, ptr: String, old: bool) -> String {
@@ -373,11 +371,11 @@ impl IRInterface for Uclid5Interface {
     }
     fn ite_to_string(ite: &IfThenElse) -> String {
         let cond = Self::expr_to_string(&ite.cond);
-        let thn = indent_text(Self::stmt_to_string(&*ite.then_stmt), 4);
+        let thn = utils::indent_text(Self::stmt_to_string(&*ite.then_stmt), 4);
         let els = if let Some(else_stmt) = &ite.else_stmt {
             format!(
                 "else {{\n{}\n}}",
-                indent_text(Self::stmt_to_string(&*else_stmt), 4)
+                utils::indent_text(Self::stmt_to_string(&*else_stmt), 4)
             )
         } else {
             String::from("")
@@ -390,7 +388,7 @@ impl IRInterface for Uclid5Interface {
             .map(|rc_stmt| Self::stmt_to_string(rc_stmt))
             .collect::<Vec<_>>()
             .join("\n");
-        let inner = indent_text(inner, 4);
+        let inner = utils::indent_text(inner, 4);
         format!("{{\n{}\n}}", inner)
     }
     fn func_model_to_string(fm: &FuncModel, dwarf_ctx: &DwarfCtx) -> String {
@@ -464,7 +462,7 @@ impl IRInterface for Uclid5Interface {
     // Generate function model
     // NOTE: Replace string with write to file
     fn model_to_string(xlen: &u64, model: &Model, dwarf_ctx: &DwarfCtx) -> String {
-        let xlen_defn = indent_text(
+        let xlen_defn = utils::indent_text(
             format!(
                 "type xlen_t = bv{};\ndefine to_xlen_t(x: bv64): xlen_t = x[{}:0];",
                 xlen,
@@ -475,7 +473,7 @@ impl IRInterface for Uclid5Interface {
         // prelude
         let prelude = Self::prelude();
         // variables
-        let var_defns = indent_text(Self::gen_var_defns(model), 4);
+        let var_defns = utils::indent_text(Self::gen_var_defns(model), 4);
         // definitions
         let array_defns = Self::gen_array_defns(&dwarf_ctx);
         let struct_defns = Self::gen_struct_defns(&dwarf_ctx);
@@ -528,8 +526,6 @@ impl IRInterface for Uclid5Interface {
                 let bytes = typ.to_bytes();
                 Self::deref_app_to_string(bytes, e1_str.unwrap(), old)
             }
-            // FIXME: Add old flag to all spec functions and wrap "old"
-            // around the base identifier or memory variable if it's a global
             Op::Old => Self::spec_expr_to_string(
                 func_name,
                 opapp
@@ -549,9 +545,9 @@ impl IRInterface for Uclid5Interface {
                     opapp.operands.get(0).unwrap(),
                     &dwarf_ctx.typ_map(),
                 );
-                let typ_size = match &*typ {
-                    DwarfTypeDefn::Array { in_typ: _, out_typ }
-                    | DwarfTypeDefn::Pointer { value_typ: out_typ } => out_typ.as_ref().to_bytes(),
+                let out_typ_size = match &*typ {
+                    DwarfTypeDefn::Array { in_typ: _, out_typ, bytes:_ }
+                    | DwarfTypeDefn::Pointer { value_typ: out_typ, bytes:_ } => out_typ.as_ref().to_bytes(),
                     _ => panic!("Should be array or pointer type!"),
                 };
                 let array = e1_str.unwrap();
@@ -563,12 +559,12 @@ impl IRInterface for Uclid5Interface {
                 );
                 format!(
                     "{}({}, {})",
-                    Self::array_index_macro_name(&typ_size),
+                    Self::array_index_macro_name(&out_typ_size),
                     array,
                     Self::extend_to_match_width(
                         &index,
-                        index_val_typ.to_bytes() * BYTE_SIZE,
-                        typ.to_bytes() * BYTE_SIZE
+                        index_val_typ.to_bytes() * utils::BYTE_SIZE,
+                        typ.to_bytes() * utils::BYTE_SIZE
                     )
                 )
             }
@@ -607,7 +603,7 @@ impl IRInterface for Uclid5Interface {
                 format!(
                     "{}(a0)[{}:0]",
                     if old { "old" } else { "" },
-                    BYTE_SIZE * typ.to_bytes() - 1
+                    utils::BYTE_SIZE * typ.to_bytes() - 1
                 )
             } else {
                 format!("{}({})", if old { "old" } else { "" }, name)

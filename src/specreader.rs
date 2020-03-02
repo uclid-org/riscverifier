@@ -1,6 +1,5 @@
 use std::collections::HashMap;
 use std::fs;
-use std::rc::Rc;
 
 use pest::iterators::Pair;
 use pest::Parser;
@@ -50,7 +49,7 @@ impl<'s> SpecReader<'s> {
                     let func_name = SpecReader::get_func_name(spec_pair)?;
                     let mut function_specs_vec = vec![];
                     while let Some(spec_stmt_pair) = spec_inner.next() {
-                        let spec_stmt = self.translate_spec_stmt(spec_stmt_pair)?;
+                        let spec_stmt = self.translate_spec_stmt(&func_name, spec_stmt_pair)?;
                         function_specs_vec.push(spec_stmt);
                     }
                     function_specs_map.insert(func_name, function_specs_vec);
@@ -80,12 +79,12 @@ impl<'s> SpecReader<'s> {
         }
     }
 
-    fn translate_spec_stmt(&self, pair: Pair<Rule>) -> Result<ir::Spec, utils::Error> {
+    fn translate_spec_stmt(&self, func_name: &str, pair: Pair<Rule>) -> Result<ir::Spec, utils::Error> {
         match pair.as_rule() {
             Rule::spec_stmt => {
                 let mut spec_stmt_inner = pair.into_inner();
                 let spec_type = spec_stmt_inner.next().unwrap().as_str();
-                let bool_expr = self.translate_expr(spec_stmt_inner.next().unwrap())?;
+                let bool_expr = self.translate_expr(func_name, spec_stmt_inner.next().unwrap())?;
                 match spec_type {
                     "requires" => Ok(ir::Spec::Requires(bool_expr)),
                     "ensures" => Ok(ir::Spec::Ensures(bool_expr)),
@@ -100,27 +99,27 @@ impl<'s> SpecReader<'s> {
         }
     }
 
-    fn translate_expr(&self, pair: Pair<Rule>) -> Result<ir::Expr, utils::Error> {
+    fn translate_expr(&self, func_name: &str, pair: Pair<Rule>) -> Result<ir::Expr, utils::Error> {
         let rule = pair.as_rule();
         let pair_str = pair.as_str();
         let mut inner = pair.into_inner();
         match rule {
             Rule::old => {
-                let inner_expr = self.translate_expr(inner.next().unwrap())?;
+                let inner_expr = self.translate_expr(func_name, inner.next().unwrap())?;
                 Ok(ir::Expr::op_app(ir::Op::Old, vec![inner_expr]))
             }
             Rule::value_expr | Rule::bool_expr | Rule::get_field | Rule::array_index => {
-                self.translate_expr(inner.next().unwrap())
+                self.translate_expr(func_name, inner.next().unwrap())
             }
             Rule::comp_eval | Rule::bool_eval | Rule::bv_eval => {
-                let v1 = self.translate_expr(inner.next().unwrap())?;
+                let v1 = self.translate_expr(func_name, inner.next().unwrap())?;
                 let op = self.translate_op(inner.next().unwrap())?;
-                let v2 = self.translate_expr(inner.next().unwrap())?;
+                let v2 = self.translate_expr(func_name, inner.next().unwrap())?;
                 Ok(ir::Expr::op_app(op, vec![v1, v2]))
             }
             Rule::unary_bool_eval => {
                 let op = self.translate_op(inner.next().unwrap())?;
-                let v = self.translate_expr(inner.next().unwrap())?;
+                let v = self.translate_expr(func_name, inner.next().unwrap())?;
                 Ok(ir::Expr::op_app(op, vec![v]))
             }
             Rule::bool_const => Ok(ir::Expr::bool_lit(pair_str == "true")),
@@ -139,8 +138,9 @@ impl<'s> SpecReader<'s> {
             }
             Rule::path => {
                 let mut path_ref = false;
-                let mut path = self.translate_expr(inner.next().unwrap())?;
-                let is_global_var = self.dwarf_ctx.global_var(&path.get_expect_var().name).is_some();
+                let mut path = self.translate_expr(func_name, inner.next().unwrap())?;
+                let is_global_var = self.dwarf_ctx.global_var(&path.get_expect_var().name).is_ok();
+                let is_ptr_type = self.dwarf_ctx.func_sig(func_name)?.args.iter().find(|v| v.typ_defn.is_ptr_type()).is_some();
                 while let Some(e) = inner.next() {
                     match e.as_rule() {
                         Rule::path_ref => {
@@ -149,7 +149,7 @@ impl<'s> SpecReader<'s> {
                         Rule::array_index => {
                             path = ir::Expr::op_app(
                                 ir::Op::ArrayIndex,
-                                vec![path, self.translate_expr(e)?],
+                                vec![path, self.translate_expr(func_name, e)?],
                             );
                         }
                         Rule::get_field => {
@@ -163,11 +163,8 @@ impl<'s> SpecReader<'s> {
                         _ => panic!("[translate_expr] Not a valid path."),
                     }
                 }
-                // FIXME: Currently only dereference global variables
-                // But it should deference a variable if it's a pointer/struct as well
-                // Maybe we should create syntax for dereferencing because it will
-                // depend on the compiler
-                if !path_ref && is_global_var {
+                // TODO: Are globals usually always pointers?
+                if !path_ref && (is_global_var || is_ptr_type) {
                     path = ir::Expr::op_app(ir::Op::Deref, vec![path]);
                 }
                 Ok(path)

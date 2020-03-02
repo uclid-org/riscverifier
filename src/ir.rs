@@ -502,8 +502,8 @@ pub trait IRInterface: fmt::Debug {
                 Op::ArrayIndex => {
                     let pred_typ = Self::get_expr_type(func_name, &opapp.operands[0], typ_map);
                     match &*pred_typ {
-                        DwarfTypeDefn::Array { in_typ: _, out_typ } => Rc::clone(&out_typ),
-                        DwarfTypeDefn::Pointer { value_typ } => Rc::clone(&value_typ),
+                        DwarfTypeDefn::Array { in_typ: _, out_typ, bytes:_ } => Rc::clone(&out_typ),
+                        DwarfTypeDefn::Pointer { value_typ, bytes:_ } => Rc::clone(&value_typ),
                         _ => panic!("Should be an array type!"),
                     }
                 }

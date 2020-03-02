@@ -128,7 +128,7 @@ fn main() {
         });
     // Initialize DWARF reader
     let dwarf_reader: Rc<DwarfReader<CDwarfInterface>> =
-        Rc::new(DwarfReader::new(&binary_paths).unwrap());
+        Rc::new(DwarfReader::new(&xlen, &binary_paths).unwrap());
     // Function to generate
     let func_names = matches
         .value_of("function")
