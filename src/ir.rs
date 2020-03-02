@@ -3,7 +3,7 @@ use std::collections::{HashMap, HashSet};
 use std::fmt;
 use std::rc::Rc;
 
-use crate::dwarfreader::{DwarfTypeDefn, DwarfCtx};
+use crate::dwarfreader::{DwarfCtx, DwarfTypeDefn};
 use crate::utils;
 
 /// Types
@@ -446,28 +446,17 @@ pub trait IRInterface: fmt::Debug {
             Expr::Literal(l) => Self::lit_to_string(l),
             Expr::FuncApp(fapp) => Self::spec_fapp_to_string(func_name, fapp, dwarf_ctx),
             Expr::OpApp(opapp) => Self::spec_opapp_to_string(func_name, opapp, dwarf_ctx, old),
-            Expr::Var(v) | Expr::Const(v) => {
-                Self::spec_var_to_string(func_name, v, dwarf_ctx, old)
-            }
+            Expr::Var(v) | Expr::Const(v) => Self::spec_var_to_string(func_name, v, dwarf_ctx, old),
         }
     }
-    fn spec_fapp_to_string(
-        func_name: &str,
-        fapp: &FuncApp,
-        dwarf_ctx: &DwarfCtx,
-    ) -> String;
+    fn spec_fapp_to_string(func_name: &str, fapp: &FuncApp, dwarf_ctx: &DwarfCtx) -> String;
     fn spec_opapp_to_string(
         func_name: &str,
         opapp: &OpApp,
         dwarf_ctx: &DwarfCtx,
         old: bool,
     ) -> String;
-    fn spec_var_to_string(
-        func_name: &str,
-        v: &Var,
-        dwarf_ctx: &DwarfCtx,
-        old: bool,
-    ) -> String;
+    fn spec_var_to_string(func_name: &str, v: &Var, dwarf_ctx: &DwarfCtx, old: bool) -> String;
     fn get_expr_type(
         func_name: &str,
         expr: &Expr,
@@ -502,8 +491,15 @@ pub trait IRInterface: fmt::Debug {
                 Op::ArrayIndex => {
                     let pred_typ = Self::get_expr_type(func_name, &opapp.operands[0], typ_map);
                     match &*pred_typ {
-                        DwarfTypeDefn::Array { in_typ: _, out_typ, bytes:_ } => Rc::clone(&out_typ),
-                        DwarfTypeDefn::Pointer { value_typ, bytes:_ } => Rc::clone(&value_typ),
+                        DwarfTypeDefn::Array {
+                            in_typ: _,
+                            out_typ,
+                            bytes: _,
+                        } => Rc::clone(&out_typ),
+                        DwarfTypeDefn::Pointer {
+                            value_typ,
+                            bytes: _,
+                        } => Rc::clone(&value_typ),
                         _ => panic!("Should be an array type!"),
                     }
                 }

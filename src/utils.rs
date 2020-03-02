@@ -40,7 +40,6 @@ pub fn indent_text(s: String, indent: usize) -> String {
 }
 
 /// Constants
-pub const PRELUDE_PATH: &str =  "models/prelude.ucl";
+pub const PRELUDE_PATH: &str = "models/prelude.ucl";
 pub const INST_LENGTH: u64 = 4;
 pub const BYTE_SIZE: u64 = 8;
-

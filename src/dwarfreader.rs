@@ -62,7 +62,7 @@ pub enum DwarfTypeDefn {
 impl DwarfTypeDefn {
     pub fn is_ptr_type(&self) -> bool {
         match self {
-            DwarfTypeDefn::Array {..} | DwarfTypeDefn::Pointer {..} => true,
+            DwarfTypeDefn::Array { .. } | DwarfTypeDefn::Pointer { .. } => true,
             _ => false,
         }
     }
@@ -84,8 +84,15 @@ impl DwarfTypeDefn {
                 fields: _,
                 bytes,
             } => *bytes,
-            DwarfTypeDefn::Array { in_typ:_, out_typ:_, bytes } => *bytes,
-            DwarfTypeDefn::Pointer { value_typ: _, bytes } => *bytes,
+            DwarfTypeDefn::Array {
+                in_typ: _,
+                out_typ: _,
+                bytes,
+            } => *bytes,
+            DwarfTypeDefn::Pointer {
+                value_typ: _,
+                bytes,
+            } => *bytes,
         }
     }
 }
@@ -184,7 +191,10 @@ pub trait DwarfInterface: std::fmt::Debug {
     /// ====================== Helper functions ======================
     /// Parses the binary files in the paths and returns
     /// the corresponding DwarfObjects from the debugging information
-    fn process_dwarf_files(xlen: &u64, paths: &Vec<String>) -> Result<Vec<DwarfObject>, gimli::Error> {
+    fn process_dwarf_files(
+        xlen: &u64,
+        paths: &Vec<String>,
+    ) -> Result<Vec<DwarfObject>, gimli::Error> {
         let mut dwarf_objects = vec![];
         for path in paths {
             let mut dwarf_object = Self::process_dwarf_file(xlen, path)?;
@@ -377,13 +387,18 @@ pub struct DwarfCtx {
 
 impl DwarfCtx {
     pub fn global_var(&self, name: &str) -> Result<&DwarfVar, utils::Error> {
-        self.global_vars.iter().find(|v| v.name == name).ok_or(utils::Error::MissingVar)
+        self.global_vars
+            .iter()
+            .find(|v| v.name == name)
+            .ok_or(utils::Error::MissingVar)
     }
     pub fn global_vars(&self) -> &Vec<DwarfVar> {
         &self.global_vars
     }
     pub fn func_sig(&self, func_name: &str) -> Result<&DwarfFuncSig, utils::Error> {
-        self.func_sigs.get(func_name).ok_or(utils::Error::MissingFuncSig)
+        self.func_sigs
+            .get(func_name)
+            .ok_or(utils::Error::MissingFuncSig)
     }
     pub fn func_sigs(&self) -> &HashMap<String, DwarfFuncSig> {
         &self.func_sigs
@@ -419,13 +434,20 @@ where
             .flatten()
             .collect();
         let typ_map = Self::compute_typ_map(&func_sigs, &global_vars);
-        let ctx = DwarfCtx{ func_sigs, global_vars, typ_map };
+        let ctx = DwarfCtx {
+            func_sigs,
+            global_vars,
+            typ_map,
+        };
         Ok(DwarfReader {
             ctx,
             _phantom_data: PhantomData,
         })
     }
-    pub fn compute_typ_map(func_sigs: &HashMap<String, DwarfFuncSig>, global_vars: &Vec<DwarfVar>) -> HashMap<String, Rc<DwarfTypeDefn>> {
+    pub fn compute_typ_map(
+        func_sigs: &HashMap<String, DwarfFuncSig>,
+        global_vars: &Vec<DwarfVar>,
+    ) -> HashMap<String, Rc<DwarfTypeDefn>> {
         let mut typ_map = HashMap::new();
         // Add globals to type map
         for v in global_vars {
@@ -447,9 +469,7 @@ where
         // Add system variable types
         typ_map.insert(
             format!("${}", translator::EXCEPT_VAR),
-            Rc::new(DwarfTypeDefn::Primitive {
-                bytes: 8,
-            }),
+            Rc::new(DwarfTypeDefn::Primitive { bytes: 8 }),
         );
         typ_map
     }

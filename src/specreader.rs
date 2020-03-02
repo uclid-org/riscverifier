@@ -79,7 +79,11 @@ impl<'s> SpecReader<'s> {
         }
     }
 
-    fn translate_spec_stmt(&self, func_name: &str, pair: Pair<Rule>) -> Result<ir::Spec, utils::Error> {
+    fn translate_spec_stmt(
+        &self,
+        func_name: &str,
+        pair: Pair<Rule>,
+    ) -> Result<ir::Spec, utils::Error> {
         match pair.as_rule() {
             Rule::spec_stmt => {
                 let mut spec_stmt_inner = pair.into_inner();
@@ -139,8 +143,17 @@ impl<'s> SpecReader<'s> {
             Rule::path => {
                 let mut path_ref = false;
                 let mut path = self.translate_expr(func_name, inner.next().unwrap())?;
-                let is_global_var = self.dwarf_ctx.global_var(&path.get_expect_var().name).is_ok();
-                let is_ptr_type = self.dwarf_ctx.func_sig(func_name)?.args.iter().find(|v| v.typ_defn.is_ptr_type()).is_some();
+                let is_global_var = self
+                    .dwarf_ctx
+                    .global_var(&path.get_expect_var().name)
+                    .is_ok();
+                let is_ptr_type = self
+                    .dwarf_ctx
+                    .func_sig(func_name)?
+                    .args
+                    .iter()
+                    .find(|v| v.typ_defn.is_ptr_type())
+                    .is_some();
                 while let Some(e) = inner.next() {
                     match e.as_rule() {
                         Rule::path_ref => {

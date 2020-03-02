@@ -525,7 +525,10 @@ where
     }
     fn get_func_cfg(&self, func_name: &str) -> Result<&Rc<Cfg>, utils::Error> {
         self.func_cfg_map.get(func_name).map_or(
-            Err(utils::Error::TranslatorErr(format!("Could not find function {} cfg.", func_name))),
+            Err(utils::Error::TranslatorErr(format!(
+                "Could not find function {} cfg.",
+                func_name
+            ))),
             |rc| Ok(rc),
         )
     }
@@ -549,7 +552,10 @@ where
     #[allow(dead_code)]
     fn get_func_cfg_addr(&self, addr: &str) -> Result<&Rc<Cfg>, utils::Error> {
         self.func_cfg_map.get(addr).map_or(
-            Err(utils::Error::TranslatorErr(format!("Could not find function cfg with entry address {}.", addr))),
+            Err(utils::Error::TranslatorErr(format!(
+                "Could not find function cfg with entry address {}.",
+                addr
+            ))),
             |rc| Ok(rc),
         )
     }

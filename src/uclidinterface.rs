@@ -52,7 +52,11 @@ impl Uclid5Interface {
                     ))
                 }
             }
-            DwarfTypeDefn::Array { in_typ, out_typ, bytes:_ } => {
+            DwarfTypeDefn::Array {
+                in_typ,
+                out_typ,
+                bytes: _,
+            } => {
                 defns.append(&mut Self::gen_array_defn(in_typ));
                 defns.append(&mut Self::gen_array_defn(out_typ));
             }
@@ -72,9 +76,10 @@ impl Uclid5Interface {
                     ))
                 }
             }
-            DwarfTypeDefn::Pointer { value_typ, bytes:_ } => {
-                defns.append(&mut Self::gen_array_defn(&value_typ))
-            }
+            DwarfTypeDefn::Pointer {
+                value_typ,
+                bytes: _,
+            } => defns.append(&mut Self::gen_array_defn(&value_typ)),
         };
         defns
     }
@@ -138,7 +143,11 @@ impl Uclid5Interface {
                     ));
                 }
             }
-            DwarfTypeDefn::Array { in_typ, out_typ, bytes:_ } => {
+            DwarfTypeDefn::Array {
+                in_typ,
+                out_typ,
+                bytes: _,
+            } => {
                 defns.append(&mut Self::gen_struct_defn(&in_typ));
                 defns.append(&mut Self::gen_struct_defn(&out_typ));
             }
@@ -489,11 +498,7 @@ impl IRInterface for Uclid5Interface {
     }
 
     /// Specification langauge translation functions
-    fn spec_fapp_to_string(
-        name: &str,
-        fapp: &FuncApp,
-        dwarf_ctx: &DwarfCtx,
-    ) -> String {
+    fn spec_fapp_to_string(name: &str, fapp: &FuncApp, dwarf_ctx: &DwarfCtx) -> String {
         format!(
             "{}({})",
             fapp.func_name,
@@ -546,8 +551,15 @@ impl IRInterface for Uclid5Interface {
                     &dwarf_ctx.typ_map(),
                 );
                 let out_typ_size = match &*typ {
-                    DwarfTypeDefn::Array { in_typ: _, out_typ, bytes:_ }
-                    | DwarfTypeDefn::Pointer { value_typ: out_typ, bytes:_ } => out_typ.as_ref().to_bytes(),
+                    DwarfTypeDefn::Array {
+                        in_typ: _,
+                        out_typ,
+                        bytes: _,
+                    }
+                    | DwarfTypeDefn::Pointer {
+                        value_typ: out_typ,
+                        bytes: _,
+                    } => out_typ.as_ref().to_bytes(),
                     _ => panic!("Should be array or pointer type!"),
                 };
                 let array = e1_str.unwrap();
@@ -586,12 +598,7 @@ impl IRInterface for Uclid5Interface {
 
     /// Specification variable to Uclid5 variable
     /// Globals are shadowed by function variables
-    fn spec_var_to_string(
-        func_name: &str,
-        v: &Var,
-        dwarf_ctx: &DwarfCtx,
-        old: bool,
-    ) -> String {
+    fn spec_var_to_string(func_name: &str, v: &Var, dwarf_ctx: &DwarfCtx, old: bool) -> String {
         if v.name.chars().next().unwrap() == '$' {
             let name = v.name.replace("$", "");
             if name == "ret" {
