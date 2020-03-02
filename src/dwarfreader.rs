@@ -4,7 +4,6 @@ use std::collections::HashMap;
 use std::marker::PhantomData;
 use std::{borrow, fs, rc::Rc};
 
-use crate::translator;
 use crate::utils;
 
 #[derive(Debug, Clone)]
@@ -253,7 +252,7 @@ pub trait DwarfInterface: std::fmt::Debug {
             if let Some(mut dwarf_object) =
                 Self::entries_to_dwarf_object(&unit, &dwarf, &mut entries_cursor)?
             {
-                dwarf_object.add_attr("pointer_size", DwarfAttributeValue::NumericAttr(*xlen));
+                dwarf_object.add_attr("pointer_size", DwarfAttributeValue::NumericAttr(*xlen / utils::BYTE_SIZE));
                 dwarf_objects.push(dwarf_object);
             }
         }
@@ -466,11 +465,6 @@ where
                 typ_map.insert(format!("{}$$ret", fun_name), Rc::clone(ret_typ));
             }
         }
-        // Add system variable types
-        typ_map.insert(
-            format!("${}", translator::EXCEPT_VAR),
-            Rc::new(DwarfTypeDefn::Primitive { bytes: 8 }),
-        );
         typ_map
     }
     pub fn ctx(&self) -> &DwarfCtx {
