@@ -38,6 +38,7 @@ UPDATE: Currently, the SMTLIB interface in Uclid5 is broken and the models will 
 
 ## TODO
 
+* [ ] Add option to manually specify the modifies set
 * [ ] Add deref and ref in specification language
 * [ ] Write spec language (syntax and semantics) document
 * [ ] Support for floating point registers
