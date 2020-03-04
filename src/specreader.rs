@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::fs;
 
 use pest::iterators::Pair;
@@ -88,19 +88,33 @@ impl<'s> SpecReader<'s> {
             Rule::spec_stmt => {
                 let mut spec_stmt_inner = pair.into_inner();
                 let spec_type = spec_stmt_inner.next().unwrap().as_str();
-                let bool_expr = self.translate_expr(func_name, spec_stmt_inner.next().unwrap())?;
+                let expr = self.translate_expr(func_name, spec_stmt_inner.next().unwrap())?;
                 match spec_type {
-                    "requires" => Ok(ir::Spec::Requires(bool_expr)),
-                    "ensures" => Ok(ir::Spec::Ensures(bool_expr)),
+                    "requires" => Ok(ir::Spec::Requires(expr)),
+                    "ensures" => Ok(ir::Spec::Ensures(expr)),
                     _ => Err(utils::Error::SpecParseError(
                         "Invalid spec line.".to_string(),
                     )),
                 }
             }
+            Rule::mod_stmt => Ok(ir::Spec::Modifies(self.translate_mod_set(pair)?)),
             _ => Err(utils::Error::SpecParseError(
                 "Unable to translate spec statement.".to_string(),
             )),
         }
+    }
+
+    fn translate_mod_set(&self, pair: Pair<Rule>) -> Result<HashSet<ir::Var>, utils::Error> {
+        let mut mod_set = HashSet::new();
+        let mut inner = pair.into_inner();
+        while let Some(e) = inner.next() {
+            let var_str = e.as_str();
+            mod_set.insert(ir::Var {
+                name: var_str.to_string(),
+                typ: ir::Type::Unknown,
+            });
+        }
+        Ok(mod_set)
     }
 
     fn translate_expr(&self, func_name: &str, pair: Pair<Rule>) -> Result<ir::Expr, utils::Error> {

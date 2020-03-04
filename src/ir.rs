@@ -265,9 +265,9 @@ impl FuncModel {
         name: &str,
         arg_decls: Vec<Expr>,
         ret_decl: Option<Expr>,
-        requires: Vec<Spec>,
-        ensures: Vec<Spec>,
-        mod_set: HashSet<String>,
+        requires: Option<Vec<Spec>>,
+        ensures: Option<Vec<Spec>>,
+        mod_set: Option<HashSet<String>>,
         body: Stmt,
         inline: bool,
     ) -> Self {
@@ -275,6 +275,9 @@ impl FuncModel {
             &body.is_blk(),
             format!("Body of {} should be a block.", name)
         );
+        let mod_set = mod_set.unwrap_or(HashSet::new());
+        let requires = requires.unwrap_or(vec![]);
+        let ensures = ensures.unwrap_or(vec![]);
         FuncModel {
             sig: FuncSig::new(name, arg_decls, ret_decl, requires, ensures, mod_set),
             body: body,
@@ -325,22 +328,37 @@ impl FuncSig {
 pub enum Spec {
     Requires(Expr),
     Ensures(Expr),
+    Modifies(HashSet<Var>),
 }
 impl Spec {
     pub fn expr(&self) -> &Expr {
         match &self {
             Spec::Requires(e) | Spec::Ensures(e) => e,
+            _ => panic!("Spec does not contain an expression."),
+        }
+    }
+    pub fn mod_set(&self) -> &HashSet<Var> {
+        match &self {
+            Spec::Modifies(hs) => hs,
+            _ => panic!("Spec is not a modifies statement."),
         }
     }
     pub fn is_requires(&self) -> bool {
-        if let Spec::Requires(_e) = self {
+        if let Spec::Requires(_) = self {
             true
         } else {
             false
         }
     }
     pub fn is_ensures(&self) -> bool {
-        if let Spec::Ensures(_e) = self {
+        if let Spec::Ensures(_) = self {
+            true
+        } else {
+            false
+        }
+    }
+    pub fn is_modifies(&self) -> bool {
+        if let Spec::Modifies(_) = self {
             true
         } else {
             false

@@ -51,11 +51,12 @@ bool_expr =  { comp_eval
 
 spec_type = @{ "requires" | "ensures" }
 
+mod_stmt = { "modifies" ~ identifier ~ ("," ~ identifier)* ~ ";"* }
 spec_stmt = { spec_type ~ bool_expr ~ ";"* }
 
 spec_end = _{ "end_spec" }
 spec_begin = _{ "begin_spec" }
 func_name = { identifier }
-func_spec = { spec_begin ~ "(" ~ func_name ~ ")" ~ (spec_stmt)+ ~ spec_end }
+func_spec = { spec_begin ~ "(" ~ func_name ~ ")" ~ (mod_stmt | spec_stmt)+ ~ spec_end }
 
 func_specs = { SOI ~ func_spec+ ~ EOI}
