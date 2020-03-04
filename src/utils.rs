@@ -5,7 +5,7 @@ pub enum Error {
     CouldNotFindDwarfChild,
     CouldNotFindType,
     MissingVar,
-    MissingFuncSig,
+    MissingFuncSig(String),
     // Translator errors
     TranslatorErr(String),
     // Specification parser errors
