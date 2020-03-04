@@ -463,7 +463,7 @@ impl DwarfCtx {
     pub fn func_sig(&self, func_name: &str) -> Result<&DwarfFuncSig, utils::Error> {
         self.func_sigs
             .get(func_name)
-            .ok_or(utils::Error::MissingFuncSig(func_name))
+            .ok_or(utils::Error::MissingFuncSig(func_name.to_string()))
     }
     /// Returns a map of all the function signatures
     pub fn func_sigs(&self) -> &HashMap<String, DwarfFuncSig> {
