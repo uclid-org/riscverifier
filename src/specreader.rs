@@ -159,7 +159,10 @@ impl<'s> SpecReader<'s> {
                 let mut path = self.translate_expr(func_name, inner.next().unwrap())?;
                 // Check if it's a function reference (which is assumed to be a variable during the first translation pass)
                 if path_ref && path.is_var() && self.dwarf_ctx.is_func(&path.get_expect_var().name) {
-                    return Ok(ir::Expr::bv_lit(self.dwarf_ctx.func_sig(&path.get_expect_var().name)?.entry_addr, self.xlen));
+                    // return Ok(ir::Expr::bv_lit(self.dwarf_ctx.func_sig(&path.get_expect_var().name)?.entry_addr, self.xlen));
+                    let id = &path.get_expect_var().name;
+                    let func_app_name = utils::global_func_addr_name(id);
+                    return Ok(ir::Expr::func_app(func_app_name, vec![]));
                 }
                 let is_global_var = self
                     .dwarf_ctx

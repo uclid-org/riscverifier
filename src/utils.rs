@@ -39,6 +39,13 @@ pub fn indent_text(s: String, indent: usize) -> String {
     )
 }
 
+pub fn global_var_ptr_name(name: &str) -> String {
+    format!("global_var_{}", name)
+}
+pub fn global_func_addr_name(func_name: &str) -> String {
+    format!("global_func_{}", func_name)
+}
+
 /// Constants
 pub const PRELUDE_PATH: &str = "models/prelude.ucl";
 pub const INST_LENGTH: u64 = 4;

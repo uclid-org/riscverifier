@@ -84,7 +84,6 @@ impl Expr {
     pub fn op_app(op: Op, operands: Vec<Self>) -> Self {
         Expr::OpApp(OpApp { op, operands })
     }
-    #[allow(dead_code)]
     pub fn func_app(func_name: String, operands: Vec<Self>) -> Self {
         Expr::FuncApp(FuncApp {
             func_name,
@@ -263,6 +262,7 @@ pub struct FuncModel {
 impl FuncModel {
     pub fn new(
         name: &str,
+        entry_addr: u64,
         arg_decls: Vec<Expr>,
         ret_decl: Option<Expr>,
         requires: Option<Vec<Spec>>,
@@ -279,7 +279,7 @@ impl FuncModel {
         let requires = requires.unwrap_or(vec![]);
         let ensures = ensures.unwrap_or(vec![]);
         FuncModel {
-            sig: FuncSig::new(name, arg_decls, ret_decl, requires, ensures, mod_set),
+            sig: FuncSig::new(name, entry_addr, arg_decls, ret_decl, requires, ensures, mod_set),
             body: body,
             inline: inline,
         }
@@ -289,6 +289,7 @@ impl FuncModel {
 #[derive(Debug, Clone)]
 pub struct FuncSig {
     pub name: String,
+    pub entry_addr: u64,
     pub arg_decls: Vec<Expr>,
     pub ret_decl: Option<Expr>,
     pub requires: Vec<Spec>,
@@ -298,6 +299,7 @@ pub struct FuncSig {
 impl FuncSig {
     pub fn new(
         name: &str,
+        entry_addr: u64,
         arg_decls: Vec<Expr>,
         ret_decl: Option<Expr>,
         requires: Vec<Spec>,
@@ -316,6 +318,7 @@ impl FuncSig {
         }
         FuncSig {
             name: String::from(name),
+            entry_addr,
             arg_decls,
             ret_decl,
             requires,

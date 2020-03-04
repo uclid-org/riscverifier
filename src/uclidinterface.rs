@@ -168,12 +168,21 @@ impl Uclid5Interface {
     fn gen_global_defn(global_var: &DwarfVar) -> String {
         format!(
             "define {}(): xlen_t = {};",
-            Self::global_var_ptr_name(&global_var.name[..]),
+            utils::global_var_ptr_name(&global_var.name[..]),
             format!("to_xlen_t({}bv64)", global_var.memory_addr)
         )
     }
-    fn global_var_ptr_name(name: &str) -> String {
-        format!("global_{}", name)
+    fn gen_global_func_defns(model: &Model) -> String {
+        let mut defns = String::from("// Global function entry addresses\n");
+        for fm in &model.func_models {
+            defns = format!("{}{}\n", defns, Self::gen_global_func_defn(&fm.sig.name, fm.sig.entry_addr));
+        }
+        utils::indent_text(defns, 4)
+    }
+    fn gen_global_func_defn(func_name: &str, func_entry_addr: u64) -> String {
+        format!("define {}(): xlen_t = {};",
+            utils::global_func_addr_name(func_name),
+            format!("to_xlen_t({}bv64)", func_entry_addr))
     }
     fn gen_procs(model: &Model, dwarf_ctx: &DwarfCtx) -> String {
         let procs_string = model
@@ -486,14 +495,15 @@ impl IRInterface for Uclid5Interface {
         // definitions
         let array_defns = Self::gen_array_defns(&dwarf_ctx);
         let struct_defns = Self::gen_struct_defns(&dwarf_ctx);
-        let global_defns = Self::gen_global_defns(&dwarf_ctx);
+        let global_var_defns = Self::gen_global_defns(&dwarf_ctx);
+        let global_func_defns = Self::gen_global_func_defns(&model);
         // procedures
         let procs = Self::gen_procs(model, &dwarf_ctx);
         // control block
         let ctrl_blk = Self::control_blk(model, &dwarf_ctx);
         format!(
-            "module main {{\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n\n{}\n}}",
-            xlen_defn, prelude, var_defns, array_defns, struct_defns, global_defns, procs, ctrl_blk
+            "module main {{\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n\n{}\n}}",
+            xlen_defn, prelude, var_defns, array_defns, struct_defns, global_var_defns, global_func_defns, procs, ctrl_blk
         )
     }
 
@@ -635,7 +645,7 @@ impl IRInterface for Uclid5Interface {
             .find(|x| x.name == v.name)
             .is_some()
         {
-            format!("{}()", Self::global_var_ptr_name(&v.name[..]))
+            format!("{}()", utils::global_var_ptr_name(&v.name[..]))
         } else {
             panic!("Unable to find variable {:?}", v);
         }

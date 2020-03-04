@@ -83,6 +83,7 @@ where
         // Create stub function model
         let stub_fm = FuncModel::new(
             func_name,
+            *self.get_func_entry_addr(func_name)?,
             arg_decls,
             ret_decl,
             requires,
@@ -120,6 +121,7 @@ where
                 let mod_set = self.bb_mod_set(bb);
                 FuncModel::new(
                     &bb_proc_name,
+                    *entry_addr,
                     vec![],
                     None,
                     None,
@@ -175,6 +177,7 @@ where
         // Add function model
         self.model.add_func_model(FuncModel::new(
             func_name,
+            *self.get_func_entry_addr(func_name)?,
             arg_decls,
             ret_decl,
             requires,
