@@ -147,11 +147,16 @@ impl<'s> SpecReader<'s> {
             )),
             Rule::bitvec => {
                 let mut iter = pair_str.split("bv");
-                let val = iter.next().unwrap();
-                let width = iter.next().unwrap();
+                let val_str = iter.next().unwrap();
+                let val = if val_str.len() > 2 && &val_str[0..2] == "0x" {
+                    utils::hex_str_to_u64(&val_str[2..]).unwrap()
+                } else {
+                    utils::dec_str_to_u64(&val_str).unwrap()
+                };
+                let width = utils::dec_str_to_u64(iter.next().unwrap()).unwrap();
                 Ok(ir::Expr::bv_lit(
-                    utils::dec_str_to_u64(val).unwrap(),
-                    utils::dec_str_to_u64(width).unwrap(),
+                    val,
+                    width,
                 ))
             }
             Rule::path | Rule::path_ref => {

@@ -4,7 +4,8 @@ COMMENT = _{ ("/*" ~ (!"*/" ~ ANY)* ~ "*/") | ("//" ~ (!NEWLINE ~ ANY)* ~ NEWLIN
 char = { ASCII_ALPHANUMERIC | "_" }
 
 integer = @{ "-"? ~ ASCII_DIGIT+ }
-bitvec = @{ ASCII_DIGIT+ ~ "bv" ~ ASCII_DIGIT+ }
+hex_digit = { '0'..'9' | 'A'..'F' }
+bitvec = @{ (("0x" ~ hex_digit+)| ASCII_DIGIT+) ~ "bv" ~ ASCII_DIGIT+ }
 identifier = @{ "$"? ~ ASCII_ALPHA ~ char* }
 
 old = { "old" ~ "(" ~ path ~ ")" }
