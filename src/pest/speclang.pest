@@ -29,12 +29,13 @@ bool_const = @{ "true"
 			  | "false"
 			  }
 
-path = { path_ref? ~ identifier ~ (array_index | get_field)* }
-path_ref = @{ "&" }
+path = { identifier ~ (array_index | get_field)* }
+path_ref = { "&" ~ identifier ~ (array_index | get_field)* }
 
 p_value_expr = _{ "(" ~ value_expr ~ ")" }
 value_expr = { bv_eval
 			 | old
+			 | path_ref
 			 | path
  			 | bitvec
  			 | integer

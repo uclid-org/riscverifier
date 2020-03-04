@@ -154,9 +154,13 @@ impl<'s> SpecReader<'s> {
                     utils::dec_str_to_u64(width).unwrap(),
                 ))
             }
-            Rule::path => {
-                let mut path_ref = false;
+            Rule::path | Rule::path_ref => {
+                let path_ref = rule == Rule::path_ref;
                 let mut path = self.translate_expr(func_name, inner.next().unwrap())?;
+                // Check if it's a function reference (which is assumed to be a variable during the first translation pass)
+                if path_ref && path.is_var() && self.dwarf_ctx.is_func(&path.get_expect_var().name) {
+                    return Ok(ir::Expr::bv_lit(self.dwarf_ctx.func_sig(&path.get_expect_var().name)?.entry_addr, self.xlen));
+                }
                 let is_global_var = self
                     .dwarf_ctx
                     .global_var(&path.get_expect_var().name)
@@ -170,9 +174,6 @@ impl<'s> SpecReader<'s> {
                     .is_some();
                 while let Some(e) = inner.next() {
                     match e.as_rule() {
-                        Rule::path_ref => {
-                            path_ref = true;
-                        }
                         Rule::array_index => {
                             path = ir::Expr::op_app(
                                 ir::Op::ArrayIndex,
