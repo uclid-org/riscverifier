@@ -139,8 +139,9 @@ impl ObjectDumpReader {
                 }
             }
         }
-        assert!(assembly_lines.len() == 0, "Binary contains no programs!");
-        function_blocks.insert(assembly_lines[0].address.clone(), assembly_lines.clone());
+        if assembly_lines.len() > 0 {
+            function_blocks.insert(assembly_lines[0].address.clone(), assembly_lines.clone());
+        }
         function_blocks
     }
 
