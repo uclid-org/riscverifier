@@ -1,3 +1,8 @@
+begin_spec(printm)
+requires(true);
+ensures (true);
+end_spec
+
 begin_spec(region_get_addr)
 requires ((0bv32 <= i) && (i < 16bv32));
 ensures (($exception == 0bv64) ==> ($ret == regions[i].addr));
@@ -42,6 +47,5 @@ ensures true;
 end_spec
 
 begin_spec(pmp_set)
-ensures($mtvec != old($mtvec));
 ensures true;
 end_spec
