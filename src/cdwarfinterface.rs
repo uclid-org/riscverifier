@@ -14,7 +14,6 @@ impl CDwarfInterface {
     ) -> Result<DwarfFuncSig, utils::Error> {
         assert!(dobj.tag_name == "DW_TAG_subprogram");
         let name = dobj.get_attr("DW_AT_name")?.get_expect_str_val().clone();
-        let entry_addr = *dobj.get_attr("DW_AT_low_pc")?.get_expect_num_val();
         let type_defn_index = dobj.get_attr("DW_AT_type")?.get_expect_num_val();
         let type_defn = Self::get_type(type_defn_index, comp_unit).ok();
         let args = dobj
@@ -33,7 +32,7 @@ impl CDwarfInterface {
             .filter(|res: &Result<DwarfVar, utils::Error>| res.is_ok())
             .map(|res| res.unwrap())
             .collect::<Vec<_>>();
-        Ok(DwarfFuncSig::new(name, args, type_defn, entry_addr))
+        Ok(DwarfFuncSig::new(name, args, type_defn))
     }
 
     fn dobj_to_var(dobj: &DwarfObject, comp_unit: &DwarfObject) -> Result<DwarfVar, utils::Error> {

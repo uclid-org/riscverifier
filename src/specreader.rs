@@ -154,16 +154,14 @@ impl<'s> SpecReader<'s> {
                     utils::dec_str_to_u64(&val_str).unwrap()
                 };
                 let width = utils::dec_str_to_u64(iter.next().unwrap()).unwrap();
-                Ok(ir::Expr::bv_lit(
-                    val,
-                    width,
-                ))
+                Ok(ir::Expr::bv_lit(val, width))
             }
             Rule::path | Rule::path_ref => {
                 let path_ref = rule == Rule::path_ref;
                 let mut path = self.translate_expr(func_name, inner.next().unwrap())?;
                 // Check if it's a function reference (which is assumed to be a variable during the first translation pass)
-                if path_ref && path.is_var() && self.dwarf_ctx.is_func(&path.get_expect_var().name) {
+                if path_ref && path.is_var() && self.dwarf_ctx.is_func(&path.get_expect_var().name)
+                {
                     let id = &path.get_expect_var().name;
                     let func_app_name = utils::global_func_addr_name(id);
                     return Ok(ir::Expr::func_app(func_app_name, vec![]));

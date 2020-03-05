@@ -175,14 +175,20 @@ impl Uclid5Interface {
     fn gen_global_func_defns(model: &Model) -> String {
         let mut defns = String::from("// Global function entry addresses\n");
         for fm in &model.func_models {
-            defns = format!("{}{}\n", defns, Self::gen_global_func_defn(&fm.sig.name, fm.sig.entry_addr));
+            defns = format!(
+                "{}{}\n",
+                defns,
+                Self::gen_global_func_defn(&fm.sig.name, fm.sig.entry_addr)
+            );
         }
         utils::indent_text(defns, 4)
     }
     fn gen_global_func_defn(func_name: &str, func_entry_addr: u64) -> String {
-        format!("define {}(): xlen_t = {};",
+        format!(
+            "define {}(): xlen_t = {};",
             utils::global_func_addr_name(func_name),
-            format!("to_xlen_t({}bv64)", func_entry_addr))
+            format!("to_xlen_t({}bv64)", func_entry_addr)
+        )
     }
     fn gen_procs(model: &Model, dwarf_ctx: &DwarfCtx) -> String {
         let procs_string = model
@@ -503,7 +509,15 @@ impl IRInterface for Uclid5Interface {
         let ctrl_blk = Self::control_blk(model, &dwarf_ctx);
         format!(
             "module main {{\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n\n{}\n}}",
-            xlen_defn, prelude, var_defns, array_defns, struct_defns, global_var_defns, global_func_defns, procs, ctrl_blk
+            xlen_defn,
+            prelude,
+            var_defns,
+            array_defns,
+            struct_defns,
+            global_var_defns,
+            global_func_defns,
+            procs,
+            ctrl_blk
         )
     }
 

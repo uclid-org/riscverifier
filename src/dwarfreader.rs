@@ -35,16 +35,13 @@ pub struct DwarfFuncSig {
     pub args: Vec<DwarfVar>,
     /// Return type of the function if it has one
     pub ret_typ_defn: Option<Rc<DwarfTypeDefn>>,
-    /// Entry address
-    pub entry_addr: u64,
 }
 impl DwarfFuncSig {
-    pub fn new(name: String, args: Vec<DwarfVar>, ret_typ_defn: Option<Rc<DwarfTypeDefn>>, entry_addr: u64) -> Self {
+    pub fn new(name: String, args: Vec<DwarfVar>, ret_typ_defn: Option<Rc<DwarfTypeDefn>>) -> Self {
         DwarfFuncSig {
             name,
             args,
             ret_typ_defn,
-            entry_addr
         }
     }
 }
@@ -433,6 +430,7 @@ pub trait DwarfInterface: std::fmt::Debug {
 
 /// Stores the relevant debugging information for automatically
 /// translating specifications
+#[derive(Debug)]
 pub struct DwarfCtx {
     /// Function signatures from the DWARF debugging information
     func_sigs: HashMap<String, DwarfFuncSig>,
@@ -455,9 +453,7 @@ impl DwarfCtx {
     }
     /// Returns true if and only if the function named `func_name` exists
     pub fn is_func(&self, func_name: &str) -> bool {
-        self.func_sigs
-            .get(func_name)
-            .is_some()
+        self.func_sigs.get(func_name).is_some()
     }
     /// Returns the function signature of the function named `func_name`
     pub fn func_sig(&self, func_name: &str) -> Result<&DwarfFuncSig, utils::Error> {

@@ -279,7 +279,9 @@ impl FuncModel {
         let requires = requires.unwrap_or(vec![]);
         let ensures = ensures.unwrap_or(vec![]);
         FuncModel {
-            sig: FuncSig::new(name, entry_addr, arg_decls, ret_decl, requires, ensures, mod_set),
+            sig: FuncSig::new(
+                name, entry_addr, arg_decls, ret_decl, requires, ensures, mod_set,
+            ),
             body: body,
             inline: inline,
         }

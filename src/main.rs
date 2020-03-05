@@ -85,20 +85,6 @@ fn main() {
                 .long("ignore-funcs")
                 .takes_value(true),
         )
-        .arg(
-            Arg::with_name("struct-macros")
-                .help("Comma separated list of struct ids to generate operator macros for. E.g. \"enclave\"")
-                .short("m")
-                .long("struct-macros")
-                .takes_value(true),
-        )
-        .arg(
-            Arg::with_name("array-macros")
-            .help("Comma separated list of type definitions to generate operator macros for.")
-            .short("a")
-            .long("array-macros")
-            .takes_value(true),
-        )
         .get_matches();
     let xlen = utils::dec_str_to_u64(matches.value_of("xlen").unwrap_or("64"))
         .expect("[main] Unable to parse numberic xlen.");
@@ -113,16 +99,6 @@ fn main() {
     // Get ignored functions
     let ignored_functions = matches
         .value_of("ignore-funcs")
-        .map_or(HashSet::new(), |lst| {
-            lst.split(",").collect::<HashSet<&str>>()
-        });
-    let _struct_macro_ids = matches
-        .value_of("struct-macros")
-        .map_or(HashSet::new(), |lst| {
-            lst.split(",").collect::<HashSet<&str>>()
-        });
-    let _array_macro_ids = matches
-        .value_of("array-macros")
         .map_or(HashSet::new(), |lst| {
             lst.split(",").collect::<HashSet<&str>>()
         });
