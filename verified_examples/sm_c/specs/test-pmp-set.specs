@@ -4,7 +4,7 @@ ensures (true);
 end_spec
 
 begin_spec(region_get_addr)
-requires ((0bv32 <= i) && (i < 16bv32));
+requires ((0x0bv32 <= i) && (i < 16bv32));
 ensures (($exception == 0bv64) ==> ($ret == regions[i].addr));
 end_spec
 

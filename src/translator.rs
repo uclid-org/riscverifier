@@ -327,7 +327,8 @@ where
             if v.is_empty() {
                 if ts.len() != 0 {
                     // If ts.pop_all() is empty and len() != 0, there is a cycle
-                    panic!("There is a cyclic cfg in {:#?}", cfg);
+                    // panic!("There is a cyclic cfg in {:#?}", cfg);
+                    panic!("There is a cycle in the cfg of {:?}", self.get_func_name(&cfg.get_entry_addr()))
                 } else {
                     // Otherwise it's the end of the topological sort
                     break;
