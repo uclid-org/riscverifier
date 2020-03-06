@@ -217,24 +217,59 @@ impl Cfg {
             next_blk_addr_map: HashMap::new(),
         }
     }
+    /// Returns the next fall through address
+    pub fn next_blk_addr(&self, addr: u64) -> Option<&u64> {
+        self.next_blk_addr_map.get(&addr)
+    }
+    /// Returns the jump address (if it's a branch/jump instruction)
+    pub fn next_abs_jump_addr(&self, addr: u64) -> Option<&u64> {
+        self.abs_jump_map.get(&addr)
+    }
+    /// Returns the entry address to the cfg
     pub fn get_entry_addr(&self) -> &u64 {
         &self.entry_addr
     }
+    /// Returns the basic block at that address
     #[allow(dead_code)]
     pub fn get_basic_blk(&self, addr: u64) -> Option<&BasicBlock> {
         self.basic_blks_map.get(&addr)
     }
+    /// Returns the map of basic blocks
     pub fn bbs(&self) -> &HashMap<u64, BasicBlock> {
         &self.basic_blks_map
     }
+    /// Finds and returns all cycles starting starting with current node
+    pub fn find_cycle(&self, current_node: &u64, seen_nodes: &mut HashSet<u64>, processed_cycle: &mut bool) -> Option<Vec<u64>> {
+        if seen_nodes.contains(current_node) {
+            return Some(vec![*current_node]);
+        }
+        seen_nodes.insert(*current_node);
+        if let Some(addr) = self.next_blk_addr(*current_node) {
+            if let Some(mut cycle) = self.find_cycle(addr, seen_nodes, processed_cycle) {
+                if !*processed_cycle {
+                    cycle.push(*current_node);
+                }
+                if cycle[0] == *current_node {
+                    *processed_cycle = true;
+                }
+                return Some(cycle);
+            }
+        }
+        if let Some(addr) = self.next_abs_jump_addr(*current_node) {
+            if let Some(mut cycle) = self.find_cycle(addr, seen_nodes, processed_cycle) {
+                if !*processed_cycle {cycle.push(*current_node);}
+                if cycle[0] == *current_node {
+                    *processed_cycle = true;
+                }
+                return Some(cycle);
+            }
+        }
+        seen_nodes.remove(current_node);
+        None
+    }
+    /// Helpers
     pub fn add_basic_blk(&mut self, bb: BasicBlock) {
         self.basic_blks_map.insert(bb.entry_addr, bb);
-    }
-    pub fn next_blk_addr(&self, addr: u64) -> Option<&u64> {
-        self.next_blk_addr_map.get(&addr)
-    }
-    pub fn next_abs_jump_addr(&self, addr: u64) -> Option<&u64> {
-        self.abs_jump_map.get(&addr)
     }
     pub fn add_next_blk_addr(&mut self, from_addr: u64, to_addr: u64) {
         self.next_blk_addr_map.insert(from_addr, to_addr);
