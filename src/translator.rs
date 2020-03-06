@@ -314,9 +314,13 @@ where
         let mut sorted = vec![];
         let mut ts = TopologicalSort::<&u64>::new();
         ts.insert(cfg.get_entry_addr());
-        for (entry_addr, _bb) in cfg.bbs() {
+        for (entry_addr, bb) in cfg.bbs() {
             if let Some(target) = cfg.next_blk_addr(*entry_addr) {
-                ts.add_dependency(entry_addr, target);
+                // FIXME: Add fallthrough only if it does not jump to itself (e.g. function call)
+                // Dayeol, can we assume this?
+                if bb.insts()[0].function_name() != self.get_func_name(&cfg.get_entry_addr()).unwrap() {
+                    ts.add_dependency(entry_addr, target);
+                }
             }
             if let Some(target) = cfg.next_abs_jump_addr(*entry_addr) {
                 ts.add_dependency(entry_addr, target);
