@@ -239,7 +239,12 @@ impl Cfg {
         &self.basic_blks_map
     }
     /// Finds and returns all cycles starting starting with current node
-    pub fn find_cycle(&self, current_node: &u64, seen_nodes: &mut HashSet<u64>, processed_cycle: &mut bool) -> Option<Vec<u64>> {
+    pub fn find_cycle(
+        &self,
+        current_node: &u64,
+        seen_nodes: &mut HashSet<u64>,
+        processed_cycle: &mut bool,
+    ) -> Option<Vec<u64>> {
         if seen_nodes.contains(current_node) {
             return Some(vec![*current_node]);
         }
@@ -257,7 +262,9 @@ impl Cfg {
         }
         if let Some(addr) = self.next_abs_jump_addr(*current_node) {
             if let Some(mut cycle) = self.find_cycle(addr, seen_nodes, processed_cycle) {
-                if !*processed_cycle {cycle.push(*current_node);}
+                if !*processed_cycle {
+                    cycle.push(*current_node);
+                }
                 if cycle[0] == *current_node {
                     *processed_cycle = true;
                 }
