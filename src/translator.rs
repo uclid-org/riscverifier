@@ -318,7 +318,7 @@ where
             if let Some(target) = cfg.next_blk_addr(*entry_addr) {
                 // FIXME: Add fallthrough only if it does not jump to itself (e.g. function call)
                 // Dayeol, can we assume this?
-                if bb.insts()[0].function_name() != self.get_func_name(&cfg.get_entry_addr()).unwrap() {
+                if bb.insts().last().unwrap().base_instruction_name() != "jal" || bb.insts().first().unwrap().function_name() != self.get_func_name(&cfg.get_entry_addr()).unwrap() {
                     ts.add_dependency(entry_addr, target);
                 }
             }
