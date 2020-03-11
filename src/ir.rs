@@ -169,6 +169,7 @@ pub enum BVOp {
     LeftShift,
     RightShift,
     ARightShift, // arithmetic right shift
+    Concat,
     Slice { l: u64, r: u64 },
 }
 /// Boolean operators

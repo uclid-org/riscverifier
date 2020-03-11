@@ -246,6 +246,8 @@ impl<'s> SpecReader<'s> {
                 "+" => Ok(ir::Op::Bv(ir::BVOp::Add)),
                 "&" => Ok(ir::Op::Bv(ir::BVOp::And)),
                 "|" => Ok(ir::Op::Bv(ir::BVOp::Or)),
+                "++" => Ok(ir::Op::Bv(ir::BVOp::Concat)),
+                "<<" => Ok(ir::Op::Bv(ir::BVOp::LeftShift)),
                 _ => Err(utils::Error::SpecParseError(
                     "Invalid bitvector operation.".to_string(),
                 )),

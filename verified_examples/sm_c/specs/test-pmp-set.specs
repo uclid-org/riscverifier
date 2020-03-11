@@ -1,23 +1,22 @@
-begin_spec(printm)
-requires(true);
-ensures (true);
-end_spec
-
 begin_spec(region_get_addr)
 requires ((0x0bv32 <= i) && (i < 16bv32));
 ensures (($exception == 0bv64) ==> ($ret == regions[i].addr));
 end_spec
 
 begin_spec(is_pmp_region_valid)
-ensures true;
+requires ((0bv32 <= region_idx) && (region_idx < 16bv32));
+ensures (($exception == 0bv64) ==> ($ret == (region_def_bitmap & (0x1bv32 << region_idx))));
 end_spec
 
 begin_spec(region_pmpcfg_val)
-ensures true;
+requires ((0bv32 <= i) && (i < 16bv32));
+requires ((0bv32 <= reg_idx) && (reg_idx < 16bv32));
+ensures (($exception == 0bv64) ==> ($ret == ((((0bv56 ++ (regions[i].addrmode | perm_bits)) << (0bv32 ++ ((reg_idx & 7bv32) << 3bv32)))))));
 end_spec
 
 begin_spec(region_register_idx)
-ensures true;
+requires ((0bv32 <= i) && (i < 16bv32));
+ensures (($exception == 0bv64) ==> ($ret == regions[i].reg_idx));
 end_spec
 
 begin_spec(region_is_tor)
@@ -27,7 +26,9 @@ ensures ((($exception == 0bv64) && (regions[i].addrmode != 8bv8)) ==> ($ret == 0
 end_spec
 
 begin_spec(region_needs_two_entries)
-ensures true;
+requires ((0bv32 <= i) && (i < 16bv32));
+ensures ((($exception == 0bv64) && ((regions[i].addrmode == 8bv8) && (regions[i].reg_idx > 0bv32))) ==> ($ret == 1bv32));
+ensures ((($exception == 0bv64) && ((regions[i].addrmode != 8bv8) || (regions[i].reg_idx <= 0bv32))) ==> ($ret == 0bv32));
 end_spec
 
 begin_spec(region_is_napot)
@@ -43,7 +44,10 @@ ensures ((($exception == 0bv64) && ((regions[i].addr != 0bv64) || (regions[i].si
 end_spec
 
 begin_spec(region_pmpaddr_val)
-ensures true;
+requires ((0bv32 <= i) && (i < 16bv32));
+ensures ((($exception == 0bv64) && ((regions[i].addr == 0bv64) && (regions[i].size == -1))) ==> ($ret == -1));
+ensures ((($exception == 0bv64) && (((regions[i].addr != 0bv64) || (regions[i].size != -1)) && (regions[i].addrmode == 24bv8))) ==> ($ret == ((regions[i].addr | ((regions[i].size >> 1) - 1)) >> 2)));
+ensures ((($exception == 0bv64) && (((regions[i].addr != 0bv64) || (regions[i].size != -1)) && (regions[i].addrmode == 8bv8))) ==> ($ret == ((regions[i].addr + regions[i].size) >> 2)));
 end_spec
 
 begin_spec(pmp_set)

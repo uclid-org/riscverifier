@@ -299,7 +299,8 @@ impl IRInterface for Uclid5Interface {
                 width if width != "0" => format!("bv_zero_extend({}, {})", width, e1.unwrap()),
                 _ => format!("{}", e1.unwrap()),
             },
-            BVOp::LeftShift => format!("bv_l_shift({}, {})", e2.unwrap(), e1.unwrap()),
+            BVOp::LeftShift => format!("bv_left_shift({}, {})", e2.unwrap(), e1.unwrap()),
+            BVOp::Concat => format!("({} ++ {})", e1.unwrap(), e2.unwrap()),
             BVOp::Slice { l, r } => format!("{}[{}:{}]", e1.unwrap(), l - 1, r),
             _ => panic!("[bvop_to_string] Unimplemented."),
         }
