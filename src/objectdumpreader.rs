@@ -18,12 +18,15 @@ pub struct ObjectDumpReader;
 
 impl ObjectDumpReader {
     pub fn get_binary_object_dump(
-        binary_file_paths: &Vec<String>,
+        binary_file_paths: &Vec<&str>,
     ) -> HashMap<u64, Vec<AssemblyLine>> {
-        let mut assembly_lines: Vec<AssemblyLine> = vec![];
-        let mut seen_functions: HashSet<String> = HashSet::new();
+        let mut assembly_lines: Vec<AssemblyLine>;
+        let mut seen_functions: HashSet<String>;
         let mut function_blocks: HashMap<u64, Vec<AssemblyLine>> = HashMap::new();
         for binary_file_path in binary_file_paths {
+            assembly_lines = vec![];
+            seen_functions = HashSet::new();    // FIXME: Assumes that binary function definitions are disjoint!
+            function_blocks = HashMap::new();
             let output = Command::new("riscv64-unknown-elf-objdump")
                 .arg("-d")
                 .arg("-M no-aliases")
@@ -133,14 +136,14 @@ impl ObjectDumpReader {
                             }
                         }
                     }
+                    if assembly_lines.len() > 0 {
+                        function_blocks.insert(assembly_lines[0].address.clone(), assembly_lines.clone());
+                    }
                 }
                 Err(e) => {
                     panic!("[get_binary_object_dump] Unable to convert object dump output to UTF-8 string: {:?}", e);
                 }
             }
-        }
-        if assembly_lines.len() > 0 {
-            function_blocks.insert(assembly_lines[0].address.clone(), assembly_lines.clone());
         }
         function_blocks
     }

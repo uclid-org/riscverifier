@@ -43,7 +43,7 @@ fn main() {
         .author("Kevin Cheang <kcheang@berkeley.edu>")
         .about("Translates RISC-V assembly (support for 64g only) programs into an IR")
         .arg(
-            Arg::with_name("binary")
+            Arg::with_name("binaries")
                 .short("b")
                 .long("binary")
                 .help("RISC-V binary file.")
@@ -93,8 +93,9 @@ fn main() {
         panic!("[main] Non-64 bit XLEN is not yet implemented.");
     }
     // Parse function blocks from binary
-    let binary_path = matches.value_of("binary").unwrap();
-    let binary_paths = vec![String::from(binary_path)]; // FIXME: Handle multiple binaries
+    let binary_paths = matches
+        .value_of("binaries")
+        .map_or(vec![], |lst| lst.split(",").collect::<Vec<&str>>());
     let function_blocks = ObjectDumpReader::get_binary_object_dump(&binary_paths);
     // Get ignored functions
     let ignored_functions = matches

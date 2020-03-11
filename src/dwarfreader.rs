@@ -238,7 +238,7 @@ pub trait DwarfInterface: std::fmt::Debug {
     /// the corresponding DwarfObjects from the debugging information
     fn process_dwarf_files(
         xlen: &u64,
-        paths: &Vec<String>,
+        paths: &Vec<&str>,
     ) -> Result<Vec<DwarfObject>, gimli::Error> {
         let mut dwarf_objects = vec![];
         for path in paths {
@@ -250,7 +250,7 @@ pub trait DwarfInterface: std::fmt::Debug {
 
     /// Parses the specified binary file in the path and returns
     /// the corresponding DwarfObjects from the debugging information
-    fn process_dwarf_file(xlen: &u64, path: &String) -> Result<Vec<DwarfObject>, gimli::Error> {
+    fn process_dwarf_file(xlen: &u64, path: &str) -> Result<Vec<DwarfObject>, gimli::Error> {
         info!("[process_dwarf_file] Processing dwarf file {:?}.", path);
         let file = fs::File::open(&path[..]).unwrap();
         let mmap = unsafe { memmap::Mmap::map(&file).unwrap() };
@@ -485,7 +485,7 @@ impl<I> DwarfReader<I>
 where
     I: DwarfInterface,
 {
-    pub fn new(xlen: &u64, binary_paths: &Vec<String>) -> Result<DwarfReader<I>, gimli::Error> {
+    pub fn new(xlen: &u64, binary_paths: &Vec<&str>) -> Result<DwarfReader<I>, gimli::Error> {
         let dwarf_obj_vec = I::process_dwarf_files(xlen, binary_paths)?;
         let func_sigs = dwarf_obj_vec
             .iter()
