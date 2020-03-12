@@ -184,7 +184,7 @@ where
             ensures,
             Some(func_mod_set),
             body,
-            false,
+            true, // FIXME: Inlined for now otherwise we would need a quantifier over the memory
         ));
         Ok(())
     }
@@ -315,17 +315,21 @@ where
         let mut ts = TopologicalSort::<&u64>::new();
         ts.insert(cfg.get_entry_addr());
         for (entry_addr, bb) in cfg.bbs() {
-            if let Some(target) = cfg.next_blk_addr(*entry_addr) {
-                // FIXME: Check if this is okay for the security monitor. We assume all external jumps will return and have
-                // added asserts to check this in the verification models.
-                // 1. Add fallthrough for all non-jal instructions
-                // 2. Add fallthrough only if a jump instruction doesn't jump to the current function and is an external function call
-                if bb.insts().last().unwrap().base_instruction_name() != "jal" || (bb.insts().first().unwrap().function_name() != self.get_func_name(&cfg.get_entry_addr()).unwrap() && self.is_func_entry(&target.to_string())) {
-                    ts.add_dependency(entry_addr, target);
+            if let Some(jump_target) = cfg.next_abs_jump_addr(*entry_addr) {
+                if let Some(target) = cfg.next_blk_addr(*entry_addr) {
+                    // FIXME: Check if this is okay for the security monitor. We assume all external jumps will return and have
+                    // added asserts to check this in the verification models.
+                    // 1. Add fallthrough for all non-jal instructions
+                    // 2. Add fallthrough only if a jump instruction doesn't jump to the current function and is an external function call
+                    if bb.insts().last().unwrap().base_instruction_name() != "jal"
+                        || (self.get_func_name(&jump_target)
+                            != self.get_func_name(&cfg.get_entry_addr())
+                            && self.is_func_entry(&jump_target.to_string()))
+                    {
+                        ts.add_dependency(entry_addr, target);
+                    }
                 }
-            }
-            if let Some(target) = cfg.next_abs_jump_addr(*entry_addr) {
-                ts.add_dependency(entry_addr, target);
+                ts.add_dependency(entry_addr, jump_target);
             }
         }
         loop {

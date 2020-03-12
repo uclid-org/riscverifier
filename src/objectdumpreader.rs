@@ -25,7 +25,7 @@ impl ObjectDumpReader {
         let mut function_blocks: HashMap<u64, Vec<AssemblyLine>> = HashMap::new();
         for binary_file_path in binary_file_paths {
             assembly_lines = vec![];
-            seen_functions = HashSet::new();    // FIXME: Assumes that binary function definitions are disjoint!
+            seen_functions = HashSet::new(); // FIXME: Assumes that binary function definitions are disjoint!
             function_blocks = HashMap::new();
             let output = Command::new("riscv64-unknown-elf-objdump")
                 .arg("-d")
@@ -137,7 +137,8 @@ impl ObjectDumpReader {
                         }
                     }
                     if assembly_lines.len() > 0 {
-                        function_blocks.insert(assembly_lines[0].address.clone(), assembly_lines.clone());
+                        function_blocks
+                            .insert(assembly_lines[0].address.clone(), assembly_lines.clone());
                     }
                 }
                 Err(e) => {
