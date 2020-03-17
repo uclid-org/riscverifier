@@ -20,6 +20,7 @@ impl<'s> SpecReader<'s> {
         SpecReader { xlen, dwarf_ctx }
     }
 
+    /// Reads the specification file and parses the text within the file. Returns a map of function names to list of sepcs (ir::Spec)
     pub fn process_specs_file(
         &self,
         spec_file_path: &str,
@@ -29,6 +30,7 @@ impl<'s> SpecReader<'s> {
         self.parse_specs(&specs_str[..])
     }
 
+    /// Parses the specification file text and returns a map of functions to list of spec (ir::Spec)
     pub fn parse_specs(
         &self,
         specs_string: &str,
@@ -63,6 +65,7 @@ impl<'s> SpecReader<'s> {
         }
     }
 
+    /// Given the func_name rule, returns the function name
     fn get_func_name(pair: Pair<Rule>) -> Result<String, utils::Error> {
         match pair.as_rule() {
             Rule::func_name => {
@@ -79,6 +82,7 @@ impl<'s> SpecReader<'s> {
         }
     }
 
+    /// Given a spec_stmt rule, returns a ir::Spec corresponding to the specification string
     fn translate_spec_stmt(
         &self,
         func_name: &str,
@@ -104,6 +108,7 @@ impl<'s> SpecReader<'s> {
         }
     }
 
+    /// Translates modifies set into ir
     fn translate_mod_set(&self, pair: Pair<Rule>) -> Result<HashSet<ir::Var>, utils::Error> {
         let mut mod_set = HashSet::new();
         let mut inner = pair.into_inner();
@@ -117,6 +122,7 @@ impl<'s> SpecReader<'s> {
         Ok(mod_set)
     }
 
+    /// Trnaslates an expression to ir
     fn translate_expr(&self, func_name: &str, pair: Pair<Rule>) -> Result<ir::Expr, utils::Error> {
         let rule = pair.as_rule();
         let pair_str = pair.as_str();
@@ -207,6 +213,7 @@ impl<'s> SpecReader<'s> {
         }
     }
 
+    /// Translates an operator to ir
     fn translate_op(&self, pair: Pair<Rule>) -> Result<ir::Op, utils::Error> {
         let rule = pair.as_rule();
         let pair_str = pair.as_str();

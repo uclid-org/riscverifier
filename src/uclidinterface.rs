@@ -510,7 +510,8 @@ impl IRInterface for Uclid5Interface {
         // control block
         let ctrl_blk = Self::control_blk(model, &dwarf_ctx);
         format!(
-            "module main {{\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n\n{}\n}}",
+            "module {} {{\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n\n{}\n}}",
+            model.name,
             xlen_defn,
             prelude,
             var_defns,

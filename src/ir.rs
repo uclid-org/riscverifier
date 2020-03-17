@@ -374,12 +374,14 @@ impl Spec {
 /// Verification Model
 #[derive(Debug)]
 pub struct Model {
+    pub name: String,
     pub vars: HashSet<Var>,
     pub func_models: Vec<FuncModel>,
 }
 impl Model {
-    pub fn new() -> Self {
+    pub fn new(name: &str) -> Self {
         Model {
+            name: String::from(name),
             vars: HashSet::new(),
             func_models: vec![],
         }

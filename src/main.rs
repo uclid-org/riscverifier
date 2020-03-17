@@ -51,6 +51,14 @@ fn main() {
                 .index(1),
         )
         .arg(
+            Arg::with_name("modname")
+                .short("n")
+                .long("binary")
+                .help("RISC-V binary file.")
+                .required(true)
+                .index(1),
+        )
+        .arg(
             Arg::with_name("spec")
                 .short("s")
                 .long("spec")
@@ -97,6 +105,10 @@ fn main() {
         .value_of("binaries")
         .map_or(vec![], |lst| lst.split(",").collect::<Vec<&str>>());
     let function_blocks = ObjectDumpReader::get_binary_object_dump(&binary_paths);
+    // Module name
+    let module_name = matches
+        .value_of("modname")
+        .unwrap_or("main");
     // Get ignored functions
     let ignored_functions = matches
         .value_of("ignore-funcs")
@@ -130,6 +142,7 @@ fn main() {
     }
     let mut translator: Translator<Uclid5Interface> = Translator::new(
         xlen,
+        &module_name,
         &func_blks,
         &ignored_functions,
         dwarf_reader.ctx(),

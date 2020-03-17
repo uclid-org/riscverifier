@@ -49,6 +49,7 @@ where
     /// Translator constructor
     pub fn new(
         xlen: u64,
+        module_name: &'t str,
         func_cfg_map: &'t HashMap<String, Rc<Cfg>>,
         ignored_funcs: &'t HashSet<&'t str>,
         dwarf_ctx: &'t DwarfCtx,
@@ -56,7 +57,7 @@ where
     ) -> Self {
         Translator {
             xlen,
-            model: Model::new(),
+            model: Model::new(module_name),
             func_cfg_map,
             generated_funcs: HashSet::new(),
             ignored_funcs,
