@@ -20,6 +20,17 @@ impl<'s> SpecReader<'s> {
         SpecReader { xlen, dwarf_ctx }
     }
 
+    pub fn process_specs_files(
+        &self,
+        spec_file_paths: &Vec<&str>,
+        ) -> Result<HashMap<String, Vec<ir::Spec>>, utils::Error> {
+        let mut specs_map = HashMap::new();
+        for spec_file_path in spec_file_paths {
+            specs_map.extend(self.process_specs_file(spec_file_path)?);
+        }
+        Ok(specs_map)
+    }
+
     /// Reads the specification file and parses the text within the file. Returns a map of function names to list of sepcs (ir::Spec)
     pub fn process_specs_file(
         &self,

@@ -124,14 +124,14 @@ fn main() {
         .map_or(vec![], |lst| lst.split(",").collect::<Vec<&str>>());
     // Specification
     let spec_reader = SpecReader::new(xlen, dwarf_reader.ctx());
-    let mut specs_map = None;
-    if let Some(spec_file) = matches.value_of("spec") {
-        specs_map = Some(
-            spec_reader
-                .process_specs_file(spec_file)
-                .expect("Could not read spec."),
-        );
-    }
+    let spec_files = matches
+        .value_of("spec")
+        .map_or(vec![], |lst| {
+            lst.split(",").collect::<Vec<&str>>()
+        });
+    let specs_map = spec_reader
+        .process_specs_files(&spec_files)
+        .expect("Could not read spec.");
     // Translate and write to output file
     let mut func_blks = HashMap::new();
     for (k, v) in function_blocks {

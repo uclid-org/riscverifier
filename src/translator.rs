@@ -38,7 +38,7 @@ where
     /// DWARF debugging information
     dwarf_ctx: &'t DwarfCtx,
     /// Map of specs from function name to a list of pre/post conditions
-    specs_map: &'t Option<HashMap<String, Vec<Spec>>>,
+    specs_map: &'t HashMap<String, Vec<Spec>>,
     /// Don't touch this
     _phantom_i: PhantomData<I>,
 }
@@ -53,7 +53,7 @@ where
         func_cfg_map: &'t HashMap<String, Rc<Cfg>>,
         ignored_funcs: &'t HashSet<&'t str>,
         dwarf_ctx: &'t DwarfCtx,
-        specs_map: &'t Option<HashMap<String, Vec<Spec>>>,
+        specs_map: &'t HashMap<String, Vec<Spec>>,
     ) -> Self {
         Translator {
             xlen,
@@ -400,24 +400,19 @@ where
     /// Returns the modifies statments from the specificaiton map for the given function
     fn mod_set_from_spec_map(&self, func_name: &str) -> Option<HashSet<String>> {
         self.specs_map
-            .as_ref()
-            .and_then(|specs_map| Some(specs_map.get(func_name)))
+            .get(func_name)
             .and_then(|spec_vec| {
-                spec_vec.and_then(|s| {
-                    Some(
-                        s.iter()
-                            .cloned()
-                            .filter(|spec| spec.is_modifies())
-                            .map(|spec| {
-                                spec.mod_set()
-                                    .iter()
-                                    .map(|v| v.name.clone())
-                                    .collect::<Vec<String>>()
-                            })
-                            .flatten()
-                            .collect::<HashSet<String>>(),
-                    )
-                })
+                Some(spec_vec.iter()
+                    .cloned()
+                    .filter(|spec| spec.is_modifies())
+                    .map(|spec| {
+                        spec.mod_set()
+                            .iter()
+                            .map(|v| v.name.clone())
+                            .collect::<Vec<String>>()
+                    })
+                    .flatten()
+                    .collect::<HashSet<String>>())
             })
             .map_or(None, |s| Some(s))
     }
@@ -427,20 +422,15 @@ where
         func_name: &str,
         arg_decls: &Vec<Expr>,
     ) -> Result<Vec<Spec>, utils::Error> {
-        let mut requires = self
-            .specs_map
-            .as_ref()
-            .and_then(|specs_map| Some(specs_map.get(func_name)))
+        let mut requires = self.specs_map
+            .get(func_name)
             .and_then(|spec_vec| {
-                spec_vec.and_then(|v| {
-                    Some(
-                        v.iter()
-                            .cloned()
-                            .filter(|spec| spec.is_requires())
-                            .map(|spec| spec)
-                            .collect::<Vec<Spec>>(),
-                    )
-                })
+                Some(spec_vec
+                    .iter()
+                    .cloned()
+                    .filter(|spec| spec.is_requires())
+                    .map(|spec| spec)
+                    .collect::<Vec<Spec>>())
             })
             .map_or(vec![], |v| v);
         // Add pc entry requirement
@@ -474,19 +464,16 @@ where
     /// Returns ensure statments from specification map for the given function
     fn ensures_from_spec_map(&self, func_name: &str) -> Option<Vec<Spec>> {
         self.specs_map
-            .as_ref()
-            .and_then(|specs_map| Some(specs_map.get(func_name)))
-            .and_then(|spec_vec| {
-                spec_vec.and_then(|v| {
-                    Some(
-                        v.iter()
-                            .cloned()
-                            .filter(|spec| spec.is_ensures())
-                            .map(|spec| spec)
-                            .collect::<Vec<Spec>>(),
-                    )
-                })
-            })
+            .get(func_name)
+            .and_then(|spec_vec|
+                Some(
+                    spec_vec.iter()
+                        .cloned()
+                        .filter(|spec| spec.is_ensures())
+                        .map(|spec| spec)
+                        .collect::<Vec<Spec>>(),
+                )
+            )
             .map_or(None, |v| Some(v))
     }
     /// Translates DwarfTypeDefn to Type
