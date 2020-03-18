@@ -26,7 +26,7 @@ impl<'s> SpecReader<'s> {
         spec_file_path: &str,
     ) -> Result<HashMap<String, Vec<ir::Spec>>, utils::Error> {
         let specs_str = fs::read_to_string(spec_file_path)
-            .expect("[get_specs] Failed to open specification file.");
+            .expect(&format!("[get_specs] Failed to open specification file: {}.", spec_file_path));
         self.parse_specs(&specs_str[..])
     }
 
