@@ -53,10 +53,10 @@ fn main() {
         .arg(
             Arg::with_name("modname")
                 .short("n")
-                .long("binary")
-                .help("RISC-V binary file.")
-                .required(true)
-                .index(1),
+                .long("modname")
+                .help("UCLID module name")
+                .required(false)
+                .takes_value(true),
         )
         .arg(
             Arg::with_name("spec")
