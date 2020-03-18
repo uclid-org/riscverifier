@@ -183,6 +183,17 @@ impl Uclid5Interface {
         }
         utils::indent_text(defns, 4)
     }
+    fn gen_spec_path_ptr_defns(model: &Model) -> String {
+        let mut defns = String::from("// Path addresses\n");
+        for _fm in &model.func_models {
+            defns = format!(
+                "{}{}\n",
+                defns,
+                "// Nothing"
+            );
+        }
+        utils::indent_text(defns, 4)
+    }
     fn gen_global_func_defn(func_name: &str, func_entry_addr: u64) -> String {
         format!(
             "define {}(): xlen_t = {};",
@@ -501,10 +512,11 @@ impl IRInterface for Uclid5Interface {
         // variables
         let var_defns = utils::indent_text(Self::gen_var_defns(model), 4);
         // definitions
-        let array_defns = Self::gen_array_defns(&dwarf_ctx);
-        let struct_defns = Self::gen_struct_defns(&dwarf_ctx);
-        let global_var_defns = Self::gen_global_defns(&dwarf_ctx);
-        let global_func_defns = Self::gen_global_func_defns(&model);
+        let array_defns = Self::gen_array_defns(&dwarf_ctx);            // Define macros that index for arrays (by muiltiplication)
+        let struct_defns = Self::gen_struct_defns(&dwarf_ctx);          // Define macros for getting struct field values
+        let global_var_defns = Self::gen_global_defns(&dwarf_ctx);      // Define macros for global variable pointers
+        let global_func_defns = Self::gen_global_func_defns(&model);    // Define macros for function addresses
+        let _spec_path_defns = Self::gen_spec_path_ptr_defns(&model);    // Define macros for paths in specifications
         // procedures
         let procs = Self::gen_procs(model, &dwarf_ctx);
         // control block
