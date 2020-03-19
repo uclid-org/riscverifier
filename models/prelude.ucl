@@ -476,7 +476,7 @@
           }
         pc = (pc + 4bv64); // line 0
       }
-    procedure [inline] csrrci_proc(csr: bv64, imm: bv5) returns (csr_ret: bv64, rd_ret: bv64)
+    procedure [inline] csrrci_proc(csr: bv64, imm: bv64) returns (csr_ret: bv64, rd_ret: bv64)
       modifies pc, exception;
       {
         if(((current_priv <_u (csr)[9:8]) || (true && !(((csr)[11:10] <_u 3bv2)))))
@@ -485,7 +485,7 @@
           }
         else
           {
-            csr_ret, rd_ret = ((bv_zero_extend(59, imm)) & csr), csr; // line 0
+            csr_ret, rd_ret = ((bv_zero_extend(59, imm[4:0])) & csr), csr; // line 0
           }
         pc = (pc + 4bv64); // line 0
       }
