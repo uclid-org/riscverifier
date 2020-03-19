@@ -224,6 +224,7 @@ where
     }
     /// Basic block call in function body
     fn basic_blk_call(&self, entry_addr: u64, cfg: &Rc<Cfg>) -> Stmt {
+        // Assertion statements after the basic block executes (should only be used when inlining as a sanity check)
         let mut then_stmts_inner = vec![];
         // Add call to basic block
         let call_stmt = Stmt::func_call(self.bb_proc_name(entry_addr), vec![], vec![]);
@@ -296,7 +297,9 @@ where
                     .map_or(vec![], |v| v);
                 let call_stmt = Stmt::func_call(func_name, vec![], args);
                 then_stmts_inner.push(Box::new(call_stmt));
-                then_stmts_inner.push(Box::new(Stmt::Assert(fallthru_guard.unwrap().clone())));
+                if let Some(guard) = fallthru_guard {
+                    then_stmts_inner.push(Box::new(Stmt::Assert(guard)));
+                }
             }
         }
         let then_stmt = Box::new(Stmt::Block(then_stmts_inner));

@@ -127,7 +127,7 @@ impl ObjectDumpReader {
                                 });
                             }
                             Err(_e) => {
-                                // TODO: Handle this instead of failing silently
+                                // FIXME: Handle this instead of failing silently
                                 // warn!(
                                 //     "Error parsing object dump line {:?}. {:?}",
                                 //     &line.replace("\t", " ")[..],
@@ -168,8 +168,11 @@ impl ObjectDumpReader {
             match &al.op_code[..] {
                 "beq" | "bne" | "blt" | "bge" | "bltu" | "jal" => {
                     let next_addr = Cfg::next_addr(al.address());
-                    marked.insert(next_addr);
-                    cfg.add_next_blk_addr(blk_entry_addr.unwrap(), next_addr);
+                    // Add the fall through address only if it's inside the function
+                    if func_blk.iter().find(|rc_al| rc_al.address() == next_addr).is_some() {
+                        cfg.add_next_blk_addr(blk_entry_addr.unwrap(), next_addr);
+                        marked.insert(next_addr);
+                    }
                     let jump_addr = al.imm().unwrap().get_imm_val() as u64;
                     cfg.add_abs_jump_addr(blk_entry_addr.unwrap(), jump_addr);
                     marked.insert(jump_addr);
