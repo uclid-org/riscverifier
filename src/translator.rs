@@ -301,7 +301,7 @@ where
                                     let typ = self.dwarf_typ_to_ir(&dwarf_var.typ_defn);
                                     Expr::op_app(
                                         Op::Bv(BVOp::Slice {
-                                            l: typ.get_expect_bv_width(),
+                                            l: typ.get_expect_bv_width()-1,
                                             r: 0,
                                         }),
                                         vec![reg_var],
