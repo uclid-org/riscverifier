@@ -180,13 +180,15 @@ impl ObjectDumpReader {
                         match &al.op_code[..] {
                             "jal" => {
                                 match &al.rd().expect(&format!("Invalid jump instruction {:#?}.", al)).get_reg_name()[..] {
-                                    "zero" => cfg.add_next_blk_addr(blk_entry_addr.unwrap(), next_addr),
-                                    "ra" => (),
+                                    "zero" => (),
+                                    "ra" => cfg.add_next_blk_addr(blk_entry_addr.unwrap(), next_addr),
                                     _ => panic!("Invalid first argument for jal. Unable to determine the address after the jump."),
                                 }
-                            },
-                            "beq" | "bne" | "blt" | "bge" | "bltu" => cfg.add_next_blk_addr(blk_entry_addr.unwrap(), next_addr),
-                            _ => panic!("Unsupported jump instruction.")
+                            }
+                            "beq" | "bne" | "blt" | "bge" | "bltu" => {
+                                cfg.add_next_blk_addr(blk_entry_addr.unwrap(), next_addr)
+                            }
+                            _ => panic!("Unsupported jump instruction."),
                         }
                         marked.insert(next_addr);
                     }
