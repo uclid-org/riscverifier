@@ -106,9 +106,7 @@ fn main() {
         .map_or(vec![], |lst| lst.split(",").collect::<Vec<&str>>());
     let function_blocks = ObjectDumpReader::get_binary_object_dump(&binary_paths);
     // Module name
-    let module_name = matches
-        .value_of("modname")
-        .unwrap_or("main");
+    let module_name = matches.value_of("modname").unwrap_or("main");
     // Get ignored functions
     let ignored_functions = matches
         .value_of("ignore-funcs")
@@ -126,9 +124,7 @@ fn main() {
     let spec_reader = SpecReader::new(xlen, dwarf_reader.ctx());
     let spec_files = matches
         .value_of("spec")
-        .map_or(vec![], |lst| {
-            lst.split(",").collect::<Vec<&str>>()
-        });
+        .map_or(vec![], |lst| lst.split(",").collect::<Vec<&str>>());
     let specs_map = spec_reader
         .process_specs_files(&spec_files)
         .expect("Could not read spec.");

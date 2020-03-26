@@ -23,7 +23,7 @@ impl<'s> SpecReader<'s> {
     pub fn process_specs_files(
         &self,
         spec_file_paths: &Vec<&str>,
-        ) -> Result<HashMap<String, Vec<ir::Spec>>, utils::Error> {
+    ) -> Result<HashMap<String, Vec<ir::Spec>>, utils::Error> {
         let mut specs_map = HashMap::new();
         for spec_file_path in spec_file_paths {
             specs_map.extend(self.process_specs_file(spec_file_path)?);
@@ -36,8 +36,10 @@ impl<'s> SpecReader<'s> {
         &self,
         spec_file_path: &str,
     ) -> Result<HashMap<String, Vec<ir::Spec>>, utils::Error> {
-        let specs_str = fs::read_to_string(spec_file_path)
-            .expect(&format!("[get_specs] Failed to open specification file: {}.", spec_file_path));
+        let specs_str = fs::read_to_string(spec_file_path).expect(&format!(
+            "[get_specs] Failed to open specification file: {}.",
+            spec_file_path
+        ));
         self.parse_specs(&specs_str[..])
     }
 

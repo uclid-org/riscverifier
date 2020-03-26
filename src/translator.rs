@@ -9,6 +9,7 @@ use topological_sort::TopologicalSort;
 use crate::dwarfreader::{DwarfCtx, DwarfTypeDefn};
 use crate::ir::*;
 use crate::objectdumpreader::*;
+use crate::set;
 use crate::utils;
 
 /// ========== Constants ==========================================
@@ -67,19 +68,33 @@ where
             _phantom_i: PhantomData,
         }
     }
+    /// Outputs the model into output stream
     pub fn print_model(&self) {
         println!(
             "{}",
             I::model_to_string(&self.xlen, &self.model, &self.dwarf_ctx)
         );
     }
+    /// Generates a stub function with the specifications provided
     pub fn gen_func_model_stub(&mut self, func_name: &str) -> Result<(), utils::Error> {
         // Get the arguments
         let arg_decls = self.func_args(func_name);
         // Translate the specification
-        let mod_set = self.mod_set_from_spec_map(func_name);
+        let mod_set = self.mod_set_from_spec_map(func_name).map_or_else(
+            || Some(set![String::from(PC_VAR)]),
+            |mut s| {
+                s.insert(String::from(PC_VAR));
+                Some(s)
+            },
+        );
         let requires = self.requires_from_spec_map(func_name, &arg_decls).ok();
-        let ensures = self.ensures_from_spec_map(func_name);
+        let ensures = self.ensures_from_spec_map(func_name).map_or_else(
+            || Some(vec![self.pc_eventually_ra_spec()]),
+            |mut v| {
+                v.push(self.pc_eventually_ra_spec());
+                Some(v)
+            },
+        );
         let ret_decl = None;
         // Create stub function model
         let stub_fm = FuncModel::new(
@@ -96,6 +111,7 @@ where
         self.model.add_func_model(stub_fm);
         Ok(())
     }
+    /// Generates a model for the function named "func_name"
     pub fn gen_func_model(&mut self, func_name: &str) -> Result<(), utils::Error> {
         if self.ignored_funcs.get(func_name).is_some() {
             self.gen_func_model_stub(func_name)?;
@@ -267,7 +283,7 @@ where
         } else if fallthru_guard.is_some() {
             then_stmts_inner.push(Box::new(Stmt::Assert(fallthru_guard.clone().unwrap())));
         }
-        // Add call statement to callee function
+        // Add call statement to callee function if the basic block ends in a function call
         if let Some(target_addr) = cfg.next_abs_jump_addr(entry_addr) {
             if self.is_func_entry(&target_addr.to_string()[..]) {
                 let func_name = self.get_func_name(target_addr).unwrap();
@@ -405,17 +421,20 @@ where
         self.specs_map
             .get(func_name)
             .and_then(|spec_vec| {
-                Some(spec_vec.iter()
-                    .cloned()
-                    .filter(|spec| spec.is_modifies())
-                    .map(|spec| {
-                        spec.mod_set()
-                            .iter()
-                            .map(|v| v.name.clone())
-                            .collect::<Vec<String>>()
-                    })
-                    .flatten()
-                    .collect::<HashSet<String>>())
+                Some(
+                    spec_vec
+                        .iter()
+                        .cloned()
+                        .filter(|spec| spec.is_modifies())
+                        .map(|spec| {
+                            spec.mod_set()
+                                .iter()
+                                .map(|v| v.name.clone())
+                                .collect::<Vec<String>>()
+                        })
+                        .flatten()
+                        .collect::<HashSet<String>>(),
+                )
             })
             .map_or(None, |s| Some(s))
     }
@@ -425,15 +444,18 @@ where
         func_name: &str,
         arg_decls: &Vec<Expr>,
     ) -> Result<Vec<Spec>, utils::Error> {
-        let mut requires = self.specs_map
+        let mut requires = self
+            .specs_map
             .get(func_name)
             .and_then(|spec_vec| {
-                Some(spec_vec
-                    .iter()
-                    .cloned()
-                    .filter(|spec| spec.is_requires())
-                    .map(|spec| spec)
-                    .collect::<Vec<Spec>>())
+                Some(
+                    spec_vec
+                        .iter()
+                        .cloned()
+                        .filter(|spec| spec.is_requires())
+                        .map(|spec| spec)
+                        .collect::<Vec<Spec>>(),
+                )
             })
             .map_or(vec![], |v| v);
         // Add pc entry requirement
@@ -464,20 +486,46 @@ where
         }
         Ok(requires)
     }
+    /// Returns ensures stating that pc is eventually the return address
+    fn pc_eventually_ra_spec(&self) -> Spec {
+        // Add pc eventually returns constraint
+        Spec::Ensures(Expr::op_app(
+            Op::Comp(CompOp::Equality),
+            vec![
+                Expr::Var(self.pc_var()),
+                Expr::op_app(
+                    Op::Bv(BVOp::Concat),
+                    vec![
+                        Expr::op_app(
+                            Op::Bv(BVOp::Slice { l: 63, r: 1 }),
+                            vec![Expr::op_app(
+                                Op::Old,
+                                vec![Expr::var("$ra", self.bv_type(self.xlen))],
+                            )],
+                        ),
+                        Expr::bv_lit(0, 1),
+                    ],
+                ),
+            ],
+        ))
+    }
     /// Returns ensure statments from specification map for the given function
     fn ensures_from_spec_map(&self, func_name: &str) -> Option<Vec<Spec>> {
-        self.specs_map
+        let ensures = self
+            .specs_map
             .get(func_name)
-            .and_then(|spec_vec|
+            .and_then(|spec_vec| {
                 Some(
-                    spec_vec.iter()
+                    spec_vec
+                        .iter()
                         .cloned()
                         .filter(|spec| spec.is_ensures())
                         .map(|spec| spec)
                         .collect::<Vec<Spec>>(),
                 )
-            )
-            .map_or(None, |v| Some(v))
+            })
+            .map_or(None, |v| Some(v));
+        ensures
     }
     /// Translates DwarfTypeDefn to Type
     fn dwarf_typ_to_ir(&self, typ: &DwarfTypeDefn) -> Type {

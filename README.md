@@ -20,7 +20,7 @@ To build the project, run:
 
 To generate a model of a function in a binary, run the following command:
 
-`./target/debug/riscverifier /path/to/binary -f function_to_verify -o output_filename.ucl -i ignored,functions,list`
+`./target/debug/riscverifier /path/to/binary -f function_to_verify -i ignored,functions,list > outputfile.ucl`
 
 This will generate a Uclid5 model of the function in assembly by recursively finding all the functions called by function\_to\_verify, generate a procedure for each, including its basic blocks, but ignore the functions specified by the -i flag. The ignored functions are replaced by a stub Uclid5 procedure.
 

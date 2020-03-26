@@ -169,8 +169,25 @@ impl ObjectDumpReader {
                 "beq" | "bne" | "blt" | "bge" | "bltu" | "jal" => {
                     let next_addr = Cfg::next_addr(al.address());
                     // Add the fall through address only if it's inside the function
-                    if func_blk.iter().find(|rc_al| rc_al.address() == next_addr).is_some() {
-                        cfg.add_next_blk_addr(blk_entry_addr.unwrap(), next_addr);
+                    // and the first register is not zero (this would be a unconditional
+                    // jump that doesn't return). If it's not "zero" nor "ra", throw
+                    // and error because we currently can't compute where it will go
+                    if func_blk
+                        .iter()
+                        .find(|rc_al| rc_al.address() == next_addr)
+                        .is_some()
+                    {
+                        match &al.op_code[..] {
+                            "jal" => {
+                                match &al.rd().expect(&format!("Invalid jump instruction {:#?}.", al)).get_reg_name()[..] {
+                                    "zero" => cfg.add_next_blk_addr(blk_entry_addr.unwrap(), next_addr),
+                                    "ra" => (),
+                                    _ => panic!("Invalid first argument for jal. Unable to determine the address after the jump."),
+                                }
+                            },
+                            "beq" | "bne" | "blt" | "bge" | "bltu" => cfg.add_next_blk_addr(blk_entry_addr.unwrap(), next_addr),
+                            _ => panic!("Unsupported jump instruction.")
+                        }
                         marked.insert(next_addr);
                     }
                     let jump_addr = al.imm().unwrap().get_imm_val() as u64;
@@ -189,7 +206,7 @@ impl ObjectDumpReader {
         }
         // Create basic blocks
         //  If addr is marked, then save the
-        //  previous vector into basic block
+        //  previous vector as a basic block
         //  and start a new vector of instructions
         let mut basic_blk: Vec<Rc<AssemblyLine>> = vec![];
         for al in &func_blk {
