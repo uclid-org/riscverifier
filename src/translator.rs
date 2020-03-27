@@ -127,7 +127,6 @@ where
         // Add system global variables
         self.model.add_vars(&self.sys_state_vars());
         // Generate procedure model for each basic block in the function
-        // Fixme: Compute modifies set to block (NOTE: What does this even mean?)
         let bb_fms = self
             .get_func_cfg(func_name)?
             .bbs()
@@ -149,6 +148,12 @@ where
                 )
             })
             .collect::<Vec<_>>();
+        // Add all basic block mod sets to the model
+        let bb_mod_sets = bb_fms.iter().map(|fm| (fm.sig.name.clone(), fm.sig.mod_set.clone())).collect::<Vec<(String, HashSet<String>)>>();
+        for bb_mod_set in bb_mod_sets {
+            self.mod_set_map
+                .insert(bb_mod_set.0, bb_mod_set.1);
+        }
         let callees = self.get_callee_addrs(self.get_func_cfg(func_name)?);
         // Compute modifies set for the current function
         let mut func_mod_set = bb_fms
@@ -190,7 +195,9 @@ where
         let ensures = self.ensures_from_spec_map(func_name);
         let ret_decl = None;
         // Create the cfg
-        let body = self.gen_func_body(self.get_func_cfg(func_name)?);
+        let body = self.gen_func_body(&Rc::clone(self.get_func_cfg(func_name)?));
+        let real_mod_set = self.infer_mod_set(&body);
+        self.mod_set_map.insert(func_name.to_string(), real_mod_set.clone());
         // Add function model
         self.model.add_func_model(FuncModel::new(
             func_name,
@@ -199,7 +206,8 @@ where
             ret_decl,
             requires,
             ensures,
-            Some(func_mod_set),
+            // Some(func_mod_set),
+            Some(real_mod_set),
             body,
             true, // FIXME: Inlined for now otherwise we would need a quantifier over the memory
         ));
@@ -221,7 +229,7 @@ where
             .map_or(vec![], |v| v)
     }
     /// Function model body
-    fn gen_func_body(&self, cfg: &Rc<Cfg>) -> Stmt {
+    fn gen_func_body(&mut self, cfg: &Rc<Cfg>) -> Stmt {
         let mut stmts_vec = vec![];
         let top_sort = self.topological_sort(&cfg);
         // Add basic blocks in topological order
@@ -239,7 +247,7 @@ where
         Stmt::Block(stmts_vec)
     }
     /// Basic block call in function body
-    fn basic_blk_call(&self, entry_addr: u64, cfg: &Rc<Cfg>) -> Stmt {
+    fn basic_blk_call(&mut self, entry_addr: u64, cfg: &Rc<Cfg>) -> Stmt {
         // Assertion statements after the basic block executes (should only be used when inlining as a sanity check)
         let mut then_stmts_inner = vec![];
         // Add call to basic block
@@ -285,10 +293,13 @@ where
         }
         // Add call statement to callee function if the basic block ends in a function call
         if let Some(target_addr) = cfg.next_abs_jump_addr(entry_addr) {
+            // Absolute jump to a function entry. 
+            // In this case, call the function.
             if self.is_func_entry(&target_addr.to_string()[..]) {
                 let func_name = self.get_func_name(target_addr).unwrap();
                 let args = self
                     .dwarf_ctx
+                    // Get the function signature
                     .func_sig(&func_name)
                     .ok()
                     .and_then(|fs| {
@@ -297,6 +308,7 @@ where
                                 .iter()
                                 .enumerate()
                                 .map(|(i, dwarf_var)| {
+                                    // Infer the argument sizes and use the a registers as inputs
                                     let reg_var = Expr::var(&format!("a{}", i), Type::Unknown);
                                     let typ = self.dwarf_typ_to_ir(&dwarf_var.typ_defn);
                                     Expr::op_app(
@@ -311,11 +323,25 @@ where
                         )
                     })
                     .map_or(vec![], |v| v);
-                let call_stmt = Stmt::func_call(func_name, vec![], args);
-                then_stmts_inner.push(Box::new(call_stmt));
+                let call_func_stmt = Stmt::func_call(func_name, vec![], args);
+                // Add the call statement to the then statement
+                then_stmts_inner.push(Box::new(call_func_stmt));
                 if let Some(guard) = fallthru_guard {
                     then_stmts_inner.push(Box::new(Stmt::Assert(guard)));
                 }
+            } else {
+                // Absolute jump to a basic block.
+                // In this case, recursively build a tree of basic block executions
+                let func_cfg = Rc::clone(self
+                    .get_func_cfg_addr(&target_addr)
+                    .expect(&format!("No CFG found containing address {}.", target_addr)));
+                let call_bb_stmt = self.basic_blk_call(*target_addr, &func_cfg);
+                then_stmts_inner.push(Box::new(call_bb_stmt));
+                // Also generate the function if it's not already generated
+                let func_at_target_addr = self.func_at_addr(target_addr)
+                    .expect(&format!("Could not find a function defined at {}.", target_addr));
+                self.gen_func_model(&func_at_target_addr)
+                    .expect(&format!("Unable to generate a function model for function {}.", target_addr));
             }
         }
         let then_stmt = Box::new(Stmt::Block(then_stmts_inner));
@@ -416,6 +442,58 @@ where
         Stmt::func_call(func_name, lhs, operands)
     }
     /// =================== Helper functions ===================
+    /// Returns the inferred modifies set
+    fn infer_mod_set(&self, stmt: &Stmt) -> HashSet<String> {
+        let mut mod_set = HashSet::new();
+        mod_set.insert(PC_VAR.to_string());
+        mod_set.insert(EXCEPT_VAR.to_string()); // Note: Doesn't always need to be modified
+        match stmt {
+            Stmt::Havoc(rc_var) => {
+                mod_set.insert(rc_var.name.clone());
+            },
+            Stmt::FuncCall(fc) => {
+                let fc_mod_set = self.mod_set_map.get(&fc.func_name).expect(&format!("Unable to find modifies set for {}.", fc.func_name));
+                mod_set = mod_set.union(&fc_mod_set).cloned().collect();
+            },
+            Stmt::Assign(a) => {
+                let lhs_mod_set = a.lhs.iter().map(|e| e.get_expect_var().name.clone()).collect::<HashSet<String>>();
+                mod_set = mod_set.union(&lhs_mod_set).cloned().collect();
+            },
+            Stmt::IfThenElse(ite) => {
+                let then_mod_set = self.infer_mod_set(&ite.then_stmt);
+                mod_set = mod_set.union(&then_mod_set).cloned().collect();
+                if let Some(else_stmt) = &ite.else_stmt {
+                    let else_mod_set = self.infer_mod_set(else_stmt);
+                    mod_set = mod_set.union(&else_mod_set).cloned().collect();
+                }
+            },
+            Stmt::Block(blk) => {
+                let blk_mod_sets = blk.iter().map(|stmt| self.infer_mod_set(stmt)).flatten().collect::<HashSet<String>>();
+                mod_set = mod_set.union(&blk_mod_sets).cloned().collect();
+            }
+            _ => ()
+        }
+        mod_set
+    }
+    /// Compute modifies set for a basic block
+    fn bb_mod_set(&self, bb: &BasicBlock) -> HashSet<String> {
+        let mut mod_set = HashSet::new();
+        mod_set.insert(PC_VAR.to_string());
+        mod_set.insert(EXCEPT_VAR.to_string()); // Note: Doesn't always need to be modified
+        for al in bb.insts() {
+            if let Some(reg) = al.rd() {
+                mod_set.insert(reg.get_reg_name());
+            }
+            if let Some(reg) = al.csr() {
+                mod_set.insert(reg.get_reg_name());
+            }
+            match al.base_instruction_name() {
+                "sb" | "sh" | "sw" | "sd" => mod_set.insert(MEM_VAR.to_string()),
+                _ => false,
+            };
+        }
+        mod_set
+    }
     /// Returns the modifies statments from the specificaiton map for the given function
     fn mod_set_from_spec_map(&self, func_name: &str) -> Option<HashSet<String>> {
         self.specs_map
@@ -537,25 +615,6 @@ where
             | DwarfTypeDefn::Struct { .. }
             | DwarfTypeDefn::Pointer { .. } => Type::Bv { w: self.xlen },
         }
-    }
-    /// Compute modifies set for a basic block
-    fn bb_mod_set(&self, bb: &BasicBlock) -> HashSet<String> {
-        let mut mod_set = HashSet::new();
-        mod_set.insert(PC_VAR.to_string());
-        mod_set.insert(EXCEPT_VAR.to_string()); // Note: Doesn't always need to be modified
-        for al in bb.insts() {
-            if let Some(reg) = al.rd() {
-                mod_set.insert(reg.get_reg_name());
-            }
-            if let Some(reg) = al.csr() {
-                mod_set.insert(reg.get_reg_name());
-            }
-            match al.base_instruction_name() {
-                "sb" | "sh" | "sw" | "sd" => mod_set.insert(MEM_VAR.to_string()),
-                _ => false,
-            };
-        }
-        mod_set
     }
     /// List of callee addresses in the CFG
     fn get_callee_addrs(&self, cfg: &Rc<Cfg>) -> HashSet<u64> {
@@ -680,16 +739,26 @@ where
     /// Returns the entry address of the function named `func_name`
     fn get_func_entry_addr(&self, func_name: &str) -> Result<&u64, utils::Error> {
         Ok(self.get_func_cfg(func_name)?.get_entry_addr())
-    }
-    /// Returns the CFG for the function with entry address `addr`
-    #[allow(dead_code)]
-    fn get_func_cfg_addr(&self, addr: &str) -> Result<&Rc<Cfg>, utils::Error> {
-        self.func_cfg_map.get(addr).map_or(
+    }    
+    /// Returns the CFG for the function containg the address `addr`
+    fn get_func_cfg_addr(&self, addr: &u64) -> Result<&Rc<Cfg>, utils::Error> {
+        self.func_cfg_map.iter().find(|(_, cfg)| {
+            cfg.bbs().keys().find(|bb_entry| bb_entry == &addr).is_some()
+        }).map_or(
             Err(utils::Error::TranslatorErr(format!(
-                "Could not find function cfg with entry address {}.",
+                "Could not find function cfg containing a basic block with entry address {}.",
                 addr
             ))),
-            |rc| Ok(rc),
+            |rc| Ok(rc.1),
         )
+    }
+    /// Returns the function defined at address "addr"
+    fn func_at_addr(&self, addr: &u64) -> Option<String> {
+        if let Some(cfg) = self.get_func_cfg_addr(addr).ok() {
+            cfg.get_basic_blk(*addr)
+                .map_or(None, |bb| Some(bb.insts().iter().next().unwrap().function_name().to_string()))
+        } else {
+            None
+        }
     }
 }

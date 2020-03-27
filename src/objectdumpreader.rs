@@ -67,7 +67,8 @@ impl ObjectDumpReader {
                                     .unwrap()
                                     .into_inner()
                                     .as_str()
-                                    .to_string();
+                                    .to_string()
+                                    .replace(".", "_");
                                 // instruction operands
                                 let mut operands = vec![];
                                 while let Some(operand_iter) = assembly_line_iter.next() {
@@ -104,6 +105,9 @@ impl ObjectDumpReader {
                                 if seen_functions.get(&callee_name).is_none()
                                     && !&assembly_lines.is_empty()
                                 {
+                                    // Sanity check
+                                    let _ = assembly_lines.iter().map(|al| assert!(al.function_name() == assembly_lines[0].function_name(), "Invalid function block."));
+                                    // Add list of assembly lines to function blocks
                                     function_blocks.insert(
                                         assembly_lines[0].address.clone(),
                                         assembly_lines.clone(),
@@ -146,6 +150,7 @@ impl ObjectDumpReader {
                 }
             }
         }
+
         function_blocks
     }
 
@@ -157,6 +162,8 @@ impl ObjectDumpReader {
         // Stores basic block ENTRY point addresses
         let mut marked = HashSet::new();
         let mut blk_entry_addr = None;
+        // Iterate over the assembly lines in the function block and create dependencies for the cfg
+        // Mark all of the addresses which are the beginning of a basic block (except the first function entry basic block)
         for al in &func_blk {
             if blk_entry_addr.is_none() {
                 blk_entry_addr = Some(al.address());
@@ -165,6 +172,7 @@ impl ObjectDumpReader {
             // MARK1. branch fall through targets
             // DEP2. Instruction is branch | jal, add absolute addr
             // MARK2. absolute jump (branch) targets
+            // FIXME: Handle jalr and mret
             match &al.op_code[..] {
                 "beq" | "bne" | "blt" | "bge" | "bltu" | "jal" => {
                     let next_addr = Cfg::next_addr(al.address());
@@ -195,12 +203,18 @@ impl ObjectDumpReader {
                     let jump_addr = al.imm().unwrap().get_imm_val() as u64;
                     cfg.add_abs_jump_addr(blk_entry_addr.unwrap(), jump_addr);
                     marked.insert(jump_addr);
-                }
+                },
+                "jalr" | "mret" => {
+                    // Only add the next address to split the block.
+                    // We don't know where it jumps statically so we don't mark any "jump_addr".
+                    let next_addr = Cfg::next_addr(al.address());
+                    marked.insert(next_addr);
+                },
                 _ => (),
             }
             // DEP3. Update blk_entry_addr
             match &al.op_code[..] {
-                "beq" | "bne" | "blt" | "bge" | "bltu" | "jal" | "jalr" => {
+                "beq" | "bne" | "blt" | "bge" | "bltu" | "jal" | "jalr" | "mret" => {
                     blk_entry_addr = Some(Cfg::next_addr(al.address()))
                 }
                 _ => (),
@@ -229,9 +243,16 @@ impl ObjectDumpReader {
 
 #[derive(Debug)]
 pub struct Cfg {
+    /// Entry address for the function represented by the CFG
     entry_addr: u64,
+    /// Map from basic block entry address to a BasicBlock
     basic_blks_map: HashMap<u64, BasicBlock>,
+    /// Map from entry addresses to entry addresses.
+    /// Only entry addresses whose corresponding basic block ends in a jump or branch
+    /// with an absolute target will have a key and value pair in this map.
     abs_jump_map: HashMap<u64, u64>,
+    /// Map from addresses to addresses.
+    /// Map of address to the next fall through address
     next_blk_addr_map: HashMap<u64, u64>,
 }
 impl Cfg {

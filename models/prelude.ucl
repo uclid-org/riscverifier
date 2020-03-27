@@ -1,16 +1,19 @@
-    //define sp_preconditions(): boolean = (stack_low_const <= sp && sp <= stack_high_const);
+    // Loads values from byte-sized memory
     define loadByte_macro (mem: [bv64]bv8, addr: bv64): bv8 = (mem)[addr];
     define loadHalf_macro (mem: [bv64]bv8, addr: bv64): bv16 = (loadByte_macro(mem, (addr + 1bv64)) ++ loadByte_macro(mem, addr));
     define loadWord_macro (mem: [bv64]bv8, addr: bv64): bv32 = (loadHalf_macro(mem, (addr + 2bv64)) ++ loadHalf_macro(mem, addr));
     define loadDouble_macro (mem: [bv64]bv8, addr: bv64): bv64 = (loadWord_macro(mem, (addr + 4bv64)) ++ loadWord_macro(mem, addr));
+    // Aliases to the load value macros above
     define deref_1(mem: [bv64]bv8, addr: bv64): bv8 = loadByte_macro(mem, addr);
     define deref_2(mem: [bv64]bv8, addr: bv64): bv16 = loadHalf_macro(mem, addr);
     define deref_4(mem: [bv64]bv8, addr: bv64): bv32 = loadWord_macro(mem, addr);
     define deref_8(mem: [bv64]bv8, addr: bv64): bv64 = loadDouble_macro(mem, addr);
+    // Memory updates to byte-sized memory
     define mem_update_byte(memP: [bv64]bv8, index: bv64, value: bv8): [bv64]bv8 = memP[index -> value];
     define mem_update_half(memP: [bv64]bv8, index: bv64, value: bv16): [bv64]bv8 = mem_update_byte(mem_update_byte(memP, index, value[7:0]), index+1bv64, value[15:8]);
     define mem_update_word(memP: [bv64]bv8, index: bv64, value: bv32): [bv64]bv8 = mem_update_half(mem_update_half(memP, index, value[15:0]), index+2bv64, value[31:16]);
     define mem_update_double(memP: [bv64]bv8, index: bv64, value: bv64): [bv64]bv8 = mem_update_word(mem_update_word(memP, index, value[31:0]), index+4bv64, value[63:32]);
+    // Instruction specifications
     procedure [inline] add_proc(rs1: bv64, rs2: bv64) returns (ret: bv64)
       modifies pc;
       {
@@ -127,6 +130,12 @@
       {
         ret = (pc + 4bv64); // line 0
         pc = ((rs1 + imm)[63:1] ++ 0bv1); // line 0
+      }
+    procedure [inline] mret_proc()
+      modifies pc;
+      {
+        // FIXME: Fill out the actual specs of this instruction.
+        pc = 0bv64;
       }
     procedure [inline] lb_proc(rs1: bv64, imm: bv64) returns (ret: bv64)
       modifies pc;
@@ -247,21 +256,31 @@
           }
         pc = (pc + 4bv64); // line 0
       }
-    procedure [inline] fence_proc()
+    // FIXME: Implement wfi instruction 
+    procedure [inline] wfi_proc()
+      modifies pc;
+      {
+        pc = (pc + 4bv64);
+      }
+    procedure [inline] fence_proc(rs: bv64)
       modifies pc;
       {
         pc = (pc + 4bv64); // line 0
       }
-    procedure [inline] sfence_vma_proc(rs1: bv64, imm: bv64) returns (ret: bv64)
+    procedure [inline] fence_i_proc()
       modifies pc;
       {
-        ret = 0bv64; // line 0
         pc = (pc + 4bv64); // line 0
       }
-    procedure [inline] lwu_proc(addr: bv64) returns (ret: bv64)
+    procedure [inline] sfence_vma_proc()
       modifies pc;
       {
-        ret = bv_zero_extend(32, loadWord_macro(mem, addr)); // line 0
+        pc = (pc + 4bv64); // line 0
+      }
+    procedure [inline] lwu_proc(rs1 :bv64, imm: bv64) returns (ret: bv64)
+      modifies pc;
+      {
+        ret = bv_zero_extend(32, loadWord_macro(mem, rs1 + imm)); // line 0
         pc = (pc + 4bv64); // line 0
       }
     procedure [inline] ld_proc(rs1: bv64, imm: bv64) returns (ret: bv64)
