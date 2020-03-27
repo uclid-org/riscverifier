@@ -10,6 +10,11 @@ use crate::utils;
 pub struct Uclid5Interface;
 
 impl Uclid5Interface {
+    /// Returns a string of the variable declarations in the model
+    /// 
+    /// # Arguments
+    ///
+    /// * `model` - The model to generate the declarations string for
     fn gen_var_defns(model: &Model) -> String {
         let mut sorted = model.vars.iter().collect::<Vec<_>>();
         sorted.sort();
@@ -20,9 +25,17 @@ impl Uclid5Interface {
             .join("\n");
         format!("// RISC-V system state variables\n{}", defns)
     }
+    /// Reads the model for the RISC-V instructions (provided by utils::PRELUDE_PATH) and returns it as a string
     fn prelude() -> String {
         fs::read_to_string(utils::PRELUDE_PATH).expect("Unable to read prelude.")
     }
+    /// Generate a define macro string for each type of array variable
+    /// that is a global variable or function argument 
+    /// 
+    /// # Arguments
+    ///
+    /// * `dwarf_ctx` - The DWARF information that contains all the global variables and function
+    ///                 signatures for the binaries provided
     fn gen_array_defns(dwarf_ctx: &DwarfCtx) -> String {
         let mut defns: Vec<String> = vec![];
         for var in dwarf_ctx.global_vars() {
@@ -40,10 +53,23 @@ impl Uclid5Interface {
         defns.dedup();
         utils::indent_text(format!("// Array helpers\n{}", defns.join("\n")), 4)
     }
+    /// Recursively generate define macros for a given type (size in bytes).
+    /// The macro is a function that takes a base address and index
+    /// and returns 'base + index * typ_defn.bytes'.
+    /// Returns a string representations of these define macros.
+    /// 
+    /// # Arguments
+    ///
+    /// * `typ_defn` - Type to generate an array index macro for
+    ///
+    /// # Example
+    ///
+    /// define index_by_16(base: xlen_t, index: xlen_t): xlen_t = base + bv_left_shift(to_xlen_t(4bv64), index);
     fn gen_array_defn(typ_defn: &DwarfTypeDefn) -> Vec<String> {
         let mut defns = vec![];
         match &typ_defn {
             DwarfTypeDefn::Primitive { bytes } => {
+                // Check if the type is valid (bytes > 0)
                 if *bytes > 0 {
                     defns.push(format!(
                         "define {}(base: xlen_t, index: xlen_t): xlen_t = base + {};",
@@ -83,9 +109,12 @@ impl Uclid5Interface {
         };
         defns
     }
+    /// Returns the name of the array index macro given the byte size
     fn array_index_macro_name(bytes: &u64) -> String {
         format!("index_by_{}", bytes)
     }
+    /// Creates an expression that represents 'num_const * expr'
+    /// TODO: Does SMT support precise multiplication? Maybe we can take this out
     fn multiply_expr(num_const: &u64, expr: &str) -> String {
         format!("{:b}", num_const) // Binary expression
             .chars()
@@ -94,6 +123,7 @@ impl Uclid5Interface {
                 // acc = (expression, i-th bit counter)
                 if x == '1' {
                     (
+                        // Add multiple of 2 of the expression to the current expression
                         format!(
                             "bv_left_shift({}, {}){}{}",
                             format!("to_xlen_t({}bv64)", acc.1),
@@ -101,6 +131,7 @@ impl Uclid5Interface {
                             if acc.0.len() == 0 { "" } else { " + " },
                             acc.0
                         ),
+                        // Increment the i-th bit counter
                         acc.1 + 1,
                     )
                 } else {
@@ -109,6 +140,12 @@ impl Uclid5Interface {
             })
             .0
     }
+    /// Return a string of get field macros for all the type definitions in the global variables
+    /// and formal arguments of functions.
+    ///  
+    /// # Arguments
+    ///
+    /// * `dwarf_ctx` - The DWARF context containing the variables and function signatures.
     fn gen_struct_defns(dwarf_ctx: &DwarfCtx) -> String {
         let mut defns = vec![];
         for var in dwarf_ctx.global_vars() {
@@ -126,6 +163,15 @@ impl Uclid5Interface {
         defns.dedup();
         utils::indent_text(format!("// Struct helpers\n{}", defns.join("\n")), 4)
     }
+    /// Recursively generate string representations of get field macros for type definition 'typ'.
+    ///
+    /// # Example
+    ///
+    ///     Given the following struct definition:
+    ///     struct ctx { ..., a0: T, ... }; 
+    ///
+    ///     This function returns the following definition to simplify 'c.a0', where c is of type ctx:
+    ///     define ctx_a0(ptr: xlen_t): xlen_t = ptr + to_xlen_t(80bv64);
     fn gen_struct_defn(typ: &DwarfTypeDefn) -> Vec<String> {
         let mut defns = vec![];
         match typ {
@@ -155,9 +201,11 @@ impl Uclid5Interface {
         }
         defns
     }
+    /// Given the `struct_id` and `field_name`, return the get field macro name.
     fn get_field_macro_name(struct_id: &str, field_name: &String) -> String {
         format!("{}_{}", struct_id, field_name)
     }
+    /// Given the dwarf_ctx, returns a string of global variable definitions.
     fn gen_global_defns(dwarf_ctx: &DwarfCtx) -> String {
         let mut defns = String::from("// Global variables\n");
         for var in dwarf_ctx.global_vars() {
@@ -165,6 +213,8 @@ impl Uclid5Interface {
         }
         utils::indent_text(defns, 4)
     }
+    /// Given a global variable, returns a string of a macro that refers to the static
+    /// memory location of the variable. 
     fn gen_global_defn(global_var: &DwarfVar) -> String {
         format!(
             "define {}(): xlen_t = {};",
@@ -172,6 +222,7 @@ impl Uclid5Interface {
             format!("to_xlen_t({}bv64)", global_var.memory_addr)
         )
     }
+    /// Returns a string of macros to refer to a static function's entry address. 
     fn gen_global_func_defns(model: &Model) -> String {
         let mut defns = String::from("// Global function entry addresses\n");
         for fm in &model.func_models {
@@ -183,13 +234,7 @@ impl Uclid5Interface {
         }
         utils::indent_text(defns, 4)
     }
-    fn gen_spec_path_ptr_defns(model: &Model) -> String {
-        let mut defns = String::from("// Path addresses\n");
-        for _fm in &model.func_models {
-            defns = format!("{}{}\n", defns, "// Nothing");
-        }
-        utils::indent_text(defns, 4)
-    }
+    /// Returns a define macro that returns the `func_entry_addr` 
     fn gen_global_func_defn(func_name: &str, func_entry_addr: u64) -> String {
         format!(
             "define {}(): xlen_t = {};",
@@ -197,6 +242,8 @@ impl Uclid5Interface {
             format!("to_xlen_t({}bv64)", func_entry_addr)
         )
     }
+    /// Returns a string of all the procedures in the model.
+    /// This contains all of the function models.
     fn gen_procs(model: &Model, dwarf_ctx: &DwarfCtx) -> String {
         let procs_string = model
             .func_models
@@ -206,6 +253,9 @@ impl Uclid5Interface {
             .join("\n\n");
         utils::indent_text(procs_string, 4)
     }
+    /// Returns the control block for the UCLID5 model.
+    /// This currently will automatically verify all functions with
+    /// a specification.
     fn control_blk(model: &Model, dwarf_ctx: &DwarfCtx) -> String {
         let verif_fns_string = model
             .func_models
@@ -225,7 +275,15 @@ impl Uclid5Interface {
         let control_string = format!("control {{\n{}\n}}", verif_fns_string);
         utils::indent_text(control_string, 4)
     }
-    /// Helper functions
+
+    /// =================== Helper functions ===================
+
+    /// Return a UCLID5 variable declaration.
+    ///
+    /// # Example
+    ///
+    /// Var = { name: "x".to_string(), typ: Type::Bv { bytes: 64 } } will return:
+    /// `x: bv64`
     fn var_decl(var: &Var) -> String {
         format!(
             "{}: {}",
@@ -233,6 +291,8 @@ impl Uclid5Interface {
             Self::typ_to_string(&var.typ)
         )
     }
+
+    /// UCLID5 string that zero extends an expression's bit width.
     fn extend_to_match_width(expr: &str, from: u64, to: u64) -> String {
         if to > from {
             format!("bv_zero_extend({}, {})", to - from, expr)
@@ -511,9 +571,7 @@ impl IRInterface for Uclid5Interface {
         let array_defns = Self::gen_array_defns(&dwarf_ctx); // Define macros that index for arrays (by muiltiplication)
         let struct_defns = Self::gen_struct_defns(&dwarf_ctx); // Define macros for getting struct field values
         let global_var_defns = Self::gen_global_defns(&dwarf_ctx); // Define macros for global variable pointers
-        let global_func_defns = Self::gen_global_func_defns(&model); // Define macros for function addresses
-        let _spec_path_defns = Self::gen_spec_path_ptr_defns(&model); // Define macros for paths in specifications
-                                                                      // procedures
+        let global_func_defns = Self::gen_global_func_defns(&model); // Define macros for function addresses                                              // procedures
         let procs = Self::gen_procs(model, &dwarf_ctx);
         // control block
         let ctrl_blk = Self::control_blk(model, &dwarf_ctx);
