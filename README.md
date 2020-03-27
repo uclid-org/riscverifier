@@ -38,13 +38,14 @@ UPDATE: Currently, the SMTLIB interface in Uclid5 is broken and the models will 
 
 ## TODO
 
-* [ ] Add option to manually specify the modifies set
-* [ ] Add deref and ref in specification language
+* [ ] Handle indirect jumps?
+* [ ] Separate the data and stack memory sections into mem\_stack and mem\_data
+* [ ] Add forall into the specificaiton language 
+
+* [X] Add option to manually specify the modifies set
+* [X] Add deref and ref in specification language
 * [ ] Write spec language (syntax and semantics) document
 * [ ] Support for floating point registers
-
-Stretch goals:
-* [ ] Reimplement the dissasembler (after my PhD :-)).
 
 ## Notes
 
