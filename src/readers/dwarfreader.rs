@@ -235,7 +235,7 @@ pub trait DwarfInterface: std::fmt::Debug {
 
     /// ====================== Helper functions ======================
     /// Parses the binary files in the paths and returns
-    /// the corresponding DwarfObjects from the debugging information
+    /// the corresponding DwarfObjects from the debugging information.
     fn process_dwarf_files(
         xlen: &u64,
         paths: &Vec<&str>,
@@ -249,7 +249,7 @@ pub trait DwarfInterface: std::fmt::Debug {
     }
 
     /// Parses the specified binary file in the path and returns
-    /// the corresponding DwarfObjects from the debugging information
+    /// the corresponding DwarfObjects from the debugging information.
     fn process_dwarf_file(xlen: &u64, path: &str) -> Result<Vec<DwarfObject>, gimli::Error> {
         info!("[process_dwarf_file] Processing dwarf file {:?}.", path);
         let file = fs::File::open(&path[..]).unwrap();
@@ -308,7 +308,10 @@ pub trait DwarfInterface: std::fmt::Debug {
         Ok(dwarf_objects)
     }
 
-    /// Converts gimli entries_cursor to a DwarfObject
+    /// Converts gimli entries_cursor to a DwarfObject.
+    /// This function simplifies the gimli reader iterable
+    /// into a recursive data structure DwarfObject that contains
+    /// (most) of the relevant DWARF data.
     fn entries_to_dwarf_object<R: gimli::Reader<Offset = usize>>(
         unit: &gimli::Unit<R>,
         dwarf: &gimli::Dwarf<R>,
@@ -338,7 +341,8 @@ pub trait DwarfInterface: std::fmt::Debug {
                         parent = grandparent.last_child();
                         dwarf_object_stack.push(grandparent);
                     }
-                    // If depth decreases, then add parent back to the grandparent recursively
+                    // If depth decreases, then pop the parent from the stack
+                    // and add it to the grandparent node
                     _ if delta_depth < 0 => {
                         for _ in 0..-delta_depth {
                             let mut grandparent = dwarf_object_stack.pop().unwrap();
@@ -452,7 +456,7 @@ impl DwarfCtx {
         &self.global_vars
     }
     /// Returns true if and only if the function named `func_name` exists
-    pub fn is_func(&self, func_name: &str) -> bool {
+    pub fn func_sig_exists(&self, func_name: &str) -> bool {
         self.func_sigs.get(func_name).is_some()
     }
     /// Returns the function signature of the function named `func_name`

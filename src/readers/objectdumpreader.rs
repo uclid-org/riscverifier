@@ -52,15 +52,14 @@ impl ObjectDumpReader {
                                     assembly_line_iter.next().unwrap().as_str(),
                                 ).expect("[get_binary_object_dump] Unable to parse assembly line address.");
                                 // callee name and offset
-                                let mut callee_offset_iter =
+                                let mut func_offset_iter =
                                     assembly_line_iter.next().unwrap().into_inner();
-                                let callee_name =
-                                    callee_offset_iter.next().unwrap().as_str().to_string();
-                                let callee_offset_str = callee_offset_iter.as_str();
-                                let callee_offset = utils::hex_str_to_u64(
-                                    callee_offset_str.trim_start_matches("0x"),
-                                )
-                                .unwrap_or_else(|_| 0);
+                                let func_name =
+                                    func_offset_iter.next().unwrap().as_str().to_string();
+                                let func_offset_str = func_offset_iter.as_str();
+                                let func_offset =
+                                    utils::hex_str_to_u64(func_offset_str.trim_start_matches("0x"))
+                                        .unwrap_or_else(|_| 0);
                                 // instruction op code
                                 let op_code = assembly_line_iter
                                     .next()
@@ -102,30 +101,35 @@ impl ObjectDumpReader {
                                         }
                                     }
                                 }
-                                if seen_functions.get(&callee_name).is_none()
+                                if seen_functions.get(&func_name).is_none()
                                     && !&assembly_lines.is_empty()
                                 {
                                     // Sanity check
-                                    let _ = assembly_lines.iter().map(|al| assert!(al.function_name() == assembly_lines[0].function_name(), "Invalid function block."));
+                                    let _ = assembly_lines.iter().map(|al| {
+                                        assert!(
+                                            al.function_name() == assembly_lines[0].function_name(),
+                                            "Invalid function block."
+                                        )
+                                    });
                                     // Add list of assembly lines to function blocks
                                     function_blocks.insert(
                                         assembly_lines[0].address.clone(),
                                         assembly_lines.clone(),
                                     );
                                     assembly_lines = vec![];
-                                    seen_functions.insert(callee_name.clone());
+                                    seen_functions.insert(func_name.clone());
                                 }
                                 if seen_functions.len() == 0 {
-                                    seen_functions.insert(callee_name.clone());
+                                    seen_functions.insert(func_name.clone());
                                 }
                                 // debug!(
                                 //     "[get_binary_object_dump]   Addr: {:?}, Function name: {:?}, Offset: {:?}, OpCode: {:?}, Arguments: {:?}.",
-                                //     address, callee_name, callee_offset, op_code, operands
+                                //     address, func_name, func_offset, op_code, operands
                                 // );
                                 assembly_lines.push(AssemblyLine {
                                     address,
-                                    callee_name,
-                                    callee_offset,
+                                    func_name,
+                                    func_offset,
                                     op_code,
                                     operands,
                                 });
@@ -150,7 +154,6 @@ impl ObjectDumpReader {
                 }
             }
         }
-
         function_blocks
     }
 
@@ -203,13 +206,13 @@ impl ObjectDumpReader {
                     let jump_addr = al.imm().unwrap().get_imm_val() as u64;
                     cfg.add_abs_jump_addr(blk_entry_addr.unwrap(), jump_addr);
                     marked.insert(jump_addr);
-                },
+                }
                 "jalr" | "mret" => {
                     // Only add the next address to split the block.
                     // We don't know where it jumps statically so we don't mark any "jump_addr".
                     let next_addr = Cfg::next_addr(al.address());
                     marked.insert(next_addr);
-                },
+                }
                 _ => (),
             }
             // DEP3. Update blk_entry_addr
@@ -354,8 +357,8 @@ impl BasicBlock {
 #[derive(Debug, Clone)]
 pub struct AssemblyLine {
     address: u64,
-    callee_name: String,
-    callee_offset: u64,
+    func_name: String,
+    func_offset: u64,
     op_code: String,
     operands: Vec<InstOperand>,
 }
@@ -366,7 +369,7 @@ impl AssemblyLine {
     }
 
     pub fn function_name(&self) -> &str {
-        &self.callee_name[..]
+        &self.func_name[..]
     }
 
     pub fn base_instruction_name(&self) -> &str {

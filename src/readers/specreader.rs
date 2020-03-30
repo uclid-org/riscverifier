@@ -4,8 +4,8 @@ use std::fs;
 use pest::iterators::Pair;
 use pest::Parser;
 
-use crate::dwarfreader::DwarfCtx;
 use crate::ir;
+use crate::readers::dwarfreader::DwarfCtx;
 use crate::utils;
 
 #[derive(Parser)]
@@ -36,10 +36,10 @@ impl<'s> SpecReader<'s> {
         &self,
         spec_file_path: &str,
     ) -> Result<HashMap<String, Vec<ir::Spec>>, utils::Error> {
-        let specs_str = fs::read_to_string(spec_file_path).expect(&format!(
-            "[get_specs] Failed to open specification file: {}.",
-            spec_file_path
-        ));
+        let specs_str = match fs::read_to_string(spec_file_path) {
+            Ok(res) => res,
+            Err(e) => panic!("Failed to read spec file: {}. {}", spec_file_path, e),
+        };
         self.parse_specs(&specs_str[..])
     }
 
@@ -179,7 +179,9 @@ impl<'s> SpecReader<'s> {
                 let path_ref = rule == Rule::path_ref;
                 let mut path = self.translate_expr(func_name, inner.next().unwrap())?;
                 // Check if it's a function reference (which is assumed to be a variable during the first translation pass)
-                if path_ref && path.is_var() && self.dwarf_ctx.is_func(&path.get_expect_var().name)
+                if path_ref
+                    && path.is_var()
+                    && self.dwarf_ctx.func_sig_exists(&path.get_expect_var().name)
                 {
                     let id = &path.get_expect_var().name;
                     let func_app_name = utils::global_func_addr_name(id);

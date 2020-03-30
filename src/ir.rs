@@ -3,7 +3,7 @@ use std::collections::{HashMap, HashSet};
 use std::fmt;
 use std::rc::Rc;
 
-use crate::dwarfreader::{DwarfCtx, DwarfTypeDefn};
+use crate::readers::dwarfreader::{DwarfCtx, DwarfTypeDefn};
 use crate::utils;
 
 /// Types

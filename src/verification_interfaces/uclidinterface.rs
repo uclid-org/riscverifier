@@ -1,8 +1,8 @@
 use std::fs;
 use std::rc::Rc;
 
-use crate::dwarfreader::{DwarfCtx, DwarfTypeDefn, DwarfVar};
 use crate::ir::*;
+use crate::readers::dwarfreader::{DwarfCtx, DwarfTypeDefn, DwarfVar};
 use crate::translator;
 use crate::utils;
 
@@ -11,7 +11,7 @@ pub struct Uclid5Interface;
 
 impl Uclid5Interface {
     /// Returns a string of the variable declarations in the model
-    /// 
+    ///
     /// # Arguments
     ///
     /// * `model` - The model to generate the declarations string for
@@ -30,8 +30,8 @@ impl Uclid5Interface {
         fs::read_to_string(utils::PRELUDE_PATH).expect("Unable to read prelude.")
     }
     /// Generate a define macro string for each type of array variable
-    /// that is a global variable or function argument 
-    /// 
+    /// that is a global variable or function argument
+    ///
     /// # Arguments
     ///
     /// * `dwarf_ctx` - The DWARF information that contains all the global variables and function
@@ -57,7 +57,7 @@ impl Uclid5Interface {
     /// The macro is a function that takes a base address and index
     /// and returns 'base + index * typ_defn.bytes'.
     /// Returns a string representations of these define macros.
-    /// 
+    ///
     /// # Arguments
     ///
     /// * `typ_defn` - Type to generate an array index macro for
@@ -168,7 +168,7 @@ impl Uclid5Interface {
     /// # Example
     ///
     ///     Given the following struct definition:
-    ///     struct ctx { ..., a0: T, ... }; 
+    ///     struct ctx { ..., a0: T, ... };
     ///
     ///     This function returns the following definition to simplify 'c.a0', where c is of type ctx:
     ///     define ctx_a0(ptr: xlen_t): xlen_t = ptr + to_xlen_t(80bv64);
@@ -214,7 +214,7 @@ impl Uclid5Interface {
         utils::indent_text(defns, 4)
     }
     /// Given a global variable, returns a string of a macro that refers to the static
-    /// memory location of the variable. 
+    /// memory location of the variable.
     fn gen_global_defn(global_var: &DwarfVar) -> String {
         format!(
             "define {}(): xlen_t = {};",
@@ -222,7 +222,7 @@ impl Uclid5Interface {
             format!("to_xlen_t({}bv64)", global_var.memory_addr)
         )
     }
-    /// Returns a string of macros to refer to a static function's entry address. 
+    /// Returns a string of macros to refer to a static function's entry address.
     fn gen_global_func_defns(model: &Model) -> String {
         let mut defns = String::from("// Global function entry addresses\n");
         for fm in &model.func_models {
@@ -234,7 +234,7 @@ impl Uclid5Interface {
         }
         utils::indent_text(defns, 4)
     }
-    /// Returns a define macro that returns the `func_entry_addr` 
+    /// Returns a define macro that returns the `func_entry_addr`
     fn gen_global_func_defn(func_name: &str, func_entry_addr: u64) -> String {
         format!(
             "define {}(): xlen_t = {};",

@@ -14,23 +14,23 @@ extern crate topological_sort;
 use std::collections::{HashMap, HashSet};
 use std::rc::Rc;
 
-mod cdwarfinterface;
-use cdwarfinterface::CDwarfInterface;
+mod dwarf_interfaces;
+use dwarf_interfaces::cdwarfinterface::CDwarfInterface;
 
-mod dwarfreader;
-use dwarfreader::DwarfReader;
-
-mod objectdumpreader;
-use objectdumpreader::ObjectDumpReader;
-
-mod specreader;
-use specreader::SpecReader;
+mod readers;
+use readers::disassembler::Disassembler;
+use readers::dwarfreader::DwarfReader;
+use readers::objectdumpreader::ObjectDumpReader;
+use readers::specreader::SpecReader;
 
 mod translator;
 use translator::Translator;
 
-mod uclidinterface;
-use uclidinterface::Uclid5Interface;
+mod verification_interfaces;
+use verification_interfaces::uclidinterface::Uclid5Interface;
+
+mod datastructures;
+use datastructures::cfg::{BasicBlock, Cfg};
 
 mod ir;
 
@@ -105,6 +105,15 @@ fn main() {
         .value_of("binaries")
         .map_or(vec![], |lst| lst.split(",").collect::<Vec<&str>>());
     let function_blocks = ObjectDumpReader::get_binary_object_dump(&binary_paths);
+
+    // TEST
+    let mut disassembler = Disassembler::new(None, Some("debug_log"));
+    let als = disassembler.read_binaries(&binary_paths);
+    // println!("{:#?}", als);
+    // println!("{:#?}", BasicBlock::split(&als));
+    // println!("{:#?}", Cfg::new(2147483652, &als));
+    // return;
+
     // Module name
     let module_name = matches.value_of("modname").unwrap_or("main");
     // Get ignored functions
