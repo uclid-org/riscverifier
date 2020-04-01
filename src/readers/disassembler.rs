@@ -15,17 +15,17 @@ use std::rc::Rc;
 use crate::utils;
 
 /// FIXME: Create static strings for all instructions below
-const BEQ: &'static str = "beq";
-const BNE: &'static str = "bne";
-const BLT: &'static str = "blt";
-const BGE: &'static str = "bge";
-const BEQZ: &'static str = "beqz";
-const BLTU: &'static str = "bltu";
-const JAL: &'static str = "jal";
-const JALR: &'static str = "jalr";
-const MRET: &'static str = "mret";
-const DIR_JUMP_OPS: [&'static str; 7] = [BEQ, BNE, BLT, BGE, BEQZ, BLTU, JAL];
-const JUMP_OPS: [&'static str; 9] = [BEQ, BNE, BLT, BGE, BEQZ, BLTU, JAL, JALR, MRET];
+pub const BEQ: &'static str = "beq";
+pub const BNE: &'static str = "bne";
+pub const BLT: &'static str = "blt";
+pub const BGE: &'static str = "bge";
+pub const BEQZ: &'static str = "beqz";
+pub const BLTU: &'static str = "bltu";
+pub const JAL: &'static str = "jal";
+pub const JALR: &'static str = "jalr";
+pub const MRET: &'static str = "mret";
+pub const DIR_JUMP_OPS: [&'static str; 7] = [BEQ, BNE, BLT, BGE, BEQZ, BLTU, JAL];
+pub const JUMP_OPS: [&'static str; 9] = [BEQ, BNE, BLT, BGE, BEQZ, BLTU, JAL, JALR, MRET];
 
 #[derive(Parser)]
 #[grammar = "pest/objectdump.pest"]
@@ -54,8 +54,11 @@ impl<'a> Disassembler<'a> {
     pub fn read_binaries(&mut self, paths: &Vec<&str>) -> Vec<Rc<AssemblyLine>> {
         // Assembly lines from the binaries (at the paths).
         let mut als = vec![];
-        // A set of all processed functions.
+        // A set of all processed addresses.
         let mut processed = HashSet::new();
+        // A set of processed functions.
+        // FIXME: Heuristic to determine if a line is the entry of a function
+        let mut processed_func = HashSet::new();
         // Iterate over the bianry paths and process them one by one.
         for path in paths {
             // Call the objdump to disassemble the binary at `path`.
@@ -71,7 +74,8 @@ impl<'a> Disassembler<'a> {
             let stdout = String::from_utf8(objdump.stdout)
                 .expect(&format!("Unable to read objdump of {}.", path));
             // Parse each instruction line individually
-            for line in stdout.lines() {
+            let stdout_vec: Vec<_> = stdout.lines().enumerate().collect();
+            for (index, line) in &stdout_vec {
                 if let Ok(mut result) =
                     ObjectDumpParser::parse(Rule::assembly_line, &line.replace("\t", " ")[..])
                 {
@@ -90,6 +94,10 @@ impl<'a> Disassembler<'a> {
                     let mut al_iter_inner = al_iter.next().unwrap().into_inner();
                     // Unmangle function name
                     let func = al_iter_inner.next().unwrap().as_str().to_string();
+                    // Add function to processed set
+                    let is_entry = !processed_func.contains(&func);
+                    processed_func.insert(func.clone());
+                    let is_exit = index+1 >= stdout_vec.len() || !processed_func.contains(&stdout_vec[index+1].1[..]);
                     // Unmangle function offset
                     let offset_str = al_iter_inner.as_str().trim_start_matches("0x");
                     // FIXME: Default 0 if we can't parse it
@@ -130,6 +138,8 @@ impl<'a> Disassembler<'a> {
                             }
                     }
                     als.push(Rc::new(AssemblyLine {
+                        is_entry,
+                        is_exit,
                         addr,
                         func,
                         offset,
@@ -166,6 +176,8 @@ pub trait Inst {
 
 #[derive(Debug, Clone)]
 pub struct AssemblyLine {
+    is_entry: bool,
+    is_exit: bool,
     /// Instruction address
     addr: u64,
     /// Function that the instruction resides in
@@ -176,6 +188,12 @@ pub struct AssemblyLine {
     op_code: String,
     /// Operands of the fuction
     ops: Vec<InstOperand>,
+}
+
+impl fmt::Display for AssemblyLine {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "{:#x?}:{:?}: {:?} {}", self.addr, self.func, self.op_code, self.ops.iter().map(|o| o.to_string()).collect::<Vec<_>>().join(", "))
+    }
 }
 
 impl Inst for AssemblyLine {
@@ -197,7 +215,7 @@ impl Inst for AssemblyLine {
                 // ASSUMPTION: Jal instructions with "ra" as the destination
                 // register is assumed to return.
                 JAL => {
-                    if self.rd().unwrap().get_reg_name() == "ra" {
+                    if self.rd().unwrap().get_reg_name() == "ra" && !self.is_exit {
                         succs.push(next_addr)
                     }
                 }
@@ -207,7 +225,7 @@ impl Inst for AssemblyLine {
             // Add the target address
             let target_addr = self.imm().unwrap().get_imm_val();
             succs.push(target_addr as u64);
-        } else {
+        } else if !self.is_ind_jump() {
             // Fallthrough address
             succs.push(next_addr);
         }
@@ -216,10 +234,15 @@ impl Inst for AssemblyLine {
 }
 
 impl AssemblyLine {
+    /// Returns true if the line is the entry to the function
+    pub fn is_label_entry(&self) -> bool {
+        self.is_entry
+    }
+    /// Returns the function the line is defined at
     pub fn function_name(&self) -> &str {
         &self.func[..]
     }
-
+    /// Returns the op code
     pub fn op(&self) -> &str {
         match &self.op_code[..] {
             // TODO: What to do with fences?
@@ -227,7 +250,7 @@ impl AssemblyLine {
             _ => &self.op_code[..],
         }
     }
-
+    /// Returns the destination register
     pub fn rd(&self) -> Option<&InstOperand> {
         match &self.op_code[..] {
             "add" | "sub" | "sll" | "slt" | "sltu" | "xor" | "srl" | "sra" | "or" | "and"
@@ -240,7 +263,7 @@ impl AssemblyLine {
             _ => None,
         }
     }
-
+    /// Returns rs1
     pub fn rs1(&self) -> Option<&InstOperand> {
         match &self.op_code[..] {
             "add" | "sub" | "sll" | "slt" | "sltu" | "xor" | "srl" | "sra" | "or" | "and"
@@ -256,7 +279,7 @@ impl AssemblyLine {
             _ => None,
         }
     }
-
+    /// Returns rs2
     pub fn rs2(&self) -> Option<&InstOperand> {
         match &self.op_code[..] {
             "add" | "sub" | "sll" | "slt" | "sltu" | "xor" | "srl" | "sra" | "or" | "and"
@@ -269,8 +292,7 @@ impl AssemblyLine {
             _ => None,
         }
     }
-
-    #[allow(dead_code)]
+    /// Returns immediate offset
     pub fn offset(&self) -> Option<i64> {
         match &self.op_code[..] {
             "jalr" | "lb" | "lh" | "lw" | "lbu" | "lhu" | "lwu" | "ld" | "sb" | "sh" | "sw"
@@ -286,7 +308,7 @@ impl AssemblyLine {
             _ => None,
         }
     }
-
+    /// Returns immediate
     pub fn imm(&self) -> Option<&InstOperand> {
         match &self.op_code[..] {
             "addi" | "slti" | "sltiu" | "xori" | "ori" | "andi" | "slli" | "srli" | "srai"

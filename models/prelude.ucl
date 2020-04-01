@@ -33,6 +33,21 @@
         ret = (rs1 * rs2); // line 0
         pc = (pc + 4bv64); // line 0
       }
+    // FIXME: Implement
+    procedure [inline] div_proc(rs1: bv64, rs2: bv64) returns (ret: bv64)
+      modifies pc;
+      {
+        ret = 0bv64; // line 0
+        pc = (pc + 4bv64); // line 0
+      }
+    // FIXME: Implement
+    procedure [inline] rem_proc(rs1: bv64, rs2: bv64) returns (ret: bv64)
+      modifies pc;
+      {
+        ret = 0bv64; // line 0
+        pc = (pc + 4bv64); // line 0
+      }
+ 
     procedure [inline] sll_proc(rs1: bv64, rs2: bv64) returns (ret: bv64)
       modifies pc;
       {
@@ -262,7 +277,7 @@
       {
         pc = (pc + 4bv64);
       }
-    procedure [inline] fence_proc(rs: bv64)
+    procedure [inline] fence_proc()
       modifies pc;
       {
         pc = (pc + 4bv64); // line 0

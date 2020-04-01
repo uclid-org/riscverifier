@@ -20,7 +20,6 @@ use dwarf_interfaces::cdwarfinterface::CDwarfInterface;
 mod readers;
 use readers::disassembler::Disassembler;
 use readers::dwarfreader::DwarfReader;
-use readers::objectdumpreader::ObjectDumpReader;
 use readers::specreader::SpecReader;
 
 mod translator;
@@ -104,11 +103,11 @@ fn main() {
     let binary_paths = matches
         .value_of("binaries")
         .map_or(vec![], |lst| lst.split(",").collect::<Vec<&str>>());
-    let function_blocks = ObjectDumpReader::get_binary_object_dump(&binary_paths);
 
     // TEST
     let mut disassembler = Disassembler::new(None, Some("debug_log"));
     let als = disassembler.read_binaries(&binary_paths);
+    let bbs = BasicBlock::split(&als);
     // println!("{:#?}", als);
     // println!("{:#?}", BasicBlock::split(&als));
     // println!("{:#?}", Cfg::new(2147483652, &als));
@@ -138,25 +137,17 @@ fn main() {
         .process_specs_files(&spec_files)
         .expect("Could not read spec.");
     // Translate and write to output file
-    let mut func_blks = HashMap::new();
-    for (k, v) in function_blocks {
-        let blk = v.iter().map(|al| Rc::new(al.clone())).collect::<Vec<_>>();
-        let cfg = Rc::new(ObjectDumpReader::get_cfg(blk.clone()));
-        func_blks.insert(format!("{}", k), Rc::clone(&cfg));
-        func_blks.insert(blk[0].function_name().to_string(), Rc::clone(&cfg));
-    }
     let mut translator: Translator<Uclid5Interface> = Translator::new(
         xlen,
         &module_name,
-        &func_blks,
+        &bbs,
         &ignored_functions,
         dwarf_reader.ctx(),
         &specs_map,
     );
     for func_name in func_names {
-        translator
-            .gen_func_model(&func_name)
-            .expect("Unable to generate function model.");
+        translator.gen_func_model(&func_name);
     }
     translator.print_model();
+    translator.clear();
 }
