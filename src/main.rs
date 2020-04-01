@@ -11,7 +11,7 @@ extern crate pest_derive;
 
 extern crate topological_sort;
 
-use std::collections::{HashMap, HashSet};
+use std::collections::HashSet;
 use std::rc::Rc;
 
 mod dwarf_interfaces;
@@ -29,7 +29,7 @@ mod verification_interfaces;
 use verification_interfaces::uclidinterface::Uclid5Interface;
 
 mod datastructures;
-use datastructures::cfg::{BasicBlock, Cfg};
+use datastructures::cfg::BasicBlock;
 
 mod ir;
 
@@ -103,16 +103,10 @@ fn main() {
     let binary_paths = matches
         .value_of("binaries")
         .map_or(vec![], |lst| lst.split(",").collect::<Vec<&str>>());
-
-    // TEST
+    // Disassemble binaries and create basic blocks
     let mut disassembler = Disassembler::new(None, Some("debug_log"));
     let als = disassembler.read_binaries(&binary_paths);
     let bbs = BasicBlock::split(&als);
-    // println!("{:#?}", als);
-    // println!("{:#?}", BasicBlock::split(&als));
-    // println!("{:#?}", Cfg::new(2147483652, &als));
-    // return;
-
     // Module name
     let module_name = matches.value_of("modname").unwrap_or("main");
     // Get ignored functions

@@ -1,10 +1,7 @@
-use std::cell::RefCell;
 use std::collections::{HashMap, HashSet};
 use std::rc::Rc;
-use std::slice::Iter;
 
-use crate::utils;
-use crate::readers::disassembler::{AssemblyLine, Inst};
+use crate::readers::disassembler::Inst;
 
 #[derive(Debug)]
 pub struct Cfg<T>
@@ -58,6 +55,7 @@ where
         };
         // Populate the CFG starting from the entry address
         cfg.create_cfg(entry_addr, &bbs);
+        cfg.print();
         cfg
     }
     /// Recursively builds a CFG starting with the entry address
@@ -122,10 +120,11 @@ where
     }
     /// Prints the CFG in a more readable format
     pub fn print(&self) {
+    	info!("========== Created CFG ===========");
         for (addr, cfg_node) in self.nodes() {
-            println!("====== CfgNode entry address: {:#x?} ======", addr);
+            info!("====== CfgNode entry address: {:#x?} ======", addr);
             for al in cfg_node.into_iter() {
-                println!("{}", al.to_string());
+                info!("{}", al.to_string());
             }
         }
     }

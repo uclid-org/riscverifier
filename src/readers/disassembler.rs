@@ -5,7 +5,7 @@
 //! format of the objdump output.
 
 use pest::Parser;
-use std::collections::{HashMap, HashSet};
+use std::collections::HashSet;
 use std::fmt;
 use std::fs::File;
 use std::io::prelude::*;
@@ -56,9 +56,8 @@ impl<'a> Disassembler<'a> {
         let mut als = vec![];
         // A set of all processed addresses.
         let mut processed = HashSet::new();
-        // A set of processed functions.
-        // FIXME: Heuristic to determine if a line is the entry of a function
-        let mut processed_func = HashSet::new();
+        // Accumulate assembly lines
+        let mut raw_als_data = vec![];
         // Iterate over the bianry paths and process them one by one.
         for path in paths {
             // Call the objdump to disassemble the binary at `path`.
@@ -74,8 +73,7 @@ impl<'a> Disassembler<'a> {
             let stdout = String::from_utf8(objdump.stdout)
                 .expect(&format!("Unable to read objdump of {}.", path));
             // Parse each instruction line individually
-            let stdout_vec: Vec<_> = stdout.lines().enumerate().collect();
-            for (index, line) in &stdout_vec {
+            for line in stdout.lines() {
                 if let Ok(mut result) =
                     ObjectDumpParser::parse(Rule::assembly_line, &line.replace("\t", " ")[..])
                 {
@@ -94,10 +92,6 @@ impl<'a> Disassembler<'a> {
                     let mut al_iter_inner = al_iter.next().unwrap().into_inner();
                     // Unmangle function name
                     let func = al_iter_inner.next().unwrap().as_str().to_string();
-                    // Add function to processed set
-                    let is_entry = !processed_func.contains(&func);
-                    processed_func.insert(func.clone());
-                    let is_exit = index+1 >= stdout_vec.len() || !processed_func.contains(&stdout_vec[index+1].1[..]);
                     // Unmangle function offset
                     let offset_str = al_iter_inner.as_str().trim_start_matches("0x");
                     // FIXME: Default 0 if we can't parse it
@@ -137,26 +131,47 @@ impl<'a> Disassembler<'a> {
                                 }
                             }
                     }
-                    als.push(Rc::new(AssemblyLine {
-                        is_entry,
-                        is_exit,
-                        addr,
-                        func,
-                        offset,
-                        op_code,
-                        ops,
-                    }));
+                    raw_als_data.push((addr, func, offset, op_code, ops));
+                    // als.push(Rc::new(AssemblyLine {
+                    //     is_entry,
+                    //     is_exit,
+                    //     addr,
+                    //     func,
+                    //     offset,
+                    //     op_code,
+                    //     ops,
+                    // }));
                 } else {
                     if let Some(mut file) = self.debug_file.as_ref() {
-                        file.write_all(line.as_bytes());
+                        file.write_all(line.as_bytes())
+                            .expect("Unable to write to debug file.");
                     }
                 }
             }
         }
+        // A set of processed functions.
+        // FIXME: Heuristic to determine if a line is the entry of a function
+        let mut processed_func = HashSet::new();
+        let raw_als_data_enum = raw_als_data.iter().enumerate().collect::<Vec<_>>();
+        for (index, (addr, func, offset, op_code, ops)) in &raw_als_data_enum {
+            // Add function to processed set
+            let is_entry = !processed_func.contains(&func[..]);
+            processed_func.insert(func.clone());
+            // It's an exit if it's the last instruction or the next instruction is defined for another function
+            let is_exit = index+1 >= raw_als_data_enum.len() || !processed_func.contains(&(raw_als_data_enum[index+1].1).1[..]);
+            als.push(Rc::new(AssemblyLine {
+                is_entry,
+                is_exit,
+                addr: *addr,
+                func: func.to_owned(),
+                offset: *offset,
+                op_code: op_code.to_owned(),
+                ops: ops.to_owned()
+            }
+            ));
+        }
         als
     }
-    // / Creates CFGs given a list of assembly lines.
-    // fn als_to_cfgs(als: &Vec<AssemblyLine>) -> HashMap<>;
 }
 
 pub trait Inst {
@@ -299,7 +314,7 @@ impl AssemblyLine {
             | "sd" => {
                 assert!(self.ops.len() == 2);
                 match &self.ops[1] {
-                    InstOperand::Register(_register_id, offset) => {
+                    InstOperand::Register(_, offset) => {
                         Some(offset.expect("Instruction has no offset!"))
                     }
                     _ => panic!("[offset] Operand has no offset!"),
@@ -351,19 +366,19 @@ impl InstOperand {
     }
     pub fn get_reg_name(&self) -> String {
         match self {
-            InstOperand::Register(n, _i) => n.clone(),
+            InstOperand::Register(n, _) => n.clone(),
             _ => panic!("Not a register operand!"),
         }
     }
     pub fn get_reg_offset(&self) -> i64 {
         match self {
-            InstOperand::Register(_n, i) => i.expect("Register has no offset."),
+            InstOperand::Register(_, i) => i.expect("Register has no offset."),
             _ => panic!("Not a register operand!"),
         }
     }
     pub fn has_offset(&self) -> bool {
         match self {
-            InstOperand::Register(_n, i) => i.is_some(),
+            InstOperand::Register(_, i) => i.is_some(),
             _ => panic!("Not a register operand!"),
         }
     }

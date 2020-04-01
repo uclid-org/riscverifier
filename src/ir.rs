@@ -397,7 +397,7 @@ impl Model {
     pub fn add_var(&mut self, var: Var) {
         self.vars.insert(var);
     }
-    pub fn add_vars(&mut self, vars: &Vec<Var>) {
+    pub fn add_vars(&mut self, vars: &HashSet<Var>) {
         for v in vars.iter() {
             self.add_var(v.clone());
         }

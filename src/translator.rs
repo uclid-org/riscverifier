@@ -10,7 +10,6 @@ use crate::ir::*;
 use crate::readers::disassembler;
 use crate::readers::disassembler::Inst;
 use crate::readers::dwarfreader::{DwarfCtx, DwarfTypeDefn};
-use crate::set;
 use crate::utils;
 
 /// ========== Constants ==========================================
@@ -197,13 +196,13 @@ where
         self.model.add_func_models(bb_fms);
         // ======== Recursively Generate Callees ======== //
         let callees = self.get_callee_addrs(func_name, &func_cfg);
-        for (target, line_addr) in &callees {
+        for (target, _) in &callees {
             if let Ok(name) = self.get_func_at(target) {
                 self.gen_func_model(&name[..]);
             }
         }
         // Add callee modifies set to this function's modifies set
-        for (target, line_addr) in &callees {
+        for (target, _) in &callees {
             if let Ok(name) = self.get_func_at(target) {
                 if !self.ignored_funcs.contains(&name[..]) {
                     continue;
@@ -313,6 +312,7 @@ where
         let mut ts = TopologicalSort::<u64>::new();
         ts.insert(*cfg_rc.entry_addr());
         let ignore = |addr| self.get_func_at(&addr).is_ok() && self.ignored_funcs.contains(&self.get_func_at(&addr).unwrap()[..]);
+        println!("successors: {:#?}", cfg_rc.nodes().iter().map(|(addr, node)| node.exit().successors()).collect::<Vec<_>>());
         self.compute_deps(&ignore, cfg_rc, cfg_rc.entry_addr(), &mut ts, &mut HashSet::new());
         loop {
             let mut v = ts.pop_all();
@@ -457,7 +457,7 @@ where
     }
     /// Infer register variables from cfg.
     /// FIXME: Remove this function, eventually the system model should be entirely predefined.
-    fn infer_vars(&self, cfg_rc: &Rc<cfg::Cfg<disassembler::AssemblyLine>>) -> Vec<Var> {
+    fn infer_vars(&self, cfg_rc: &Rc<cfg::Cfg<disassembler::AssemblyLine>>) -> HashSet<Var> {
         let mut var_names = vec![];
         for (_, cfg_node) in cfg_rc.nodes() {
             for al in cfg_node.into_iter() {
@@ -470,7 +470,6 @@ where
                 }
             }
         }
-        var_names.dedup();
         var_names
             .iter()
             .cloned()
@@ -478,7 +477,7 @@ where
                 name: vid,
                 typ: self.bv_type(self.xlen),
             })
-            .collect::<Vec<Var>>()
+            .collect::<HashSet<Var>>()
     }
     /// Computes the arguments of a function from the DWARF info
     fn func_args(&self, func_name: &str) -> Vec<Expr> {
@@ -615,12 +614,12 @@ where
         }
     }
     /// A vector of the state variables
-    fn sys_state_vars(&self) -> Vec<Var> {
-        let mut vec_var = vec![];
-        vec_var.push(self.pc_var());
-        vec_var.push(self.mem_var());
-        vec_var.push(self.priv_var());
-        vec_var.push(self.except_var());
+    fn sys_state_vars(&self) -> HashSet<Var> {
+        let mut vec_var = HashSet::new();
+        vec_var.insert(self.pc_var());
+        vec_var.insert(self.mem_var());
+        vec_var.insert(self.priv_var());
+        vec_var.insert(self.except_var());
         vec_var
     }
     /// Returns the type of memory (XLEN addressable byte valued array)
