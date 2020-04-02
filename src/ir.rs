@@ -376,7 +376,7 @@ impl Spec {
 pub struct Model {
     pub name: String,
     pub vars: HashSet<Var>,
-    pub func_models: Vec<FuncModel>,
+    pub func_models: Vec<FuncModel>
 }
 impl Model {
     pub fn new(name: &str) -> Self {
@@ -387,7 +387,9 @@ impl Model {
         }
     }
     pub fn add_func_model(&mut self, fm: FuncModel) {
-        self.func_models.push(fm);
+        if self.func_models.iter().find(|fm_| fm_.sig.name == fm.sig.name).is_none() {
+            self.func_models.push(fm);
+        }
     }
     pub fn add_func_models(&mut self, fms: Vec<FuncModel>) {
         for fm in fms {

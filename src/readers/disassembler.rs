@@ -24,8 +24,12 @@ pub const BLTU: &'static str = "bltu";
 pub const JAL: &'static str = "jal";
 pub const JALR: &'static str = "jalr";
 pub const MRET: &'static str = "mret";
+pub const FENCE: &'static str = "fence";
+pub const SFENCE_VMA: &'static str = "sfence.vma";
+pub const FENCE_I: &'static str = "fence.i";
 pub const DIR_JUMP_OPS: [&'static str; 7] = [BEQ, BNE, BLT, BGE, BEQZ, BLTU, JAL];
 pub const JUMP_OPS: [&'static str; 9] = [BEQ, BNE, BLT, BGE, BEQZ, BLTU, JAL, JALR, MRET];
+pub const IGNORED_INSTS: [&'static str; 3] = [FENCE, SFENCE_VMA, FENCE_I];
 
 #[derive(Parser)]
 #[grammar = "pest/objectdump.pest"]
@@ -98,6 +102,9 @@ impl<'a> Disassembler<'a> {
                     let offset = utils::hex_str_to_u64(offset_str).unwrap_or_else(|_| 0);
                     // Unmangle op code
                     let op_code = al_iter.next().unwrap().into_inner().as_str().to_string();
+                    if IGNORED_INSTS.contains(&&op_code[..]) {
+                        continue;
+                    }
                     // Unmangle operands
                     let mut ops = vec![];
                     while let Some(operand_iter) = al_iter.next() {
@@ -132,15 +139,6 @@ impl<'a> Disassembler<'a> {
                             }
                     }
                     raw_als_data.push((addr, func, offset, op_code, ops));
-                    // als.push(Rc::new(AssemblyLine {
-                    //     is_entry,
-                    //     is_exit,
-                    //     addr,
-                    //     func,
-                    //     offset,
-                    //     op_code,
-                    //     ops,
-                    // }));
                 } else {
                     if let Some(mut file) = self.debug_file.as_ref() {
                         file.write_all(line.as_bytes())

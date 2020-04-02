@@ -120,9 +120,9 @@ where
     }
     /// Prints the CFG in a more readable format
     pub fn print(&self) {
-    	info!("========== Created CFG ===========");
+    	info!("========== Created CFG with entry address {} ===========", self.entry_addr);
         for (addr, cfg_node) in self.nodes() {
-            info!("====== CfgNode entry address: {:#x?} ======", addr);
+            info!("-----> CfgNode entry address: {:#x?} <------", addr);
             for al in cfg_node.into_iter() {
                 info!("{}", al.to_string());
             }

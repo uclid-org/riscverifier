@@ -220,7 +220,7 @@ where
                         .expect(&format!("Unable to find modifies set for {}.", name));
                     mod_set = mod_set.union(callee_ms).cloned().collect();
                 }
-                }
+            }
         }
         // Memo current mod set
         self.mod_set_map
@@ -230,7 +230,7 @@ where
         // Translate specs
         let requires = self.requires_from_spec_map(func_name, &arg_exprs).ok();
         let ensures = self.ensures_from_spec_map(func_name);
-        let body = self.cfg_to_symbolic_blk(&func_cfg);
+        let body = self.cfg_to_symbolic_blk(&func_entry, &func_cfg);
         self.model.add_func_model(FuncModel::new(
             func_name,
             func_entry,
@@ -292,28 +292,71 @@ where
         mod_set
     }
     /// Returns a block statement for the CFG
-    fn cfg_to_symbolic_blk(&self, cfg_rc: &Rc<cfg::Cfg<disassembler::AssemblyLine>>) -> Stmt {
+    fn cfg_to_symbolic_blk(&self, func_entry_addr: &u64, cfg_rc: &Rc<cfg::Cfg<disassembler::AssemblyLine>>) -> Stmt {
         let mut stmts_vec = vec![];
         let sorted = self.topo_sort(cfg_rc);
         for bb_entry in sorted {
+            let cfg_node = cfg_rc
+                .nodes()
+                .get(&bb_entry)
+                .expect(&format!("Unable to find CFG node with entry address {}.", bb_entry));
+            // Skip basic blocks that entry addresses (except for this function)
+            if cfg_node.entry().is_label_entry() && bb_entry != *func_entry_addr {
+                continue;
+            }
+            let mut then_stmts = vec![];
+            // Basic block call
             let if_guard = Expr::op_app(
                 Op::Comp(CompOp::Equality),
                 vec![Expr::Var(self.pc_var()), Expr::bv_lit(bb_entry, self.xlen)]
             );
-            let call_stmt = Box::new(Stmt::func_call(self.bb_proc_name(bb_entry), vec![], vec![]));
-            // Add basic block
-            stmts_vec.push(Box::new(Stmt::if_then_else(if_guard, call_stmt, None)));
+            let bb_call_stmt = Box::new(Stmt::func_call(self.bb_proc_name(bb_entry), vec![], vec![]));
+            then_stmts.push(bb_call_stmt);
+            // Function call
+            // If the instruction is a jump and the target is
+            // another function's entry address, then make a call to it.
+            if cfg_node.exit().op() == disassembler::JAL {
+                let target_addr = cfg_node
+                    .exit()
+                    .imm()
+                    .expect("Invalid format: JAL is missing a target address.")
+                    .get_imm_val() as u64;
+                let target_cfg_node = cfg_rc
+                    .nodes()
+                    .get(&target_addr)
+                    .expect(&format!("Unable to find CFG node with entry address {}.", bb_entry));
+                if target_cfg_node.entry().is_label_entry() {
+                    let f_name = self.get_func_at(&target_addr)
+                        .expect(&format!("Could not find function entry at {}.", bb_entry));
+                    let f_args = self.func_args(&f_name)
+                        .iter()
+                        .enumerate()
+                        .map(|(i, arg_expr)| {
+                            let arg_var = arg_expr.get_expect_var();
+                            Expr::var(&format!("a{}[{}:0]", i, arg_var.typ.get_expect_bv_width()-1), arg_var.typ.clone())
+                        })
+                        .collect::<Vec<_>>();
+                    let f_call_stmt = Box::new(Stmt::func_call(f_name, vec![], f_args));
+                    then_stmts.push(f_call_stmt);
+                }
+            }
+            let then_blk_stmt = Box::new(Stmt::Block(then_stmts));
+            let guarded_call = Box::new(Stmt::if_then_else(if_guard, then_blk_stmt, None));
+            stmts_vec.push(guarded_call);
         }
         Stmt::Block(stmts_vec)
     }
     /// Returns a topological sort of the cfg as an array of entry addresses
     fn topo_sort(&self, cfg_rc: &Rc<cfg::Cfg<disassembler::AssemblyLine>>) -> Vec<u64> {
-        let mut sorted = vec![];
         let mut ts = TopologicalSort::<u64>::new();
+        // Initialize the first entry address of the CFG
         ts.insert(*cfg_rc.entry_addr());
+        // Closure that determines the subgraphs to ignore by entry address
         let ignore = |addr| self.get_func_at(&addr).is_ok() && self.ignored_funcs.contains(&self.get_func_at(&addr).unwrap()[..]);
-        println!("successors: {:#?}", cfg_rc.nodes().iter().map(|(addr, node)| node.exit().successors()).collect::<Vec<_>>());
+        // Recursively update ts to contain all the dependencies between basic blocks in the CFG
         self.compute_deps(&ignore, cfg_rc, cfg_rc.entry_addr(), &mut ts, &mut HashSet::new());
+        // Convert to an array of sorted addresses by dependency
+        let mut sorted = vec![];
         loop {
             let mut v = ts.pop_all();
             if v.is_empty() {

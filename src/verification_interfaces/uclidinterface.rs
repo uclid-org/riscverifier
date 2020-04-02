@@ -445,7 +445,7 @@ impl IRInterface for Uclid5Interface {
             })
             .collect::<Vec<_>>()
             .join(", ");
-        format!("call ({}) = {}({});", lhs, func_call.func_name, args)
+        format!("call ({}) = {}({});", lhs, func_call.func_name.replace(".", "_"), args)
     }
     fn assign_to_string(assign: &Assign) -> String {
         let lhs = assign
