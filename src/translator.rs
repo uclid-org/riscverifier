@@ -14,6 +14,7 @@ use crate::utils;
 
 /// ========== Constants ==========================================
 pub const PC_VAR: &str = "pc";
+pub const RETURNED_FLAG: &str = "returned";
 pub const MEM_VAR: &str = "mem";
 pub const PRIV_VAR: &str = "current_priv";
 pub const EXCEPT_VAR: &str = "exception";
@@ -248,6 +249,7 @@ where
     fn infer_mod_set(&self, stmt: &Stmt) -> HashSet<String> {
         let mut mod_set = HashSet::new();
         mod_set.insert(PC_VAR.to_string());
+        mod_set.insert(RETURNED_FLAG.to_string());
         mod_set.insert(MEM_VAR.to_string());
         mod_set.insert(EXCEPT_VAR.to_string()); // Note: Doesn't always need to be modified
         match stmt {
@@ -306,9 +308,17 @@ where
             }
             let mut then_stmts = vec![];
             // Basic block call
-            let if_guard = Expr::op_app(
+            let if_pc_guard = Expr::op_app(
                 Op::Comp(CompOp::Equality),
                 vec![Expr::Var(self.pc_var()), Expr::bv_lit(bb_entry, self.xlen)]
+            );
+            let if_returned_guard = Expr::op_app(
+                Op::Comp(CompOp::Equality),
+                vec![Expr::Var(self.returned_var()), Expr::bool_lit(false)]
+            );
+            let if_guard = Expr::op_app(
+                Op::Bool(BoolOp::Conj),
+                vec![if_pc_guard, if_returned_guard]
             );
             let bb_call_stmt = Box::new(Stmt::func_call(self.bb_proc_name(bb_entry), vec![], vec![]));
             then_stmts.push(bb_call_stmt);
@@ -583,7 +593,7 @@ where
                 )
             })
             .map_or(vec![], |v| v);
-        // Add pc entry requirement
+        // Add pc entry constraint
         let func_entry = *self
             .func_entry_addr(func_name)
             .expect(&format!("Could not find {}'s entry address.", func_name));
@@ -594,6 +604,14 @@ where
                 Expr::bv_lit(func_entry, self.xlen),
             ],
         )));
+        // Add returned flag initially 0 constraint
+        requires.push(Spec::Requires(Expr::op_app(
+            Op::Comp(CompOp::Equality),
+            vec![
+                Expr::Var(self.returned_var()),
+                Expr::bool_lit(false),
+            ]
+            )));
         // Add argument constraints
         for (i, arg) in arg_decls.iter().enumerate() {
             let var = arg.get_expect_var();
@@ -635,6 +653,14 @@ where
             typ: self.bv_type(self.xlen),
         }
     }
+    /// Returned flag indicates if jalr has occured.
+    /// We assume all jalr return to the caller.
+    fn returned_var(&self) -> Var {
+        Var {
+            name: RETURNED_FLAG.to_string(),
+            typ: self.bool_type(),
+        }
+    }
     /// Memory state variable
     fn mem_var(&self) -> Var {
         Var {
@@ -660,6 +686,7 @@ where
     fn sys_state_vars(&self) -> HashSet<Var> {
         let mut vec_var = HashSet::new();
         vec_var.insert(self.pc_var());
+        vec_var.insert(self.returned_var());
         vec_var.insert(self.mem_var());
         vec_var.insert(self.priv_var());
         vec_var.insert(self.except_var());
@@ -675,6 +702,10 @@ where
     /// Returns a bitvector type of specified width
     fn bv_type(&self, width: u64) -> Type {
         Type::Bv { w: width }
+    }
+    /// Returns a boolean type
+    fn bool_type(&self) -> Type {
+        Type::Bool
     }
     /// ====================== DWARF RELATED FUNCTIONS =======================
     /// Translates DwarfTypeDefn to Type

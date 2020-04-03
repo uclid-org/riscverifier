@@ -156,9 +156,10 @@
         pc = (pc + 4bv64); // line 0
       }
     procedure [inline] jalr_proc(rs1: bv64, imm: bv64) returns (ret: bv64)
-      modifies pc;
+      modifies pc, returned;
       {
         ret = (pc + 4bv64); // line 0
+        returned = true;
         pc = ((rs1 + imm)[63:1] ++ 0bv1); // line 0
       }
     procedure [inline] mret_proc()

@@ -313,7 +313,7 @@ impl IRInterface for Uclid5Interface {
     fn typ_to_string(typ: &Type) -> String {
         match typ {
             Type::Unknown => panic!("Type is unknown!"),
-            Type::Bool => format!("bool"),
+            Type::Bool => format!("boolean"),
             Type::Bv { w } => format!("bv{}", w),
             Type::Array { in_typs, out_typ } => format!(
                 "[{}]{}",
@@ -715,6 +715,7 @@ impl IRInterface for Uclid5Interface {
             .is_some()
             || vec![
                 translator::PC_VAR,
+                translator::RETURNED_FLAG,
                 translator::MEM_VAR,
                 translator::PRIV_VAR,
                 translator::EXCEPT_VAR,
