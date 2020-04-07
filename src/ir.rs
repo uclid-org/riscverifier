@@ -1,10 +1,9 @@
 use std::cmp::Ordering;
-use std::collections::{HashMap, HashSet};
+use std::collections::{BTreeMap, HashSet};
 use std::fmt;
 use std::rc::Rc;
 
-use crate::readers::dwarfreader::{DwarfCtx, DwarfTypeDefn};
-use crate::utils;
+use crate::readers::dwarfreader::DwarfCtx;
 
 /// Types
 #[allow(dead_code)]
@@ -19,12 +18,50 @@ pub enum Type {
         in_typs: Vec<Box<Type>>,
         out_typ: Box<Type>,
     },
+    Struct {
+        id: String,
+        fields: BTreeMap<String, Box<Type>>,
+        w: u64,
+    },
 }
 impl Type {
     pub fn get_expect_bv_width(&self) -> u64 {
         match self {
             Type::Bv { w } => *w,
-            _ => panic!("Not a bitvector."),
+            Type::Struct {
+                id: _,
+                fields: _,
+                w,
+            } => *w,
+            _ => panic!("Not a bitvector: {:#?}.", self),
+        }
+    }
+    pub fn get_array_out_type(&self) -> &Type {
+        match self {
+            Type::Array {
+                in_typs: _,
+                out_typ,
+            } => out_typ,
+            _ => panic!("Not an array type: {:#?}.", self),
+        }
+    }
+    pub fn get_array_in_type(&self) -> &Vec<Box<Type>> {
+        match self {
+            Type::Array {
+                in_typs,
+                out_typ: _,
+            } => in_typs,
+            _ => panic!("Not an array type: {:#?}.", self),
+        }
+    }
+    pub fn get_struct_id(&self) -> String {
+        match self {
+            Type::Struct {
+                id,
+                fields: _,
+                w: _,
+            } => id.clone(),
+            _ => panic!("Not a struct type {:#?}.", self),
         }
     }
 }
@@ -33,16 +70,25 @@ impl Type {
 #[allow(dead_code)]
 #[derive(Debug, PartialEq, Eq, Hash, Clone)]
 pub enum Expr {
-    Literal(Literal),
-    Var(Var),
-    Const(Var),
-    OpApp(OpApp),
-    FuncApp(FuncApp),
+    Literal(Literal, Type),
+    Var(Var, Type),
+    Const(Var, Type),
+    OpApp(OpApp, Type),
+    FuncApp(FuncApp, Type),
 }
 impl Expr {
+    pub fn typ(&self) -> &Type {
+        match self {
+            Expr::Literal(_, t)
+            | Expr::Var(_, t)
+            | Expr::Const(_, t)
+            | Expr::OpApp(_, t)
+            | Expr::FuncApp(_, t) => &t,
+        }
+    }
     pub fn contains_old(&self) -> bool {
         match self {
-            Expr::OpApp(opapp) => opapp
+            Expr::OpApp(opapp, _) => opapp
                 .operands
                 .iter()
                 .fold(false, |acc, operand| acc || operand.contains_old()),
@@ -51,44 +97,63 @@ impl Expr {
     }
     pub fn get_expect_var(&self) -> &Var {
         match self {
-            Expr::Var(v) | Expr::Const(v) => v,
+            Expr::Var(v, _) | Expr::Const(v, _) => v,
             _ => panic!("Not a variable/constant."),
         }
     }
     pub fn is_var(&self) -> bool {
-        if let Expr::Var(_) = self {
+        if let Expr::Var(_, _) = self {
             true
         } else {
             false
         }
     }
     pub fn bv_lit(val: u64, width: u64) -> Self {
-        Expr::Literal(Literal::Bv { val, width })
+        Expr::Literal(Literal::Bv { val, width }, Type::Bv { w: width })
     }
     pub fn bool_lit(val: bool) -> Self {
-        Expr::Literal(Literal::Bool { val })
+        Expr::Literal(Literal::Bool { val }, Type::Bool)
     }
     pub fn var(name: &str, typ: Type) -> Self {
-        Expr::Var(Var {
-            name: name.to_string(),
-            typ,
-        })
-    }
-    #[allow(dead_code)]
-    pub fn const_var(name: &str, typ: Type) -> Self {
-        Expr::Const(Var {
-            name: name.to_string(),
-            typ,
-        })
+        Expr::Var(
+            Var {
+                name: name.to_string(),
+                typ: typ.clone(),
+            },
+            typ.clone(),
+        )
     }
     pub fn op_app(op: Op, operands: Vec<Self>) -> Self {
-        Expr::OpApp(OpApp { op, operands })
+        let typ = match &op {
+            Op::Forall(_) | Op::Exists(_) | Op::Comp(_) | Op::Bool(_) => Type::Bool,
+            Op::Old | Op::Bv(_) => operands[0].typ().clone(),
+            Op::Deref(width) => Type::Bv { w: *width },
+            Op::ArrayIndex => match operands[0].typ() {
+                Type::Array {
+                    in_typs: _,
+                    out_typ,
+                } => *out_typ.clone(),
+                _ => panic!("Cannot index into non-array type {:#?}.", operands[0]),
+            },
+            Op::GetField(f) => match operands[0].typ() {
+                Type::Struct {
+                    id: _,
+                    fields,
+                    w: _,
+                } => *fields.get(f).expect("Invalid field.").clone(),
+                _ => panic!("Can only get field from struct type."),
+            },
+        };
+        Expr::OpApp(OpApp { op, operands }, typ)
     }
-    pub fn func_app(func_name: String, operands: Vec<Self>) -> Self {
-        Expr::FuncApp(FuncApp {
-            func_name,
-            operands,
-        })
+    pub fn func_app(func_name: String, operands: Vec<Self>, typ: Type) -> Self {
+        Expr::FuncApp(
+            FuncApp {
+                func_name,
+                operands,
+            },
+            typ,
+        )
     }
 }
 /// Literals
@@ -129,7 +194,9 @@ pub struct OpApp {
 #[allow(dead_code)]
 #[derive(Debug, PartialEq, Eq, Hash, Clone)]
 pub enum Op {
-    Deref,
+    Forall(Var),
+    Exists(Var),
+    Deref(u64),
     Old,
     Comp(CompOp),
     Bv(BVOp),
@@ -229,6 +296,9 @@ impl Stmt {
             then_stmt,
             else_stmt,
         })
+    }
+    pub fn assign(lhs: Vec<Expr>, rhs: Vec<Expr>) -> Self {
+        Stmt::Assign(Assign { lhs, rhs })
     }
 }
 
@@ -376,7 +446,7 @@ impl Spec {
 pub struct Model {
     pub name: String,
     pub vars: HashSet<Var>,
-    pub func_models: Vec<FuncModel>
+    pub func_models: Vec<FuncModel>,
 }
 impl Model {
     pub fn new(name: &str) -> Self {
@@ -387,7 +457,12 @@ impl Model {
         }
     }
     pub fn add_func_model(&mut self, fm: FuncModel) {
-        if self.func_models.iter().find(|fm_| fm_.sig.name == fm.sig.name).is_none() {
+        if self
+            .func_models
+            .iter()
+            .find(|fm_| fm_.sig.name == fm.sig.name)
+            .is_none()
+        {
             self.func_models.push(fm);
         }
     }
@@ -413,10 +488,10 @@ pub trait IRInterface: fmt::Debug {
     /// Expressions to string functions
     fn expr_to_string(expr: &Expr) -> String {
         match expr {
-            Expr::Literal(l) => Self::lit_to_string(l),
-            Expr::FuncApp(fapp) => Self::fapp_to_string(fapp),
-            Expr::OpApp(opapp) => Self::opapp_to_string(opapp),
-            Expr::Var(v) | Expr::Const(v) => Self::var_to_string(v),
+            Expr::Literal(l, _) => Self::lit_to_string(l),
+            Expr::FuncApp(fapp, _) => Self::fapp_to_string(fapp),
+            Expr::OpApp(opapp, _) => Self::opapp_to_string(opapp),
+            Expr::Var(v, _) | Expr::Const(v, _) => Self::var_to_string(v),
         }
     }
     fn opapp_to_string(opapp: &OpApp) -> String {
@@ -429,7 +504,9 @@ pub trait IRInterface: fmt::Debug {
             .get(1)
             .map_or(None, |e| Some(Self::expr_to_string(e)));
         match &opapp.op {
-            Op::Deref => panic!("Deref is only supported in the specification."),
+            Op::Forall(v) => Self::forall_to_string(v, e1_str.unwrap()),
+            Op::Exists(v) => Self::exists_to_string(v, e1_str.unwrap()),
+            Op::Deref(_) => panic!("Deref is only supported in the specification."),
             Op::Old => panic!("Old operator is only supported in the specification."),
             Op::Comp(cop) => Self::comp_app_to_string(cop, e1_str, e2_str),
             Op::Bv(bvop) => Self::bv_app_to_string(bvop, e1_str, e2_str),
@@ -444,6 +521,8 @@ pub trait IRInterface: fmt::Debug {
     }
     fn lit_to_string(lit: &Literal) -> String;
     fn typ_to_string(typ: &Type) -> String;
+    fn forall_to_string(v: &Var, expr: String) -> String;
+    fn exists_to_string(v: &Var, expr: String) -> String;
     fn deref_app_to_string(bytes: u64, e1: String, old: bool) -> String;
     fn comp_app_to_string(compop: &CompOp, e1: Option<String>, e2: Option<String>) -> String;
     fn bv_app_to_string(bvop: &BVOp, e1: Option<String>, e2: Option<String>) -> String;
@@ -471,10 +550,12 @@ pub trait IRInterface: fmt::Debug {
         old: bool,
     ) -> String {
         match expr {
-            Expr::Literal(l) => Self::lit_to_string(l),
-            Expr::FuncApp(fapp) => Self::spec_fapp_to_string(func_name, fapp, dwarf_ctx),
-            Expr::OpApp(opapp) => Self::spec_opapp_to_string(func_name, opapp, dwarf_ctx, old),
-            Expr::Var(v) | Expr::Const(v) => Self::spec_var_to_string(func_name, v, dwarf_ctx, old),
+            Expr::Literal(l, _) => Self::lit_to_string(l),
+            Expr::FuncApp(fapp, _) => Self::spec_fapp_to_string(func_name, fapp, dwarf_ctx),
+            Expr::OpApp(opapp, _) => Self::spec_opapp_to_string(func_name, opapp, dwarf_ctx, old),
+            Expr::Var(v, _) | Expr::Const(v, _) => {
+                Self::spec_var_to_string(func_name, v, dwarf_ctx, old)
+            }
         }
     }
     fn spec_fapp_to_string(func_name: &str, fapp: &FuncApp, dwarf_ctx: &DwarfCtx) -> String;
@@ -485,65 +566,4 @@ pub trait IRInterface: fmt::Debug {
         old: bool,
     ) -> String;
     fn spec_var_to_string(func_name: &str, v: &Var, dwarf_ctx: &DwarfCtx, old: bool) -> String;
-    fn get_expr_type(
-        func_name: &str,
-        expr: &Expr,
-        typ_map: &HashMap<String, Rc<DwarfTypeDefn>>,
-    ) -> Rc<DwarfTypeDefn> {
-        match expr {
-            Expr::Literal(l) => match l {
-                Literal::Bv { val: _, width } => Rc::new(DwarfTypeDefn::Primitive {
-                    bytes: width / utils::BYTE_SIZE,
-                }),
-                Literal::Bool { val: _ } => Rc::new(DwarfTypeDefn::Primitive { bytes: 1 }),
-            },
-            Expr::Var(v) | Expr::Const(v) => {
-                // Try finding variable type as a global
-                if let Some(typ) = typ_map.get(&v.name) {
-                    Rc::clone(typ)
-                } else {
-                    // Try finding variable type as function argument
-                    Rc::clone(typ_map.get(&format!("{}${}", func_name, v.name)).expect(
-                        &format!(
-                            "Could not find type for {} in function {}.",
-                            v.name, func_name
-                        )[..],
-                    ))
-                }
-            }
-            Expr::OpApp(opapp) => match &opapp.op {
-                Op::Comp(_) | Op::Bool(_) => Rc::new(DwarfTypeDefn::Primitive { bytes: 1 }),
-                Op::Bv(_) | Op::Old | Op::Deref => {
-                    Self::get_expr_type(func_name, &opapp.operands[0], typ_map)
-                }
-                Op::ArrayIndex => {
-                    let pred_typ = Self::get_expr_type(func_name, &opapp.operands[0], typ_map);
-                    match &*pred_typ {
-                        DwarfTypeDefn::Array {
-                            in_typ: _,
-                            out_typ,
-                            bytes: _,
-                        } => Rc::clone(&out_typ),
-                        DwarfTypeDefn::Pointer {
-                            value_typ,
-                            bytes: _,
-                        } => Rc::clone(&value_typ),
-                        _ => panic!("Should be an array type!"),
-                    }
-                }
-                Op::GetField(s) => {
-                    let pred_typ = Self::get_expr_type(func_name, &opapp.operands[0], typ_map);
-                    match &*pred_typ {
-                        DwarfTypeDefn::Struct {
-                            id: _,
-                            fields,
-                            bytes: _,
-                        } => Rc::clone(&fields.get(s).expect("Invalid stuct field").typ),
-                        _ => panic!("Predecessor type should be struct."),
-                    }
-                }
-            },
-            Expr::FuncApp(_) => panic!("Unimplemented!"),
-        }
-    }
 }

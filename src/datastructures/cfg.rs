@@ -93,18 +93,25 @@ where
         &self.nodes
     }
     /// Returns a cycle in the CFG
-    pub fn find_cycle(&self, ignore: &dyn Fn(u64) -> bool, current_node: &u64, seen_nodes: &mut HashSet<u64>, processed_cycle: &mut bool) -> Option<Vec<u64>> {
+    pub fn find_cycle(
+        &self,
+        ignore: &dyn Fn(u64) -> bool,
+        current_node: &u64,
+        seen_nodes: &mut HashSet<u64>,
+        processed_cycle: &mut bool,
+    ) -> Option<Vec<u64>> {
         if seen_nodes.contains(current_node) {
             return Some(vec![*current_node]);
         }
         seen_nodes.insert(*current_node);
-        let cfg_node = self.nodes
-        	.get(current_node)
-        	.expect(&format!("Unable to find CFG node at address {}.", current_node));
+        let cfg_node = self.nodes.get(current_node).expect(&format!(
+            "Unable to find CFG node at address {}.",
+            current_node
+        ));
         for addr in cfg_node.exit().successors() {
-        	if  ignore(addr) {
-        		continue;
-        	}
+            if ignore(addr) {
+                continue;
+            }
             if let Some(mut cycle) = self.find_cycle(ignore, &addr, seen_nodes, processed_cycle) {
                 if !*processed_cycle {
                     cycle.push(*current_node);
@@ -120,7 +127,10 @@ where
     }
     /// Prints the CFG in a more readable format
     pub fn print(&self) {
-    	info!("========== Created CFG with entry address {} ===========", self.entry_addr);
+        info!(
+            "========== Created CFG with entry address {} ===========",
+            self.entry_addr
+        );
         for (addr, cfg_node) in self.nodes() {
             info!("-----> CfgNode entry address: {:#x?} <------", addr);
             for al in cfg_node.into_iter() {

@@ -3,7 +3,7 @@ use std::rc::Rc;
 
 use crate::ir::*;
 use crate::readers::dwarfreader::{DwarfCtx, DwarfTypeDefn, DwarfVar};
-use crate::translator;
+use crate::system_model;
 use crate::utils;
 
 #[derive(Debug)]
@@ -324,7 +324,20 @@ impl IRInterface for Uclid5Interface {
                     .join(", "),
                 Self::typ_to_string(out_typ)
             ),
+            Type::Struct {
+                id: _,
+                fields: _,
+                w: _,
+            } => panic!("Should not need to print struct types in this model."),
         }
+    }
+    fn forall_to_string(v: &Var, expr: String) -> String {
+        let typ_str = Self::typ_to_string(&v.typ);
+        format!("(forall ({}: {}) :: ({}))", &v.name[1..], typ_str, expr)
+    }
+    fn exists_to_string(v: &Var, expr: String) -> String {
+        let typ_str = Self::typ_to_string(&v.typ);
+        format!("(exists ({}: {}) :: ({}))", &v.name[1..], typ_str, expr)
     }
     fn deref_app_to_string(bytes: u64, ptr: String, old: bool) -> String {
         format!(
@@ -445,7 +458,12 @@ impl IRInterface for Uclid5Interface {
             })
             .collect::<Vec<_>>()
             .join(", ");
-        format!("call ({}) = {}({});", lhs, func_call.func_name.replace(".", "_"), args)
+        format!(
+            "call ({}) = {}({});",
+            lhs,
+            func_call.func_name.replace(".", "_"),
+            args
+        )
     }
     fn assign_to_string(assign: &Assign) -> String {
         let lhs = assign
@@ -615,14 +633,10 @@ impl IRInterface for Uclid5Interface {
             Some(Self::spec_expr_to_string(func_name, e, dwarf_ctx, old))
         });
         match &opapp.op {
-            Op::Deref => {
-                let typ = Self::get_expr_type(
-                    func_name,
-                    opapp.operands.get(0).unwrap(),
-                    &dwarf_ctx.typ_map(),
-                );
-                let bytes = typ.to_bytes();
-                Self::deref_app_to_string(bytes, e1_str.unwrap(), old)
+            Op::Forall(v) => Self::forall_to_string(v, e1_str.unwrap()),
+            Op::Exists(v) => Self::exists_to_string(v, e1_str.unwrap()),
+            Op::Deref(width) => {
+                Self::deref_app_to_string(width / utils::BYTE_SIZE, e1_str.unwrap(), old)
             }
             Op::Old => Self::spec_expr_to_string(
                 func_name,
@@ -637,49 +651,38 @@ impl IRInterface for Uclid5Interface {
             Op::Bv(bvop) => Self::bv_app_to_string(bvop, e1_str, e2_str),
             Op::Bool(bop) => Self::bool_app_to_string(bop, e1_str, e2_str),
             Op::ArrayIndex => {
+                // Memory index is just the address itself
+                if opapp.operands[0].get_expect_var().name == system_model::MEM_VAR {
+                    return Self::spec_expr_to_string(
+                        func_name,
+                        &opapp.operands[1],
+                        dwarf_ctx,
+                        old,
+                    );
+                }
                 // Get expression expression type
-                let typ = Self::get_expr_type(
-                    func_name,
-                    opapp.operands.get(0).unwrap(),
-                    &dwarf_ctx.typ_map(),
-                );
-                let out_typ_size = match &*typ {
-                    DwarfTypeDefn::Array {
-                        in_typ: _,
-                        out_typ,
-                        bytes: _,
-                    }
-                    | DwarfTypeDefn::Pointer {
-                        value_typ: out_typ,
-                        bytes: _,
-                    } => out_typ.as_ref().to_bytes(),
-                    _ => panic!("Should be array or pointer type!"),
-                };
                 let array = e1_str.unwrap();
                 let index = e2_str.unwrap();
-                let index_val_typ = Self::get_expr_type(
-                    func_name,
-                    opapp.operands.get(1).unwrap(),
-                    &dwarf_ctx.typ_map(),
-                );
+                let index_var = opapp.operands[1].typ();
+                let index_var_width = index_var.get_expect_bv_width();
+                let out_typ = opapp.operands[0].typ().get_array_out_type();
+                let out_typ_width = out_typ.get_expect_bv_width();
+                let in_typ = &opapp.operands[0].typ().get_array_in_type()[0];
+                let in_typ_width = in_typ.get_expect_bv_width();
                 format!(
                     "{}({}, {})",
-                    Self::array_index_macro_name(&out_typ_size),
+                    Self::array_index_macro_name(&(out_typ_width / utils::BYTE_SIZE)),
                     array,
                     Self::extend_to_match_width(
                         &index,
-                        index_val_typ.to_bytes() * utils::BYTE_SIZE,
-                        typ.to_bytes() * utils::BYTE_SIZE
+                        index_var_width, // from
+                        in_typ_width,    // to
                     )
                 )
             }
             Op::GetField(field) => {
-                let typ = Self::get_expr_type(
-                    func_name,
-                    opapp.operands.get(0).unwrap(),
-                    &dwarf_ctx.typ_map(),
-                );
-                let struct_id = typ.get_expect_struct_id();
+                let typ = opapp.operands[0].typ();
+                let struct_id = typ.get_struct_id();
                 format!(
                     "{}({})",
                     Self::get_field_macro_name(&struct_id, field),
@@ -691,20 +694,11 @@ impl IRInterface for Uclid5Interface {
 
     /// Specification variable to Uclid5 variable
     /// Globals are shadowed by function variables
-    fn spec_var_to_string(func_name: &str, v: &Var, dwarf_ctx: &DwarfCtx, old: bool) -> String {
+    fn spec_var_to_string(_func_name: &str, v: &Var, dwarf_ctx: &DwarfCtx, old: bool) -> String {
         if v.name.chars().next().unwrap() == '$' {
-            let name = v.name.replace("$", "");
+            let name = &v.name[1..];
             if name == "ret" {
-                let typ = Self::get_expr_type(
-                    func_name,
-                    &Expr::var(&v.name, Type::Unknown),
-                    &dwarf_ctx.typ_map(),
-                );
-                format!(
-                    "{}(a0)[{}:0]",
-                    if old { "old" } else { "" },
-                    utils::BYTE_SIZE * typ.to_bytes() - 1
-                )
+                format!("{}(a0)", if old { "old" } else { "" },)
             } else {
                 format!("{}({})", if old { "old" } else { "" }, name)
             }
@@ -713,14 +707,7 @@ impl IRInterface for Uclid5Interface {
             .iter()
             .find(|(_, fs)| fs.args.iter().find(|arg| arg.name == v.name).is_some())
             .is_some()
-            || vec![
-                translator::PC_VAR,
-                translator::RETURNED_FLAG,
-                translator::MEM_VAR,
-                translator::PRIV_VAR,
-                translator::EXCEPT_VAR,
-            ]
-            .contains(&&v.name[..])
+            || system_model::SYSTEM_VARS.contains(&&v.name[..])
         {
             format!("{}({})", if old { "old" } else { "" }, v.name.clone())
         } else if dwarf_ctx

@@ -10,14 +10,8 @@ use crate::ir::*;
 use crate::readers::disassembler;
 use crate::readers::disassembler::Inst;
 use crate::readers::dwarfreader::{DwarfCtx, DwarfTypeDefn};
+use crate::system_model;
 use crate::utils;
-
-/// ========== Constants ==========================================
-pub const PC_VAR: &str = "pc";
-pub const RETURNED_FLAG: &str = "returned";
-pub const MEM_VAR: &str = "mem";
-pub const PRIV_VAR: &str = "current_priv";
-pub const EXCEPT_VAR: &str = "exception";
 
 /// ========== Translator ==========================================
 /// Instruction level translator from RISC-V to verification IR
@@ -153,7 +147,8 @@ where
         // Add global variables for the function block
         self.model.add_vars(&self.infer_vars(&func_cfg));
         // Add system variables
-        self.model.add_vars(&self.sys_state_vars());
+        self.model
+            .add_vars(&system_model::sys_state_vars(self.xlen));
 
         // ====== Basic Block Function Models ==== //
         // Generate procedure model for each basic block
@@ -241,17 +236,17 @@ where
             ensures,
             Some(mod_set),
             body,
-            true,
+            false,
         ));
     }
     /// ========================== HELPER FUNCTIONS =========================
     /// Returns the inferred modifies set
     fn infer_mod_set(&self, stmt: &Stmt) -> HashSet<String> {
         let mut mod_set = HashSet::new();
-        mod_set.insert(PC_VAR.to_string());
-        mod_set.insert(RETURNED_FLAG.to_string());
-        mod_set.insert(MEM_VAR.to_string());
-        mod_set.insert(EXCEPT_VAR.to_string()); // Note: Doesn't always need to be modified
+        mod_set.insert(system_model::PC_VAR.to_string());
+        mod_set.insert(system_model::RETURNED_FLAG.to_string());
+        mod_set.insert(system_model::MEM_VAR.to_string());
+        mod_set.insert(system_model::EXCEPT_VAR.to_string()); // Note: Doesn't always need to be modified
         match stmt {
             Stmt::Havoc(rc_var) => {
                 mod_set.insert(rc_var.name.clone());
@@ -259,10 +254,14 @@ where
             Stmt::FuncCall(fc) => {
                 // Add modifies set if it's a function call
                 if let Some(fc_mod_set) = self.mod_set_map.get(&fc.func_name) {
-                   mod_set = mod_set.union(&fc_mod_set).cloned().collect();
+                    mod_set = mod_set.union(&fc_mod_set).cloned().collect();
                 }
                 // Add the left hand assignments
-                let lhs = fc.lhs.iter().map(|v| v.get_expect_var().name.to_string()).collect::<HashSet<_>>();
+                let lhs = fc
+                    .lhs
+                    .iter()
+                    .map(|v| v.get_expect_var().name.to_string())
+                    .collect::<HashSet<_>>();
                 mod_set = mod_set.union(&lhs).cloned().collect();
             }
             Stmt::Assign(a) => {
@@ -294,15 +293,23 @@ where
         mod_set
     }
     /// Returns a block statement for the CFG
-    fn cfg_to_symbolic_blk(&self, func_entry_addr: &u64, cfg_rc: &Rc<cfg::Cfg<disassembler::AssemblyLine>>) -> Stmt {
+    fn cfg_to_symbolic_blk(
+        &self,
+        func_entry_addr: &u64,
+        cfg_rc: &Rc<cfg::Cfg<disassembler::AssemblyLine>>,
+    ) -> Stmt {
         let mut stmts_vec = vec![];
         let sorted = self.topo_sort(cfg_rc);
         for bb_entry in sorted {
-            let cfg_node = cfg_rc
-                .nodes()
-                .get(&bb_entry)
-                .expect(&format!("Unable to find CFG node with entry address {}.", bb_entry));
-            // Skip basic blocks that entry addresses (except for this function)
+            let cfg_node = cfg_rc.nodes().get(&bb_entry).expect(&format!(
+                "Unable to find CFG node with entry address {}.",
+                bb_entry
+            ));
+            // Skip basic blocks that are entry addresses to functions (except for this function)
+            // FIXME: This is not tested well. Check if trap_vector is properly generated.
+            // Sometimes there are functions (e.g. trap_vector) that call basic blocks
+            // from other functions. If this happens, we want to create a model that
+            // contains basic blocks from both functions.
             if cfg_node.entry().is_label_entry() && bb_entry != *func_entry_addr {
                 continue;
             }
@@ -310,17 +317,25 @@ where
             // Basic block call
             let if_pc_guard = Expr::op_app(
                 Op::Comp(CompOp::Equality),
-                vec![Expr::Var(self.pc_var()), Expr::bv_lit(bb_entry, self.xlen)]
+                vec![
+                    Expr::Var(
+                        system_model::pc_var(self.xlen),
+                        system_model::bv_type(self.xlen),
+                    ),
+                    Expr::bv_lit(bb_entry, self.xlen),
+                ],
             );
             let if_returned_guard = Expr::op_app(
                 Op::Comp(CompOp::Equality),
-                vec![Expr::Var(self.returned_var()), Expr::bool_lit(false)]
+                vec![
+                    Expr::Var(system_model::returned_var(), Type::Bool),
+                    Expr::bool_lit(false),
+                ],
             );
-            let if_guard = Expr::op_app(
-                Op::Bool(BoolOp::Conj),
-                vec![if_pc_guard, if_returned_guard]
-            );
-            let bb_call_stmt = Box::new(Stmt::func_call(self.bb_proc_name(bb_entry), vec![], vec![]));
+            let if_guard =
+                Expr::op_app(Op::Bool(BoolOp::Conj), vec![if_pc_guard, if_returned_guard]);
+            let bb_call_stmt =
+                Box::new(Stmt::func_call(self.bb_proc_name(bb_entry), vec![], vec![]));
             then_stmts.push(bb_call_stmt);
             // Function call
             // If the instruction is a jump and the target is
@@ -331,19 +346,24 @@ where
                     .imm()
                     .expect("Invalid format: JAL is missing a target address.")
                     .get_imm_val() as u64;
-                let target_cfg_node = cfg_rc
-                    .nodes()
-                    .get(&target_addr)
-                    .expect(&format!("Unable to find CFG node with entry address {}.", bb_entry));
+                let target_cfg_node = cfg_rc.nodes().get(&target_addr).expect(&format!(
+                    "Unable to find CFG node with entry address {}.",
+                    bb_entry
+                ));
                 if target_cfg_node.entry().is_label_entry() {
-                    let f_name = self.get_func_at(&target_addr)
+                    let f_name = self
+                        .get_func_at(&target_addr)
                         .expect(&format!("Could not find function entry at {}.", bb_entry));
-                    let f_args = self.func_args(&f_name)
+                    let f_args = self
+                        .func_args(&f_name)
                         .iter()
                         .enumerate()
                         .map(|(i, arg_expr)| {
                             let arg_var = arg_expr.get_expect_var();
-                            Expr::var(&format!("a{}[{}:0]", i, arg_var.typ.get_expect_bv_width()-1), arg_var.typ.clone())
+                            Expr::var(
+                                &format!("a{}[{}:0]", i, arg_var.typ.get_expect_bv_width() - 1),
+                                arg_var.typ.clone(),
+                            )
                         })
                         .collect::<Vec<_>>();
                     let f_call_stmt = Box::new(Stmt::func_call(f_name, vec![], f_args));
@@ -354,6 +374,12 @@ where
             let guarded_call = Box::new(Stmt::if_then_else(if_guard, then_blk_stmt, None));
             stmts_vec.push(guarded_call);
         }
+        // Add line to reset returned variable after function return.
+        // This is required when functions are nested.
+        stmts_vec.push(Box::new(Stmt::assign(
+            vec![Expr::Var(system_model::returned_var(), Type::Bool)],
+            vec![Expr::bool_lit(false)],
+        )));
         Stmt::Block(stmts_vec)
     }
     /// Returns a topological sort of the cfg as an array of entry addresses
@@ -362,9 +388,20 @@ where
         // Initialize the first entry address of the CFG
         ts.insert(*cfg_rc.entry_addr());
         // Closure that determines the subgraphs to ignore by entry address
-        let ignore = |addr| self.get_func_at(&addr).is_ok() && self.ignored_funcs.contains(&self.get_func_at(&addr).unwrap()[..]);
+        let ignore = |addr| {
+            self.get_func_at(&addr).is_ok()
+                && self
+                    .ignored_funcs
+                    .contains(&self.get_func_at(&addr).unwrap()[..])
+        };
         // Recursively update ts to contain all the dependencies between basic blocks in the CFG
-        self.compute_deps(&ignore, cfg_rc, cfg_rc.entry_addr(), &mut ts, &mut HashSet::new());
+        self.compute_deps(
+            &ignore,
+            cfg_rc,
+            cfg_rc.entry_addr(),
+            &mut ts,
+            &mut HashSet::new(),
+        );
         // Convert to an array of sorted addresses by dependency
         let mut sorted = vec![];
         loop {
@@ -373,7 +410,12 @@ where
                 if ts.len() != 0 {
                     // If ts.pop_all() is empty and len() != 0, there is a cycle
                     let cycle = cfg_rc
-                        .find_cycle(&ignore, cfg_rc.entry_addr(), &mut HashSet::new(), &mut false)
+                        .find_cycle(
+                            &ignore,
+                            cfg_rc.entry_addr(),
+                            &mut HashSet::new(),
+                            &mut false,
+                        )
                         .expect("Should have found a cycle.");
                     panic!(
                         "There is a cycle in the cfg of {:?}: {:?}.",
@@ -397,7 +439,14 @@ where
     /// Recursively computes the dependency graph given the entry address
     /// However, it ignores all subgraphs rooted at cfg nodes with an entry address
     /// in which the closure "ignore" returns true for.
-    fn compute_deps(&self, ignore: &dyn Fn(u64) -> bool, cfg_rc: &Rc<cfg::Cfg<disassembler::AssemblyLine>>, curr: &u64, ts: &mut TopologicalSort<u64>, processed: &mut HashSet<u64>) {
+    fn compute_deps(
+        &self,
+        ignore: &dyn Fn(u64) -> bool,
+        cfg_rc: &Rc<cfg::Cfg<disassembler::AssemblyLine>>,
+        curr: &u64,
+        ts: &mut TopologicalSort<u64>,
+        processed: &mut HashSet<u64>,
+    ) {
         if processed.contains(curr) {
             return;
         }
@@ -425,7 +474,10 @@ where
         if entry_blk.is_label_entry() {
             Ok(entry_blk.function_name().to_string())
         } else {
-            Err(utils::Error::TranslatorErr(format!("{} is not a function entry address.", entry_blk.address())))
+            Err(utils::Error::TranslatorErr(format!(
+                "{} is not a function entry address.",
+                entry_blk.address()
+            )))
         }
     }
     /// Returns a list of callee addresses and the lines they were called at
@@ -433,7 +485,11 @@ where
     /// # EXAMPLE
     /// 0000000080004444 <osm_pmp_set+0xc> jal  zero,0000000080004d58 <pmp_set>
     /// The line above would be added as (0000000080004d58, 0000000080004444)
-    fn get_callee_addrs(&self, func_name: &str, cfg_rc: &Rc<cfg::Cfg<disassembler::AssemblyLine>>) -> Vec<(u64, u64)> {
+    fn get_callee_addrs(
+        &self,
+        func_name: &str,
+        cfg_rc: &Rc<cfg::Cfg<disassembler::AssemblyLine>>,
+    ) -> Vec<(u64, u64)> {
         let mut callee_addrs = vec![];
         for (_, cfg_node) in cfg_rc.nodes() {
             for al in cfg_node.into_iter() {
@@ -467,7 +523,10 @@ where
         let mut regs: [Option<&disassembler::InstOperand>; 2] = [al.rd(), al.csr()];
         for reg_op in regs.iter_mut() {
             if let Some(reg) = reg_op {
-                lhs.push(Expr::var(&reg.get_reg_name()[..], self.bv_type(self.xlen)));
+                lhs.push(Expr::var(
+                    &reg.get_reg_name()[..],
+                    system_model::bv_type(self.xlen),
+                ));
                 assert!(!reg.has_offset());
             }
         }
@@ -476,7 +535,10 @@ where
         let mut regs: [Option<&disassembler::InstOperand>; 3] = [al.rs1(), al.rs2(), al.csr()];
         for reg_op in regs.iter_mut() {
             if let Some(reg) = reg_op {
-                operands.push(Expr::var(&reg.get_reg_name()[..], self.bv_type(self.xlen)));
+                operands.push(Expr::var(
+                    &reg.get_reg_name()[..],
+                    system_model::bv_type(self.xlen),
+                ));
                 if reg.has_offset() {
                     operands.push(Expr::bv_lit(reg.get_reg_offset() as u64, self.xlen));
                 }
@@ -528,7 +590,7 @@ where
             .cloned()
             .map(|vid| Var {
                 name: vid,
-                typ: self.bv_type(self.xlen),
+                typ: system_model::bv_type(self.xlen),
             })
             .collect::<HashSet<Var>>()
     }
@@ -600,7 +662,10 @@ where
         requires.push(Spec::Requires(Expr::op_app(
             Op::Comp(CompOp::Equality),
             vec![
-                Expr::Var(self.pc_var()),
+                Expr::Var(
+                    system_model::pc_var(self.xlen),
+                    system_model::bv_type(self.xlen),
+                ),
                 Expr::bv_lit(func_entry, self.xlen),
             ],
         )));
@@ -608,10 +673,10 @@ where
         requires.push(Spec::Requires(Expr::op_app(
             Op::Comp(CompOp::Equality),
             vec![
-                Expr::Var(self.returned_var()),
+                Expr::Var(system_model::returned_var(), Type::Bool),
                 Expr::bool_lit(false),
-            ]
-            )));
+            ],
+        )));
         // Add argument constraints
         for (i, arg) in arg_decls.iter().enumerate() {
             let var = arg.get_expect_var();
@@ -632,80 +697,66 @@ where
         }
         Ok(requires)
     }
+    /// TODO: Add this to the models/prelude.ucl file as a define macro?
     /// Returns ensure statments from specification map for the given function
+    /// Also adds various ensures common across all functions:
+    ///     (1) callee return constraint
     fn ensures_from_spec_map(&self, func_name: &str) -> Option<Vec<Spec>> {
-        let ensures = self.specs_map.get(func_name).and_then(|spec_vec| {
-            let ensures = spec_vec
-                .iter()
-                .cloned()
-                .filter(|spec| spec.is_ensures())
-                .map(|spec| spec)
-                .collect::<Vec<Spec>>();
-            Some(ensures)
-        });
-        ensures
-    }
-    /// ====================== SYSTEM STATE VARIABLES AND TYPES =================
-    /// The set of system state variables
-    fn pc_var(&self) -> Var {
-        Var {
-            name: PC_VAR.to_string(),
-            typ: self.bv_type(self.xlen),
-        }
-    }
-    /// Returned flag indicates if jalr has occured.
-    /// We assume all jalr return to the caller.
-    fn returned_var(&self) -> Var {
-        Var {
-            name: RETURNED_FLAG.to_string(),
-            typ: self.bool_type(),
-        }
-    }
-    /// Memory state variable
-    fn mem_var(&self) -> Var {
-        Var {
-            name: MEM_VAR.to_string(),
-            typ: self.mem_type(),
-        }
-    }
-    /// Privilege state variable
-    fn priv_var(&self) -> Var {
-        Var {
-            name: PRIV_VAR.to_string(),
-            typ: self.bv_type(2),
-        }
-    }
-    /// Expection state variable
-    fn except_var(&self) -> Var {
-        Var {
-            name: EXCEPT_VAR.to_string(),
-            typ: self.bv_type(self.xlen),
-        }
-    }
-    /// A vector of the state variables
-    fn sys_state_vars(&self) -> HashSet<Var> {
-        let mut vec_var = HashSet::new();
-        vec_var.insert(self.pc_var());
-        vec_var.insert(self.returned_var());
-        vec_var.insert(self.mem_var());
-        vec_var.insert(self.priv_var());
-        vec_var.insert(self.except_var());
-        vec_var
-    }
-    /// Returns the type of memory (XLEN addressable byte valued array)
-    fn mem_type(&self) -> Type {
-        Type::Array {
-            in_typs: vec![Box::new(self.bv_type(self.xlen))],
-            out_typ: Box::new(self.bv_type(utils::BYTE_SIZE)),
-        }
-    }
-    /// Returns a bitvector type of specified width
-    fn bv_type(&self, width: u64) -> Type {
-        Type::Bv { w: width }
-    }
-    /// Returns a boolean type
-    fn bool_type(&self) -> Type {
-        Type::Bool
+        // Ensures statements from the specification file
+        let mut ensures = self
+            .specs_map
+            .get(func_name)
+            .and_then(|spec_vec| {
+                let ensures = spec_vec
+                    .iter()
+                    .cloned()
+                    .filter(|spec| spec.is_ensures())
+                    .map(|spec| spec)
+                    .collect::<Vec<Spec>>();
+                Some(ensures)
+            })
+            .map_or(vec![], |v| v);
+        // (1) callee return constraint: ensures pc == old(ra)[63:1] ++ 0bv1
+        let ra = if self.mod_set_map.get(func_name).unwrap().contains("ra") {
+            Expr::op_app(
+                Op::Old,
+                vec![Expr::var(
+                    system_model::RA,
+                    system_model::bv_type(self.xlen),
+                )],
+            )
+        } else {
+            Expr::var(system_model::RA, system_model::bv_type(self.xlen))
+        };
+        ensures.push(Spec::Requires(Expr::op_app(
+            Op::Bool(BoolOp::Impl),
+            vec![
+                Expr::op_app(
+                    Op::Comp(CompOp::Equality),
+                    vec![
+                        Expr::var(system_model::EXCEPT_VAR, system_model::bv_type(self.xlen)),
+                        Expr::bv_lit(0, self.xlen),
+                    ],
+                ),
+                Expr::op_app(
+                    Op::Comp(CompOp::Equality),
+                    vec![
+                        Expr::Var(
+                            system_model::pc_var(self.xlen),
+                            system_model::bv_type(self.xlen),
+                        ),
+                        Expr::op_app(
+                            Op::Bv(BVOp::Concat),
+                            vec![
+                                Expr::op_app(Op::Bv(BVOp::Slice { l: 63, r: 1 }), vec![ra]),
+                                Expr::bv_lit(0, 1),
+                            ],
+                        ),
+                    ],
+                ),
+            ],
+        )));
+        Some(ensures)
     }
     /// ====================== DWARF RELATED FUNCTIONS =======================
     /// Translates DwarfTypeDefn to Type

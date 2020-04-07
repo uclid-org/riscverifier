@@ -6,6 +6,7 @@ use pest::Parser;
 
 use crate::ir;
 use crate::readers::dwarfreader::DwarfCtx;
+use crate::system_model;
 use crate::utils;
 
 #[derive(Parser)]
@@ -135,28 +136,37 @@ impl<'s> SpecReader<'s> {
         Ok(mod_set)
     }
 
-    /// Trnaslates an expression to ir
     fn translate_expr(&self, func_name: &str, pair: Pair<Rule>) -> Result<ir::Expr, utils::Error> {
+        self._translate_expr(func_name, pair, &mut HashMap::new())
+    }
+    /// Trnaslates an expression to ir
+    fn _translate_expr(
+        &self,
+        func_name: &str,
+        pair: Pair<Rule>,
+        bound_var_map: &mut HashMap<String, ir::Expr>,
+    ) -> Result<ir::Expr, utils::Error> {
         let rule = pair.as_rule();
         let pair_str = pair.as_str();
         let mut inner = pair.into_inner();
         match rule {
             Rule::old => {
-                let inner_expr = self.translate_expr(func_name, inner.next().unwrap())?;
+                let inner_expr =
+                    self._translate_expr(func_name, inner.next().unwrap(), bound_var_map)?;
                 Ok(ir::Expr::op_app(ir::Op::Old, vec![inner_expr]))
             }
             Rule::value_expr | Rule::bool_expr | Rule::get_field | Rule::array_index => {
-                self.translate_expr(func_name, inner.next().unwrap())
+                self._translate_expr(func_name, inner.next().unwrap(), bound_var_map)
             }
             Rule::comp_eval | Rule::bool_eval | Rule::bv_eval => {
-                let v1 = self.translate_expr(func_name, inner.next().unwrap())?;
+                let v1 = self._translate_expr(func_name, inner.next().unwrap(), bound_var_map)?;
                 let op = self.translate_op(inner.next().unwrap())?;
-                let v2 = self.translate_expr(func_name, inner.next().unwrap())?;
+                let v2 = self._translate_expr(func_name, inner.next().unwrap(), bound_var_map)?;
                 Ok(ir::Expr::op_app(op, vec![v1, v2]))
             }
             Rule::unary_bool_eval => {
                 let op = self.translate_op(inner.next().unwrap())?;
-                let v = self.translate_expr(func_name, inner.next().unwrap())?;
+                let v = self._translate_expr(func_name, inner.next().unwrap(), bound_var_map)?;
                 Ok(ir::Expr::op_app(op, vec![v]))
             }
             Rule::bool_const => Ok(ir::Expr::bool_lit(pair_str == "true")),
@@ -177,7 +187,8 @@ impl<'s> SpecReader<'s> {
             }
             Rule::path | Rule::path_ref => {
                 let path_ref = rule == Rule::path_ref;
-                let mut path = self.translate_expr(func_name, inner.next().unwrap())?;
+                let mut path =
+                    self._translate_expr(func_name, inner.next().unwrap(), bound_var_map)?;
                 // Check if it's a function reference (which is assumed to be a variable during the first translation pass)
                 if path_ref
                     && path.is_var()
@@ -185,7 +196,11 @@ impl<'s> SpecReader<'s> {
                 {
                     let id = &path.get_expect_var().name;
                     let func_app_name = utils::global_func_addr_name(id);
-                    return Ok(ir::Expr::func_app(func_app_name, vec![]));
+                    return Ok(ir::Expr::func_app(
+                        func_app_name,
+                        vec![],
+                        ir::Type::Bv { w: self.xlen },
+                    ));
                 }
                 let is_global_var = self
                     .dwarf_ctx
@@ -198,12 +213,14 @@ impl<'s> SpecReader<'s> {
                     .iter()
                     .find(|v| v.typ_defn.is_ptr_type())
                     .is_some();
+                // FIXME: Fix how memory is translated
+                let is_mem = path.get_expect_var().name == system_model::MEM_VAR;
                 while let Some(e) = inner.next() {
                     match e.as_rule() {
                         Rule::array_index => {
                             path = ir::Expr::op_app(
                                 ir::Op::ArrayIndex,
-                                vec![path, self.translate_expr(func_name, e)?],
+                                vec![path, self._translate_expr(func_name, e, bound_var_map)?],
                             );
                         }
                         Rule::get_field => {
@@ -218,13 +235,109 @@ impl<'s> SpecReader<'s> {
                     }
                 }
                 // TODO: Are globals usually always pointers?
-                if !path_ref && (is_global_var || is_ptr_type) {
-                    path = ir::Expr::op_app(ir::Op::Deref, vec![path]);
+                if !path_ref && (is_global_var || is_ptr_type || is_mem) {
+                    path = ir::Expr::op_app(
+                        ir::Op::Deref(path.typ().get_expect_bv_width()),
+                        vec![path],
+                    );
                 }
                 Ok(path)
             }
-            Rule::identifier => Ok(ir::Expr::var(pair_str, ir::Type::Unknown)),
+            Rule::identifier => {
+                // If it's a quantifier bound variable, return the expression from the map
+                if let Some(v) = bound_var_map.get(pair_str) {
+                    return Ok(v.clone());
+                }
+                // Identifiers preceeding with a $ are special symbols in the specification language
+                // Either the symbol is a system state variable
+                // or a return value of the function
+                if pair_str.starts_with("$") {
+                    let suffix = &pair_str[1..];
+                    // System variable
+                    if system_model::SYSTEM_VARS.contains(&suffix) {
+                        return Ok(ir::Expr::var(
+                            suffix,
+                            system_model::system_var_type(suffix, self.xlen),
+                        ));
+                    }
+                    // Function return value
+                    if suffix == "ret" {
+                        let ret_typ = self.dwarf_ctx
+                            .func_sig(func_name)?
+                            .ret_typ_defn
+                            .clone()
+                            .and_then(|typ| Some(typ.to_ir_type()))
+                            .expect("Unable to determine type for return value or function does not return a value.");
+                        return Ok(ir::Expr::var("$ret", ret_typ));
+                    }
+                }
+                // Look for variable in global variables
+                let mut typ = self
+                    .dwarf_ctx
+                    .global_var(pair_str)
+                    .and_then(|v| Ok(v.typ_defn.clone()));
+                // Look for variable in function argument
+                if typ.is_err() {
+                    let arg = self
+                        .dwarf_ctx
+                        .func_sig(func_name)?
+                        .args
+                        .iter()
+                        .find(|v| v.name == pair_str)
+                        .expect(&format!(
+                            "Variable {} is also not a function argument.",
+                            pair_str
+                        ));
+                    typ = Ok(arg.typ_defn.clone());
+                }
+                Ok(ir::Expr::var(
+                    pair_str,
+                    typ.expect("Unable to find variable.").to_ir_type(),
+                ))
+            }
+            Rule::quantified_expr => {
+                let quant_type = inner.next().unwrap().as_str();
+                let name = inner.next().unwrap().as_str().to_string();
+                let typ = self.translate_typ(inner.next().unwrap())?;
+                let bound_var = ir::Var {
+                    name: name.clone(),
+                    typ: typ.clone(),
+                };
+                bound_var_map.insert(name.clone(), ir::Expr::Var(bound_var.clone(), typ.clone()));
+                let b_expr =
+                    self._translate_expr(func_name, inner.next().unwrap(), bound_var_map)?;
+                match quant_type {
+                    "forall" => Ok(ir::Expr::op_app(ir::Op::Forall(bound_var), vec![b_expr])),
+                    "exists" => Ok(ir::Expr::op_app(ir::Op::Exists(bound_var), vec![b_expr])),
+                    _ => panic!(
+                        "Invalid quantifier. A quantifier is either a 'forall' or an 'exists'."
+                    ),
+                }
+            }
             _ => panic!("Unsupported rule. {:#?} {:#?}", rule, inner),
+        }
+    }
+
+    /// Translates type definitions to ir
+    fn translate_typ(&self, pair: Pair<Rule>) -> Result<ir::Type, utils::Error> {
+        let rule = pair.as_rule();
+        let pair_str = pair.as_str();
+        match rule {
+            Rule::typ => {
+                if pair_str.contains("bv") {
+                    let mut iter = pair_str.split("bv");
+                    iter.next();
+                    let val_str = iter.next().unwrap();
+                    Ok(ir::Type::Bv {
+                        w: utils::dec_str_to_u64(val_str).expect("Invalid bv type width."),
+                    })
+                } else {
+                    panic!("Invalid type {} or translation not supported.", pair_str)
+                }
+            }
+            _ => Err(utils::Error::SpecParseError(
+                "Could not translate non-type pair.".to_string(),
+            )),
         }
     }
 

@@ -156,7 +156,8 @@ impl<'a> Disassembler<'a> {
             let is_entry = !processed_func.contains(&func[..]);
             processed_func.insert(func.clone());
             // It's an exit if it's the last instruction or the next instruction is defined for another function
-            let is_exit = index+1 >= raw_als_data_enum.len() || !processed_func.contains(&(raw_als_data_enum[index+1].1).1[..]);
+            let is_exit = index + 1 >= raw_als_data_enum.len()
+                || !processed_func.contains(&(raw_als_data_enum[index + 1].1).1[..]);
             als.push(Rc::new(AssemblyLine {
                 is_entry,
                 is_exit,
@@ -164,9 +165,8 @@ impl<'a> Disassembler<'a> {
                 func: func.to_owned(),
                 offset: *offset,
                 op_code: op_code.to_owned(),
-                ops: ops.to_owned()
-            }
-            ));
+                ops: ops.to_owned(),
+            }));
         }
         als
     }
@@ -205,7 +205,18 @@ pub struct AssemblyLine {
 
 impl fmt::Display for AssemblyLine {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "{:#x?}:{:?}: {:?} {}", self.addr, self.func, self.op_code, self.ops.iter().map(|o| o.to_string()).collect::<Vec<_>>().join(", "))
+        write!(
+            f,
+            "{:#x?}:{:?}: {:?} {}",
+            self.addr,
+            self.func,
+            self.op_code,
+            self.ops
+                .iter()
+                .map(|o| o.to_string())
+                .collect::<Vec<_>>()
+                .join(", ")
+        )
     }
 }
 

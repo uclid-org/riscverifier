@@ -31,6 +31,8 @@ use verification_interfaces::uclidinterface::Uclid5Interface;
 mod datastructures;
 use datastructures::cfg::BasicBlock;
 
+mod system_model;
+
 mod ir;
 
 mod utils;

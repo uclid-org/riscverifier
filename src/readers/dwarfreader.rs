@@ -4,6 +4,7 @@ use std::collections::HashMap;
 use std::marker::PhantomData;
 use std::{borrow, fs, rc::Rc};
 
+use crate::ir;
 use crate::utils;
 
 /// Variable from the DWARF debugging information
@@ -77,42 +78,41 @@ pub enum DwarfTypeDefn {
     },
 }
 impl DwarfTypeDefn {
+    /// Converts a dwarf type to IR type
+    pub fn to_ir_type(&self) -> ir::Type {
+        match self {
+            DwarfTypeDefn::Primitive { bytes } => ir::Type::Bv {
+                w: bytes * utils::BYTE_SIZE,
+            },
+            DwarfTypeDefn::Array {
+                in_typ,
+                out_typ,
+                bytes: _,
+            } => ir::Type::Array {
+                in_typs: vec![Box::new(in_typ.to_ir_type())],
+                out_typ: Box::new(out_typ.to_ir_type()),
+            },
+            DwarfTypeDefn::Struct { id, fields, bytes } => ir::Type::Struct {
+                id: id.clone(),
+                fields: fields
+                    .iter()
+                    .map(|(id, struct_field)| (id.clone(), Box::new(struct_field.typ.to_ir_type())))
+                    .collect::<BTreeMap<String, Box<ir::Type>>>(),
+                w: bytes * utils::BYTE_SIZE,
+            },
+            DwarfTypeDefn::Pointer {
+                value_typ: _,
+                bytes,
+            } => ir::Type::Bv {
+                w: bytes * utils::BYTE_SIZE,
+            },
+        }
+    }
     /// Returns true iff the type is a pointer type
     pub fn is_ptr_type(&self) -> bool {
         match self {
             DwarfTypeDefn::Array { .. } | DwarfTypeDefn::Pointer { .. } => true,
             _ => false,
-        }
-    }
-    /// Returns the structure name and panics if it's not a structure
-    pub fn get_expect_struct_id(&self) -> String {
-        match self {
-            DwarfTypeDefn::Struct {
-                id,
-                fields: _,
-                bytes: _,
-            } => id.clone(),
-            _ => panic!("Not a struct; could not obtain struct id."),
-        }
-    }
-    /// Returns the number of bytes of the type
-    pub fn to_bytes(&self) -> u64 {
-        match self {
-            DwarfTypeDefn::Primitive { bytes }
-            | DwarfTypeDefn::Struct {
-                id: _,
-                fields: _,
-                bytes,
-            } => *bytes,
-            DwarfTypeDefn::Array {
-                in_typ: _,
-                out_typ: _,
-                bytes,
-            } => *bytes,
-            DwarfTypeDefn::Pointer {
-                value_typ: _,
-                bytes,
-            } => *bytes,
         }
     }
 }
@@ -468,10 +468,6 @@ impl DwarfCtx {
     /// Returns a map of all the function signatures
     pub fn func_sigs(&self) -> &HashMap<String, DwarfFuncSig> {
         &self.func_sigs
-    }
-    /// Returns the type map
-    pub fn typ_map(&self) -> &HashMap<String, Rc<DwarfTypeDefn>> {
-        &self.typ_map
     }
 }
 

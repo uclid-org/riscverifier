@@ -35,6 +35,7 @@ path_ref = { "&" ~ identifier ~ (array_index | get_field)* }
 
 p_value_expr = _{ "(" ~ value_expr ~ ")" }
 value_expr = { bv_eval
+		     | bool_const
 			 | old
 			 | path_ref
 			 | path
@@ -42,12 +43,16 @@ value_expr = { bv_eval
  			 | integer
  			 | p_value_expr
  			 }
+typ = @{ "bv" ~ ASCII_DIGIT+ }
+quant = @{ "forall" | "exists" }
+quantified_expr = { quant ~ "(" ~ identifier ~ ":" ~ typ ~ ")" ~ "::" ~ bool_expr }
 
 p_bool_expr = _{ "(" ~ bool_expr ~ ")"}
-bool_expr =  { comp_eval
+bool_expr =  { bool_const
 			 | bool_eval
+			 | comp_eval
+			 | quantified_expr
 			 | unary_bool_eval
-			 | bool_const
 		     | p_bool_expr
 			 }
 
