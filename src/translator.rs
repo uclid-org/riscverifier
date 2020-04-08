@@ -97,7 +97,12 @@ where
     pub fn print_model(&self) {
         println!(
             "{}",
-            I::model_to_string(&self.xlen, &self.model, &self.dwarf_ctx)
+            I::model_to_string(
+                &self.xlen,
+                &self.model,
+                &self.dwarf_ctx,
+                &self.ignored_funcs
+            )
         );
     }
     /// ========================= FUNCTION GENERATION ========================
@@ -332,8 +337,23 @@ where
                     Expr::bool_lit(false),
                 ],
             );
-            let if_guard =
-                Expr::op_app(Op::Bool(BoolOp::Conj), vec![if_pc_guard, if_returned_guard]);
+            let if_exception_guard = Expr::op_app(
+                Op::Comp(CompOp::Equality),
+                vec![
+                    Expr::Var(
+                        system_model::except_var(self.xlen),
+                        system_model::bv_type(self.xlen),
+                    ),
+                    Expr::bv_lit(0, self.xlen),
+                ],
+            );
+            let if_guard = Expr::op_app(
+                Op::Bool(BoolOp::Conj),
+                vec![
+                    Expr::op_app(Op::Bool(BoolOp::Conj), vec![if_pc_guard, if_returned_guard]),
+                    if_exception_guard,
+                ],
+            );
             let bb_call_stmt =
                 Box::new(Stmt::func_call(self.bb_proc_name(bb_entry), vec![], vec![]));
             then_stmts.push(bb_call_stmt);
@@ -367,7 +387,10 @@ where
                         })
                         .collect::<Vec<_>>();
                     let f_call_stmt = Box::new(Stmt::func_call(f_name, vec![], f_args));
+                    // Add function call to then statement
                     then_stmts.push(f_call_stmt);
+                    // Reset the returned variable for the caller
+                    then_stmts.push(Box::new(Stmt::assign(vec![Expr::var(system_model::RETURNED_FLAG, Type::Bool)], vec![Expr::bool_lit(false)])));
                 }
             }
             let then_blk_stmt = Box::new(Stmt::Block(then_stmts));
@@ -376,10 +399,10 @@ where
         }
         // Add line to reset returned variable after function return.
         // This is required when functions are nested.
-        stmts_vec.push(Box::new(Stmt::assign(
-            vec![Expr::Var(system_model::returned_var(), Type::Bool)],
-            vec![Expr::bool_lit(false)],
-        )));
+        // stmts_vec.push(Box::new(Stmt::assign(
+        //     vec![Expr::Var(system_model::returned_var(), Type::Bool)],
+        //     vec![Expr::bool_lit(false)],
+        // )));
         Stmt::Block(stmts_vec)
     }
     /// Returns a topological sort of the cfg as an array of entry addresses
@@ -458,6 +481,19 @@ where
             }
             for target in cfg_node.exit().successors() {
                 ts.add_dependency(entry, target);
+                // If the entry address is to a function entry,
+                // then there is no need to recursively compute
+                // the dependents of the callee because
+                if cfg_rc
+                    .nodes()
+                    .get(&target)
+                    .expect("Unable to find target basic block.")
+                    .entry()
+                    .is_label_entry()
+                {
+                    continue;
+                }
+                // Otherwise, recursively compute the dependencies of the target
                 self.compute_deps(ignore, cfg_rc, &target, ts, processed);
             }
         } else {
@@ -669,6 +705,17 @@ where
                 Expr::bv_lit(func_entry, self.xlen),
             ],
         )));
+        // Add no exception requirement
+        requires.push(Spec::Requires(Expr::op_app(
+            Op::Comp(CompOp::Equality),
+            vec![
+                Expr::Var(
+                    system_model::except_var(self.xlen),
+                    system_model::bv_type(self.xlen),
+                ),
+                Expr::bv_lit(0, self.xlen),
+            ],
+        )));
         // Add returned flag initially 0 constraint
         requires.push(Spec::Requires(Expr::op_app(
             Op::Comp(CompOp::Equality),
@@ -701,6 +748,7 @@ where
     /// Returns ensure statments from specification map for the given function
     /// Also adds various ensures common across all functions:
     ///     (1) callee return constraint
+    ///     (2) returned flag is true if there is no exception
     fn ensures_from_spec_map(&self, func_name: &str) -> Option<Vec<Spec>> {
         // Ensures statements from the specification file
         let mut ensures = self
@@ -716,8 +764,10 @@ where
                 Some(ensures)
             })
             .map_or(vec![], |v| v);
-        // (1) callee return constraint: ensures pc == old(ra)[63:1] ++ 0bv1
-        let ra = if self.mod_set_map.get(func_name).unwrap().contains("ra") {
+        // (1) callee return constraint:
+        //          ensures (pc == old(ra)[63:1] ++ 0bv1)
+        let mod_set = self.mod_set_map.get(func_name);
+        let ra = if mod_set.is_some() && mod_set.unwrap().contains("ra") {
             Expr::op_app(
                 Op::Old,
                 vec![Expr::var(
@@ -727,8 +777,8 @@ where
             )
         } else {
             Expr::var(system_model::RA, system_model::bv_type(self.xlen))
-        };
-        ensures.push(Spec::Requires(Expr::op_app(
+        }; 
+        ensures.push(Spec::Ensures(Expr::op_app(
             Op::Bool(BoolOp::Impl),
             vec![
                 Expr::op_app(
@@ -756,6 +806,24 @@ where
                 ),
             ],
         )));
+        // (2) returned flag is true if there is no exception
+        //      ensures (exception == 0bv64) ==> (returned == true);
+        ensures.push(Spec::Ensures(Expr::op_app(Op::Bool(BoolOp::Impl), vec![
+                Expr::op_app(
+                    Op::Comp(CompOp::Equality),
+                    vec![
+                        Expr::var(system_model::EXCEPT_VAR, system_model::bv_type(self.xlen)),
+                        Expr::bv_lit(0, self.xlen),
+                    ],
+                ),
+                                Expr::op_app(
+                    Op::Comp(CompOp::Equality),
+                    vec![
+                        Expr::var(system_model::RETURNED_FLAG, Type::Bool),
+                        Expr::bool_lit(true),
+                    ],
+                ),
+            ])));
         Some(ensures)
     }
     /// ====================== DWARF RELATED FUNCTIONS =======================

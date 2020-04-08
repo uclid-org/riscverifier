@@ -541,7 +541,12 @@ pub trait IRInterface: fmt::Debug {
     fn block_to_string(blk: &Vec<Box<Stmt>>) -> String;
     fn func_model_to_string(fm: &FuncModel, dwarf_ctx: &DwarfCtx) -> String;
     // IR to model string
-    fn model_to_string(xlen: &u64, model: &Model, dwarf_ctx: &DwarfCtx) -> String;
+    fn model_to_string(
+        xlen: &u64,
+        model: &Model,
+        dwarf_ctx: &DwarfCtx,
+        ignored_funcs: &HashSet<&str>,
+    ) -> String;
     // Specification langauge
     fn spec_expr_to_string(
         func_name: &str,

@@ -1,3 +1,4 @@
+use std::collections::HashSet;
 use std::fs;
 use std::rc::Rc;
 
@@ -256,17 +257,21 @@ impl Uclid5Interface {
     /// Returns the control block for the UCLID5 model.
     /// This currently will automatically verify all functions with
     /// a specification.
-    fn control_blk(model: &Model, dwarf_ctx: &DwarfCtx) -> String {
+    fn control_blk(model: &Model, dwarf_ctx: &DwarfCtx, ignored_funcs: &HashSet<&str>) -> String {
         let verif_fns_string = model
             .func_models
             .iter()
             .filter(|fm| dwarf_ctx.func_sig(&fm.sig.name).is_ok())
             .map(|fm| {
-                format!(
-                    "f{} = verify({});",
-                    fm.sig.name.clone(),
-                    fm.sig.name.clone()
-                )
+                if !ignored_funcs.contains(&fm.sig.name[..]) {
+                    format!(
+                        "f{} = verify({});",
+                        fm.sig.name.clone(),
+                        fm.sig.name.clone()
+                    )
+                } else {
+                    String::from("")
+                }
             })
             .collect::<Vec<_>>()
             .join("\n");
@@ -572,7 +577,12 @@ impl IRInterface for Uclid5Interface {
 
     // Generate function model
     // NOTE: Replace string with write to file
-    fn model_to_string(xlen: &u64, model: &Model, dwarf_ctx: &DwarfCtx) -> String {
+    fn model_to_string(
+        xlen: &u64,
+        model: &Model,
+        dwarf_ctx: &DwarfCtx,
+        ignored_funcs: &HashSet<&str>,
+    ) -> String {
         let xlen_defn = utils::indent_text(
             format!(
                 "type xlen_t = bv{};\ndefine to_xlen_t(x: bv64): xlen_t = x[{}:0];",
@@ -592,7 +602,7 @@ impl IRInterface for Uclid5Interface {
         let global_func_defns = Self::gen_global_func_defns(&model); // Define macros for function addresses                                              // procedures
         let procs = Self::gen_procs(model, &dwarf_ctx);
         // control block
-        let ctrl_blk = Self::control_blk(model, &dwarf_ctx);
+        let ctrl_blk = Self::control_blk(model, &dwarf_ctx, ignored_funcs);
         format!(
             "module {} {{\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n\n{}\n}}",
             model.name,

@@ -1,34 +1,34 @@
 begin_spec(region_get_addr)
 requires ((0x0bv32 <= i) && (i < 16bv32));
 ensures (($exception == 0bv64) ==> ($ret == regions[i].addr));
-ensures (($exception == 0bv64) ==> ($returned == false));
+ensures (($exception == 0bv64) ==> forall ($ti : bv64) :: (($mem[$ti] == old($mem[$ti]))));
 end_spec
 
 begin_spec(is_pmp_region_valid)
 requires ((0bv32 <= region_idx) && (region_idx < 16bv32));
-ensures (($exception == 0bv64) ==> ($ret == (region_def_bitmap & (0x1bv32 << region_idx))));
-ensures (($exception == 0bv64) ==> ($returned == false));
+ensures (($exception == 0bv64) ==> ($ret == (0bv32 ++ (region_def_bitmap & (0x1bv32 << region_idx)))));
+ensures (($exception == 0bv64) ==> forall ($ti : bv64) :: (($mem[$ti] == old($mem[$ti]))));
 end_spec
 
 begin_spec(region_pmpcfg_val)
 requires ((0bv32 <= i) && (i < 16bv32));
 requires ((0bv32 <= reg_idx) && (reg_idx < 16bv32));
 ensures (($exception == 0bv64) ==> ($ret == ((((0bv56 ++ (regions[i].addrmode | perm_bits)) << (0bv32 ++ ((reg_idx & 7bv32) << 3bv32)))))));
-ensures (($exception == 0bv64) ==> ($returned == false));
+ensures (($exception == 0bv64) ==> forall ($ti : bv64) :: (($mem[$ti] == old($mem[$ti]))));
 end_spec
 
 begin_spec(region_register_idx)
 requires ((0bv32 <= i) && (i < 16bv32));
 ensures (($exception == 0bv64) ==> ($ret == regions[i].reg_idx));
-ensures (($exception == 0bv64) ==> ($returned == false));
+ensures (($exception == 0bv64) ==> forall ($ti : bv64) :: (($mem[$ti] == old($mem[$ti]))));
 end_spec
 
 begin_spec(region_is_tor)
+modifies a5, returned, a0, mem, zero, pc, exception;
 requires ((0bv32 <= i) && (i < 16bv32));
 ensures ((($exception == 0bv64) && (regions[i].addrmode == 8bv8)) ==> ($ret == 1bv64));
 ensures ((($exception == 0bv64) && (regions[i].addrmode != 8bv8)) ==> ($ret == 0bv64));
-ensures ((($exception == 0bv64) ==> forall ($ti : bv64) :: ((($ti >_u $sp) ==> ($mem[$ti] == old($mem[$ti]))))));
-ensures (($exception == 0bv64) ==> ($returned == false));
+ensures (($exception == 0bv64) ==> forall ($ti : bv64) :: (($mem[$ti] == old($mem[$ti]))));
 end_spec
 
 begin_spec(region_needs_two_entries)
@@ -37,31 +37,32 @@ requires ($sp >_u 0xFbv64);
 ensures ((($exception == 0bv64) && ((regions[i].addrmode == 8bv8) && (regions[i].reg_idx > 0bv32))) ==> ($ret == 1bv64));
 ensures ((($exception == 0bv64) && ((regions[i].addrmode != 8bv8) || (regions[i].reg_idx <= 0bv32))) ==> ($ret == 0bv64));
 ensures ((($exception == 0bv64) ==> forall ($ti : bv64) :: ((($ti >_u $sp) ==> ($mem[$ti] == old($mem[$ti]))))));
-ensures (($exception == 0bv64) ==> ($returned == false));
 end_spec
 
 begin_spec(region_is_napot)
+modifies mem, a5, returned, exception, a0, pc, zero;
 requires ((0bv32 <= i) && (i < 16bv32));
-ensures ((($exception == 0bv64) && (regions[i].addrmode == 24bv8)) ==> ($ret == 1bv32));
-ensures ((($exception == 0bv64) && (regions[i].addrmode != 24bv8)) ==> ($ret == 0bv32));
-ensures (($exception == 0bv64) ==> ($returned == false));
+ensures ((($exception == 0bv64) && (regions[i].addrmode == 24bv8)) ==> ($ret == 1bv64));
+ensures ((($exception == 0bv64) && (regions[i].addrmode != 24bv8)) ==> ($ret == 0bv64));
+ensures (($exception == 0bv64) ==> forall ($ti : bv64) :: (($mem[$ti] == old($mem[$ti]))));
 end_spec
 
 begin_spec(region_is_napot_all)
+modifies mem, zero, pc, returned, exception, a0, a5;
 requires ((0bv32 <= i) && (i < 16bv32));
-ensures ((($exception == 0bv64) && ((regions[i].addr == 0bv64) && (regions[i].size == -1))) ==> ($ret == 1bv32));
-ensures ((($exception == 0bv64) && ((regions[i].addr != 0bv64) || (regions[i].size != -1))) ==> ($ret == 0bv32));
-ensures (($exception == 0bv64) ==> ($returned == false));
+ensures ((($exception == 0bv64) && ((regions[i].addr == 0bv64) && (regions[i].size == -1))) ==> ($ret == 1bv64));
+ensures ((($exception == 0bv64) && ((regions[i].addr != 0bv64) || (regions[i].size != -1))) ==> ($ret == 0bv64));
+ensures (($exception == 0bv64) ==> forall ($ti : bv64) :: (($mem[$ti] == old($mem[$ti]))));
 end_spec
 
 begin_spec(region_pmpaddr_val)
 requires ((0bv32 <= i) && (i < 16bv32));
 requires ((regions[i].addr != 0bv64) || (regions[i].size != -1));
-ensures ((($exception == 0bv64) && ((regions[i].addr == 0bv64) && (regions[i].size == -1))) ==> ($ret == -1));
-ensures ((($exception == 0bv64) && (((regions[i].addr != 0bv64) || (regions[i].size != -1)) && (regions[i].addrmode == 24bv8))) ==> ($ret == (((regions[i].addr | ((regions[i].size >> 1bv64) - 1bv64)) >> 2bv64))));
-ensures ((($exception == 0bv64) && (((regions[i].addr != 0bv64) || (regions[i].size != -1)) && (regions[i].addrmode == 8bv8))) ==> ($ret == ((regions[i].addr + regions[i].size) >> 2)));
-ensures ((($exception == 0bv64) && (((regions[i].addr != 0bv64) || (regions[i].size != -1)) && ((regions[i].addrmode != 8bv8) && (regions[i].addrmode != 24bv8)))) ==> ($ret == 0));
-ensures (($exception == 0bv64) ==> ($returned == false));
+//ensures ((($exception == 0bv64) && ((regions[i].addr == 0bv64) && (regions[i].size == -1))) ==> ($ret == -1));
+//ensures ((($exception == 0bv64) && (((regions[i].addr != 0bv64) || (regions[i].size != -1)) && (regions[i].addrmode == 24bv8))) ==> ($ret == (((regions[i].addr | ((regions[i].size >> 1bv64) - 1bv64)) >> 2bv64))));
+//ensures ((($exception == 0bv64) && (((regions[i].addr != 0bv64) || (regions[i].size != -1)) && (regions[i].addrmode == 8bv8))) ==> ($ret == ((regions[i].addr + regions[i].size) >> 2)));
+//ensures ((($exception == 0bv64) && (((regions[i].addr != 0bv64) || (regions[i].size != -1)) && ((regions[i].addrmode != 8bv8) && (regions[i].addrmode != 24bv8)))) ==> ($ret == 0));
+//ensures ((($exception == 0bv64) ==> forall ($ti : bv64) :: ((($ti >_u $sp) ==> ($mem[$ti] == old($mem[$ti]))))));
 end_spec
 
 begin_spec(pmp_set)
