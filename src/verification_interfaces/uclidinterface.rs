@@ -277,7 +277,8 @@ impl Uclid5Interface {
             .join("\n");
         let verif_fns_string = format!("{}\ncheck;\nprint_results;", verif_fns_string);
         let verif_fns_string = utils::indent_text(verif_fns_string, 4);
-        let control_string = format!("control {{\n{}\n}}", verif_fns_string);
+        let solver_opts = utils::indent_text(format!("set_solver_option(\":mbqi\", false);\nset_solver_option(\":case_split\", 0);\nset_solver_option(\":relevancy\", 0);\nset_solver_option(\":threads\", 4);\nset_solver_option(\":blast_full\", true);"), 4);
+        let control_string = format!("control {{\n{}\n{}\n}}", verif_fns_string, solver_opts);
         utils::indent_text(control_string, 4)
     }
 
