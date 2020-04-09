@@ -33,10 +33,13 @@ bool_const = @{ "true"
 path = { identifier ~ (array_index | get_field)* }
 path_ref = { "&" ~ identifier ~ (array_index | get_field)* }
 
+f_app = { identifier ~ "(" ~ value_expr ~ ("," ~ value_expr)* ~ ")" }
+
 p_value_expr = _{ "(" ~ value_expr ~ ")" }
 value_expr = { bv_eval
 		     | bool_const
 			 | old
+ 			 | f_app
 			 | path_ref
 			 | path
  			 | bitvec

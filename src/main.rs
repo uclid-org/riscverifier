@@ -94,6 +94,13 @@ fn main() {
                 .long("ignore-funcs")
                 .takes_value(true),
         )
+        .arg(
+            Arg::with_name("verify-funcs")
+                .help("List of functions to verify.")
+                .short("v")
+                .long("verify-funcs")
+                .takes_value(true),
+        )
         .get_matches();
     let xlen = utils::dec_str_to_u64(matches.value_of("xlen").unwrap_or("64"))
         .expect("[main] Unable to parse numberic xlen.");
@@ -111,12 +118,6 @@ fn main() {
     let bbs = BasicBlock::split(&als);
     // Module name
     let module_name = matches.value_of("modname").unwrap_or("main");
-    // Get ignored functions
-    let ignored_functions = matches
-        .value_of("ignore-funcs")
-        .map_or(HashSet::new(), |lst| {
-            lst.split(",").collect::<HashSet<&str>>()
-        });
     // Initialize DWARF reader
     let dwarf_reader: Rc<DwarfReader<CDwarfInterface>> =
         Rc::new(DwarfReader::new(&xlen, &binary_paths).unwrap());
@@ -132,12 +133,25 @@ fn main() {
     let specs_map = spec_reader
         .process_specs_files(&spec_files)
         .expect("Could not read spec.");
+    // Get ignored functions
+    let ignored_funcs = matches
+        .value_of("ignore-funcs")
+        .map_or(HashSet::new(), |lst| {
+            lst.split(",").collect::<HashSet<&str>>()
+        });
+    // Get list of functions to verify
+    let verify_funcs = matches
+        .value_of("verify-funcs")
+        .map_or(vec![], |lst| {
+            lst.split(",").collect::<Vec<&str>>()
+        });
     // Translate and write to output file
     let mut translator: Translator<Uclid5Interface> = Translator::new(
         xlen,
         &module_name,
         &bbs,
-        &ignored_functions,
+        &ignored_funcs,
+        &verify_funcs,
         dwarf_reader.ctx(),
         &specs_map,
     );

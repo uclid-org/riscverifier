@@ -28,6 +28,8 @@ where
     bbs: &'t HashMap<u64, Rc<cfg::BasicBlock<disassembler::AssemblyLine>>>,
     /// A set of the functions to ignore
     ignored_funcs: &'t HashSet<&'t str>,
+    /// A list of functions to verify
+    verify_funcs: &'t Vec<&'t str>,
     /// DWARF debugging information
     dwarf_ctx: &'t DwarfCtx,
     /// Map of specs from function name to a list of pre/post conditions
@@ -55,6 +57,7 @@ where
         module_name: &'t str,
         bbs: &'t HashMap<u64, Rc<cfg::BasicBlock<disassembler::AssemblyLine>>>,
         ignored_funcs: &'t HashSet<&'t str>,
+        verify_funcs: &'t Vec<&'t str>,
         dwarf_ctx: &'t DwarfCtx,
         specs_map: &'t HashMap<String, Vec<Spec>>,
     ) -> Self {
@@ -63,6 +66,7 @@ where
             model: Model::new(module_name),
             bbs: bbs,
             ignored_funcs: ignored_funcs,
+            verify_funcs: verify_funcs,
             dwarf_ctx: dwarf_ctx,
             specs_map: specs_map,
             labels_to_addr: Translator::<I>::create_label_to_addr_map(bbs),
@@ -101,7 +105,8 @@ where
                 &self.xlen,
                 &self.model,
                 &self.dwarf_ctx,
-                &self.ignored_funcs
+                &self.ignored_funcs,
+                &self.verify_funcs,
             )
         );
     }

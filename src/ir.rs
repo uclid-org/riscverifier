@@ -163,6 +163,8 @@ pub enum Literal {
     Bv { val: u64, width: u64 },
     Bool { val: bool },
 }
+
+/// Variable
 #[derive(Debug, Eq, Hash, Clone)]
 pub struct Var {
     pub name: String,
@@ -546,6 +548,7 @@ pub trait IRInterface: fmt::Debug {
         model: &Model,
         dwarf_ctx: &DwarfCtx,
         ignored_funcs: &HashSet<&str>,
+        verify_funcs: &Vec<&str>,
     ) -> String;
     // Specification langauge
     fn spec_expr_to_string(

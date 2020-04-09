@@ -243,6 +243,28 @@ impl<'s> SpecReader<'s> {
                 }
                 Ok(path)
             }
+            Rule::f_app => {
+                let f_name_pair = inner.next().unwrap();
+                let f_name = match &f_name_pair.as_rule() {
+                    Rule::identifier => f_name_pair.as_str(),
+                    _ => panic!("Function application should have an identifier as name."),
+                };
+                let mut expr_args = vec![];
+                while let Some(arg) = inner.next() {
+                    expr_args.push(self._translate_expr(func_name, arg, bound_var_map)?);
+                }
+                match f_name {
+                    "bv_sign_extend" => {
+                        expr_args.reverse();
+                        Ok(ir::Expr::op_app(ir::Op::Bv(ir::BVOp::SignExt), expr_args))
+                    },
+                    "bv_zero_extend" => {
+                        expr_args.reverse();
+                        Ok(ir::Expr::op_app(ir::Op::Bv(ir::BVOp::ZeroExt), expr_args))
+                    },
+                    _ => panic!("Unimplemented function application in specreader."),
+                }
+            }
             Rule::identifier => {
                 // If it's a quantifier bound variable, return the expression from the map
                 if let Some(v) = bound_var_map.get(pair_str) {

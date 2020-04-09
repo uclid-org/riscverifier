@@ -12,14 +12,13 @@ end_spec
 
 begin_spec(region_pmpcfg_val)
 requires ((0bv32 <= i) && (i < 16bv32));
-requires ((0bv32 <= reg_idx) && (reg_idx < 16bv32));
-ensures (($exception == 0bv64) ==> ($ret == ((((0bv56 ++ (regions[i].addrmode | perm_bits)) << (0bv32 ++ ((reg_idx & 7bv32) << 3bv32)))))));
+ensures (($exception == 0bv64) ==> ($ret == (((bv_zero_extend(56, (regions[i].addrmode | perm_bits)) << bv_zero_extend(32, ((reg_idx & 7bv32) << 3bv32)))))));
 ensures (($exception == 0bv64) ==> forall ($ti : bv64) :: (($mem[$ti] == old($mem[$ti]))));
 end_spec
 
 begin_spec(region_register_idx)
-requires ((0bv32 <= i) && (i < 16bv32));
-ensures (($exception == 0bv64) ==> ($ret == regions[i].reg_idx));
+requires ((0bv32 <= i) && (i < 15bv32));
+ensures (($exception == 0bv64) ==> ($ret == bv_sign_extend(32, regions[i].reg_idx)));
 ensures (($exception == 0bv64) ==> forall ($ti : bv64) :: (($mem[$ti] == old($mem[$ti]))));
 end_spec
 
@@ -58,7 +57,7 @@ end_spec
 begin_spec(region_pmpaddr_val)
 requires ((0bv32 <= i) && (i < 16bv32));
 requires ((regions[i].addr != 0bv64) || (regions[i].size != -1));
-requires ($sp >_u 100bv64);
+requires ($sp >_u 0xFbv64);
 ensures ((($exception == 0bv64) && ((regions[i].addr == 0bv64) && (regions[i].size == -1))) ==> ($ret == -1));
 ensures ((($exception == 0bv64) && (((regions[i].addr != 0bv64) || (regions[i].size != -1)) && (regions[i].addrmode == 24bv8))) ==> ($ret == (((regions[i].addr | ((regions[i].size >> 1bv64) - 1bv64)) >> 2bv64))));
 ensures ((($exception == 0bv64) && (((regions[i].addr != 0bv64) || (regions[i].size != -1)) && (regions[i].addrmode == 8bv8))) ==> ($ret == ((regions[i].addr + regions[i].size) >> 2)));
@@ -67,5 +66,9 @@ ensures ((((($exception == 0bv64) && ($returned == true))) ==> forall ($ti : bv6
 end_spec
 
 begin_spec(pmp_set)
-ensures true;
+//requires ((0bv32 <=_u region_idx) && (region_idx <_u 16bv32));
+//requires ((0bv8 <=_u perm) && (perm <=_u 0bv8));     // What is this?
+requires (0bv32 == region_idx);
+requires (0bv8 == perm); 
+requires ($sp >_u 0xFbv64);
 end_spec
