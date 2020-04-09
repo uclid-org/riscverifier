@@ -691,11 +691,12 @@ impl IRInterface for Uclid5Interface {
                     "{}({}, {})",
                     Self::array_index_macro_name(&(out_typ_width / utils::BYTE_SIZE)),
                     array,
-                    Self::extend_to_match_width(
-                        &index,
-                        index_var_width, // from
-                        in_typ_width,    // to
-                    )
+                    // Self::extend_to_match_width(
+                    //     &index,
+                    //     index_var_width, // from
+                    //     in_typ_width,    // to
+                    // )
+                    index
                 )
             }
             Op::GetField(field) => {
@@ -714,6 +715,7 @@ impl IRInterface for Uclid5Interface {
     /// Globals are shadowed by function variables
     fn spec_var_to_string(_func_name: &str, v: &Var, dwarf_ctx: &DwarfCtx, old: bool) -> String {
         if v.name.chars().next().unwrap() == '$' {
+            // Special identifier
             let name = &v.name[1..];
             if name == "ret" {
                 format!("{}(a0)", if old { "old" } else { "" },)
@@ -727,6 +729,7 @@ impl IRInterface for Uclid5Interface {
             .is_some()
             || system_model::SYSTEM_VARS.contains(&&v.name[..])
         {
+            // Function argument
             format!("{}({})", if old { "old" } else { "" }, v.name.clone())
         } else if dwarf_ctx
             .global_vars()
@@ -734,6 +737,7 @@ impl IRInterface for Uclid5Interface {
             .find(|x| x.name == v.name)
             .is_some()
         {
+            // Global variable
             format!("{}()", utils::global_var_ptr_name(&v.name[..]))
         } else {
             panic!("Unable to find variable {:?}", v);

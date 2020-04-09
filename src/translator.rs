@@ -232,7 +232,13 @@ where
         self.mod_set_map
             .insert(func_name.to_string(), mod_set.clone());
         // Get arguments of function
-        let arg_exprs = self.func_args(func_name);
+        let arg_exprs = self.func_args(func_name)
+            .iter()
+            .map(|expr| {
+                let var = expr.get_expect_var();
+                Expr::var(&var.name, system_model::bv_type(self.xlen))
+            })
+            .collect();
         // Translate specs
         let requires = self.requires_from_spec_map(func_name, &arg_exprs).ok();
         let ensures = self.ensures_from_spec_map(func_name);
@@ -246,7 +252,7 @@ where
             ensures,
             Some(mod_set),
             body,
-            false,
+            true,
         ));
     }
     /// ========================== HELPER FUNCTIONS =========================
@@ -386,7 +392,7 @@ where
                         .map(|(i, arg_expr)| {
                             let arg_var = arg_expr.get_expect_var();
                             Expr::var(
-                                &format!("a{}[{}:0]", i, arg_var.typ.get_expect_bv_width() - 1),
+                                &format!("a{}", i),
                                 arg_var.typ.clone(),
                             )
                         })
