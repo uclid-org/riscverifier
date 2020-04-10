@@ -252,7 +252,7 @@ where
             ensures,
             Some(mod_set),
             body,
-            false,
+            true,
         ));
     }
     /// ========================== HELPER FUNCTIONS =========================

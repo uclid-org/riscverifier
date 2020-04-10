@@ -347,29 +347,37 @@
     procedure [inline] sb_proc(rs1: bv64, imm: bv64, rs2: bv64) returns ()
       modifies pc, mem;
       {
-        pc = (pc + 4bv64); // line 0
         mem[rs1 + imm] = rs2[7:0]; // line 0
+        pc = (pc + 4bv64); // line 0
       }
     procedure [inline] sh_proc(rs1: bv64, imm: bv64, rs2: bv64) returns ()
       modifies pc, mem;
       {
-        pc = (pc - 4bv64); // line 0
-        call () = sb_proc(rs1, imm, rs2); // line 0
-        call () = sb_proc(rs1, imm + 1bv64, 0bv8 ++ rs2[63:8]); // line 0
+        mem[rs1 + imm] = rs2[7:0];
+        mem[rs1 + imm + 1bv64] = rs2[15:8];
+        pc = (pc + 4bv64);
       }
     procedure [inline] sw_proc(rs1: bv64, imm: bv64, rs2: bv64) returns ()
       modifies pc, mem;
       {
-        pc = (pc - 4bv64); // line 0
-        call () = sh_proc(rs1, imm, rs2); // line 0
-        call () = sh_proc(rs1, imm + 2bv64, 0bv16 ++ rs2[63:16]); // line 0
+        mem[rs1 + imm] = rs2[7:0];
+        mem[rs1 + imm + 1bv64] = rs2[15:8];
+        mem[rs1 + imm + 2bv64] = rs2[23:16];
+        mem[rs1 + imm + 3bv64] = rs2[31:24];
+        pc = (pc + 4bv64); // line 0
       }
     procedure [inline] sd_proc(rs1: bv64, imm: bv64, rs2: bv64) returns ()
       modifies pc, mem;
       {
-        pc = (pc - 4bv64); // line 0
-        call () = sw_proc(rs1, imm, rs2); // line 0
-        call () = sw_proc(rs1, imm + 4bv64, 0bv32 ++ rs2[63:32]); // line 0
+        mem[rs1 + imm] = rs2[7:0];
+        mem[rs1 + imm + 1bv64] = rs2[15:8];
+        mem[rs1 + imm + 2bv64] = rs2[23:16];
+        mem[rs1 + imm + 3bv64] = rs2[31:24];
+        mem[rs1 + imm + 4bv64] = rs2[39:32];
+        mem[rs1 + imm + 5bv64] = rs2[47:40];
+        mem[rs1 + imm + 6bv64] = rs2[55:48];
+        mem[rs1 + imm + 7bv64] = rs2[63:56];
+        pc = (pc + 4bv64); // line 0
       }
     procedure [inline] beq_proc(rs1: bv64, rs2: bv64, imm: bv64) returns ()
       modifies pc;
