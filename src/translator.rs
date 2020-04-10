@@ -252,7 +252,7 @@ where
             ensures,
             Some(mod_set),
             body,
-            true,
+            false,
         ));
     }
     /// ========================== HELPER FUNCTIONS =========================
@@ -329,45 +329,12 @@ where
             if cfg_node.entry().is_label_entry() && bb_entry != *func_entry_addr {
                 continue;
             }
-            let mut then_stmts = vec![];
             // Basic block call
-            let if_pc_guard = Expr::op_app(
-                Op::Comp(CompOp::Equality),
-                vec![
-                    Expr::Var(
-                        system_model::pc_var(self.xlen),
-                        system_model::bv_type(self.xlen),
-                    ),
-                    Expr::bv_lit(bb_entry, self.xlen),
-                ],
-            );
-            let if_returned_guard = Expr::op_app(
-                Op::Comp(CompOp::Equality),
-                vec![
-                    Expr::Var(system_model::returned_var(), Type::Bool),
-                    Expr::bool_lit(false),
-                ],
-            );
-            let if_exception_guard = Expr::op_app(
-                Op::Comp(CompOp::Equality),
-                vec![
-                    Expr::Var(
-                        system_model::except_var(self.xlen),
-                        system_model::bv_type(self.xlen),
-                    ),
-                    Expr::bv_lit(0, self.xlen),
-                ],
-            );
-            let if_guard = Expr::op_app(
-                Op::Bool(BoolOp::Conj),
-                vec![
-                    Expr::op_app(Op::Bool(BoolOp::Conj), vec![if_pc_guard, if_returned_guard]),
-                    if_exception_guard,
-                ],
-            );
             let bb_call_stmt =
                 Box::new(Stmt::func_call(self.bb_proc_name(bb_entry), vec![], vec![]));
-            then_stmts.push(bb_call_stmt);
+            let then_blk_stmt = Stmt::Block(vec![bb_call_stmt]);
+            let guarded_call = Box::new(self.guarded_call(&bb_entry, then_blk_stmt));
+            stmts_vec.push(guarded_call);
             // Function call
             // If the instruction is a jump and the target is
             // another function's entry address, then make a call to it.
@@ -398,23 +365,59 @@ where
                         })
                         .collect::<Vec<_>>();
                     let f_call_stmt = Box::new(Stmt::func_call(f_name, vec![], f_args));
+                    let mut then_stmts = vec![];
                     // Add function call to then statement
                     then_stmts.push(f_call_stmt);
                     // Reset the returned variable for the caller
                     then_stmts.push(Box::new(Stmt::assign(vec![Expr::var(system_model::RETURNED_FLAG, Type::Bool)], vec![Expr::bool_lit(false)])));
+                    let then_blk_stmt = Stmt::Block(then_stmts);
+                    let guarded_call = Box::new(self.guarded_call(&target_addr, then_blk_stmt));
+                    stmts_vec.push(guarded_call)
                 }
             }
-            let then_blk_stmt = Box::new(Stmt::Block(then_stmts));
-            let guarded_call = Box::new(Stmt::if_then_else(if_guard, then_blk_stmt, None));
-            stmts_vec.push(guarded_call);
         }
-        // Add line to reset returned variable after function return.
-        // This is required when functions are nested.
-        // stmts_vec.push(Box::new(Stmt::assign(
-        //     vec![Expr::Var(system_model::returned_var(), Type::Bool)],
-        //     vec![Expr::bool_lit(false)],
-        // )));
         Stmt::Block(stmts_vec)
+    }
+    /// Returns a guarded block statement
+    /// Guards are pc == target, exception == 0bv64, and returned == false
+    fn guarded_call(&self, entry: &u64, blk: Stmt) -> Stmt {
+            let if_pc_guard = Expr::op_app(
+                Op::Comp(CompOp::Equality),
+                vec![
+                    Expr::Var(
+                        system_model::pc_var(self.xlen),
+                        system_model::bv_type(self.xlen),
+                    ),
+                    Expr::bv_lit(*entry, self.xlen),
+                ],
+            );
+            let if_returned_guard = Expr::op_app(
+                Op::Comp(CompOp::Equality),
+                vec![
+                    Expr::Var(system_model::returned_var(), Type::Bool),
+                    Expr::bool_lit(false),
+                ],
+            );
+            let if_exception_guard = Expr::op_app(
+                Op::Comp(CompOp::Equality),
+                vec![
+                    Expr::Var(
+                        system_model::except_var(self.xlen),
+                        system_model::bv_type(self.xlen),
+                    ),
+                    Expr::bv_lit(0, self.xlen),
+                ],
+            );
+            let if_guard = Expr::op_app(
+                Op::Bool(BoolOp::Conj),
+                vec![
+                    Expr::op_app(Op::Bool(BoolOp::Conj), vec![if_pc_guard, if_returned_guard]),
+                    if_exception_guard,
+                ],
+            );
+            let then_blk_stmt = Box::new(blk);
+            // Return the guarded call
+            Stmt::if_then_else(if_guard, then_blk_stmt, None)
     }
     /// Returns a topological sort of the cfg as an array of entry addresses
     fn topo_sort(&self, cfg_rc: &Rc<cfg::Cfg<disassembler::AssemblyLine>>) -> Vec<u64> {
