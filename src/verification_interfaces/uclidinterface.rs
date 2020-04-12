@@ -257,14 +257,21 @@ impl Uclid5Interface {
     /// Returns the control block for the UCLID5 model.
     /// This currently will automatically verify all functions with
     /// a specification.
-    fn control_blk(model: &Model, dwarf_ctx: &DwarfCtx, ignored_funcs: &HashSet<&str>, verify_funcs: &Vec<&str>) -> String {
+    fn control_blk(
+        model: &Model,
+        dwarf_ctx: &DwarfCtx,
+        ignored_funcs: &HashSet<&str>,
+        verify_funcs: &Vec<&str>,
+    ) -> String {
         let verif_fns_string = if verify_funcs.len() > 0 {
-            verify_funcs.iter().map(|f_name| {
-                format!("f{} = verify({});", f_name, f_name)
-            }).collect::<Vec<_>>()
-            .join("\n")
+            verify_funcs
+                .iter()
+                .map(|f_name| format!("f{} = verify({});", f_name, f_name))
+                .collect::<Vec<_>>()
+                .join("\n")
         } else {
-            model.func_models
+            model
+                .func_models
                 .iter()
                 .filter(|fm| dwarf_ctx.func_sig(&fm.sig.name).is_ok())
                 .map(|fm| {
@@ -589,7 +596,7 @@ impl IRInterface for Uclid5Interface {
     }
     /// A "track procedure" for tracking specified expressions.
     /// The procedure contains a list of assignments to variables to track.
-    /// 
+    ///
     /// # EXAMPLE
     /// Given a spec with:
     ///     - begin_spec(fname)
@@ -609,9 +616,7 @@ impl IRInterface for Uclid5Interface {
             .tracked
             .iter()
             .map(|spec| match spec {
-                Spec::Track(vname, expr) => {
-                    format!("var {}: xlen_t;", vname)
-                },
+                Spec::Track(vname, expr) => format!("var {}: xlen_t;", vname),
                 _ => panic!("Excepted Spec::Track."),
             })
             .collect::<Vec<String>>()
@@ -621,9 +626,7 @@ impl IRInterface for Uclid5Interface {
             .tracked
             .iter()
             .map(|spec| match spec {
-                Spec::Track(vname, expr) => {
-                    vname.to_string()
-                },
+                Spec::Track(vname, expr) => vname.to_string(),
                 _ => panic!("Excepted Spec::Track."),
             })
             .collect::<Vec<String>>()
@@ -633,9 +636,11 @@ impl IRInterface for Uclid5Interface {
             .tracked
             .iter()
             .map(|spec| match spec {
-                Spec::Track(vname, expr) => {
-                    format!("{} = {};", vname, Self::spec_expr_to_string(&fm.sig.name, &expr, dwarf_ctx, false))
-                },
+                Spec::Track(vname, expr) => format!(
+                    "{} = {};",
+                    vname,
+                    Self::spec_expr_to_string(&fm.sig.name, &expr, dwarf_ctx, false)
+                ),
                 _ => panic!("Excepted Spec::Track."),
             })
             .collect::<Vec<String>>()

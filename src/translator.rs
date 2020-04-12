@@ -235,7 +235,8 @@ where
         self.mod_set_map
             .insert(func_name.to_string(), mod_set.clone());
         // Get arguments of function
-        let arg_exprs = self.func_args(func_name)
+        let arg_exprs = self
+            .func_args(func_name)
             .iter()
             .map(|expr| {
                 let var = expr.get_expect_var();
@@ -365,10 +366,7 @@ where
                         .enumerate()
                         .map(|(i, arg_expr)| {
                             let arg_var = arg_expr.get_expect_var();
-                            Expr::var(
-                                &format!("a{}", i),
-                                arg_var.typ.clone(),
-                            )
+                            Expr::var(&format!("a{}", i), arg_var.typ.clone())
                         })
                         .collect::<Vec<_>>();
                     let f_call_stmt = Box::new(Stmt::func_call(f_name, vec![], f_args));
@@ -376,7 +374,10 @@ where
                     // Add function call to then statement
                     then_stmts.push(f_call_stmt);
                     // Reset the returned variable for the caller
-                    then_stmts.push(Box::new(Stmt::assign(vec![Expr::var(system_model::RETURNED_FLAG, Type::Bool)], vec![Expr::bool_lit(false)])));
+                    then_stmts.push(Box::new(Stmt::assign(
+                        vec![Expr::var(system_model::RETURNED_FLAG, Type::Bool)],
+                        vec![Expr::bool_lit(false)],
+                    )));
                     let then_blk_stmt = Stmt::Block(then_stmts);
                     let guarded_call = Box::new(self.guarded_call(&target_addr, then_blk_stmt));
                     stmts_vec.push(guarded_call)
@@ -388,43 +389,43 @@ where
     /// Returns a guarded block statement
     /// Guards are pc == target, exception == 0bv64, and returned == false
     fn guarded_call(&self, entry: &u64, blk: Stmt) -> Stmt {
-            let if_pc_guard = Expr::op_app(
-                Op::Comp(CompOp::Equality),
-                vec![
-                    Expr::Var(
-                        system_model::pc_var(self.xlen),
-                        system_model::bv_type(self.xlen),
-                    ),
-                    Expr::bv_lit(*entry, self.xlen),
-                ],
-            );
-            let if_returned_guard = Expr::op_app(
-                Op::Comp(CompOp::Equality),
-                vec![
-                    Expr::Var(system_model::returned_var(), Type::Bool),
-                    Expr::bool_lit(false),
-                ],
-            );
-            let if_exception_guard = Expr::op_app(
-                Op::Comp(CompOp::Equality),
-                vec![
-                    Expr::Var(
-                        system_model::except_var(self.xlen),
-                        system_model::bv_type(self.xlen),
-                    ),
-                    Expr::bv_lit(0, self.xlen),
-                ],
-            );
-            let if_guard = Expr::op_app(
-                Op::Bool(BoolOp::Conj),
-                vec![
-                    Expr::op_app(Op::Bool(BoolOp::Conj), vec![if_pc_guard, if_returned_guard]),
-                    if_exception_guard,
-                ],
-            );
-            let then_blk_stmt = Box::new(blk);
-            // Return the guarded call
-            Stmt::if_then_else(if_guard, then_blk_stmt, None)
+        let if_pc_guard = Expr::op_app(
+            Op::Comp(CompOp::Equality),
+            vec![
+                Expr::Var(
+                    system_model::pc_var(self.xlen),
+                    system_model::bv_type(self.xlen),
+                ),
+                Expr::bv_lit(*entry, self.xlen),
+            ],
+        );
+        let if_returned_guard = Expr::op_app(
+            Op::Comp(CompOp::Equality),
+            vec![
+                Expr::Var(system_model::returned_var(), Type::Bool),
+                Expr::bool_lit(false),
+            ],
+        );
+        let if_exception_guard = Expr::op_app(
+            Op::Comp(CompOp::Equality),
+            vec![
+                Expr::Var(
+                    system_model::except_var(self.xlen),
+                    system_model::bv_type(self.xlen),
+                ),
+                Expr::bv_lit(0, self.xlen),
+            ],
+        );
+        let if_guard = Expr::op_app(
+            Op::Bool(BoolOp::Conj),
+            vec![
+                Expr::op_app(Op::Bool(BoolOp::Conj), vec![if_pc_guard, if_returned_guard]),
+                if_exception_guard,
+            ],
+        );
+        let then_blk_stmt = Box::new(blk);
+        // Return the guarded call
+        Stmt::if_then_else(if_guard, then_blk_stmt, None)
     }
     /// Returns a topological sort of the cfg as an array of entry addresses
     fn topo_sort(&self, cfg_rc: &Rc<cfg::Cfg<disassembler::AssemblyLine>>) -> Vec<u64> {
@@ -798,7 +799,7 @@ where
             )
         } else {
             Expr::var(system_model::RA, system_model::bv_type(self.xlen))
-        }; 
+        };
         ensures.push(Spec::Ensures(Expr::op_app(
             Op::Bool(BoolOp::Impl),
             vec![
@@ -829,7 +830,9 @@ where
         )));
         // (2) returned flag is true if there is no exception
         //      ensures (exception == 0bv64) ==> (returned == true);
-        ensures.push(Spec::Ensures(Expr::op_app(Op::Bool(BoolOp::Impl), vec![
+        ensures.push(Spec::Ensures(Expr::op_app(
+            Op::Bool(BoolOp::Impl),
+            vec![
                 Expr::op_app(
                     Op::Comp(CompOp::Equality),
                     vec![
@@ -837,14 +840,15 @@ where
                         Expr::bv_lit(0, self.xlen),
                     ],
                 ),
-                                Expr::op_app(
+                Expr::op_app(
                     Op::Comp(CompOp::Equality),
                     vec![
                         Expr::var(system_model::RETURNED_FLAG, Type::Bool),
                         Expr::bool_lit(true),
                     ],
                 ),
-            ])));
+            ],
+        )));
         Some(ensures)
     }
     fn tracked_from_spec_map(&self, func_name: &str) -> Option<Vec<Spec>> {
