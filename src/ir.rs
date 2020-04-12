@@ -340,6 +340,7 @@ impl FuncModel {
         ret_decl: Option<Expr>,
         requires: Option<Vec<Spec>>,
         ensures: Option<Vec<Spec>>,
+        tracked: Option<Vec<Spec>>,
         mod_set: Option<HashSet<String>>,
         body: Stmt,
         inline: bool,
@@ -351,9 +352,10 @@ impl FuncModel {
         let mod_set = mod_set.unwrap_or(HashSet::new());
         let requires = requires.unwrap_or(vec![]);
         let ensures = ensures.unwrap_or(vec![]);
+        let tracked = tracked.unwrap_or(vec![]);
         FuncModel {
             sig: FuncSig::new(
-                name, entry_addr, arg_decls, ret_decl, requires, ensures, mod_set,
+                name, entry_addr, arg_decls, ret_decl, requires, ensures, tracked, mod_set,
             ),
             body: body,
             inline: inline,
@@ -369,6 +371,7 @@ pub struct FuncSig {
     pub ret_decl: Option<Expr>,
     pub requires: Vec<Spec>,
     pub ensures: Vec<Spec>,
+    pub tracked: Vec<Spec>,
     pub mod_set: HashSet<String>,
 }
 impl FuncSig {
@@ -379,6 +382,7 @@ impl FuncSig {
         ret_decl: Option<Expr>,
         requires: Vec<Spec>,
         ensures: Vec<Spec>,
+        tracked: Vec<Spec>,
         mod_set: HashSet<String>,
     ) -> Self {
         assert!(
@@ -398,20 +402,23 @@ impl FuncSig {
             ret_decl,
             requires,
             ensures,
+            tracked,
             mod_set,
         }
     }
 }
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub enum Spec {
     Requires(Expr),
     Ensures(Expr),
     Modifies(HashSet<Var>),
+    /// Tracking variable name and the corresponding expression
+    Track(String, Expr),
 }
 impl Spec {
     pub fn expr(&self) -> &Expr {
         match &self {
-            Spec::Requires(e) | Spec::Ensures(e) => e,
+            Spec::Requires(e) | Spec::Ensures(e) | Spec::Track(_, e) => e,
             _ => panic!("Spec does not contain an expression."),
         }
     }
@@ -437,6 +444,13 @@ impl Spec {
     }
     pub fn is_modifies(&self) -> bool {
         if let Spec::Modifies(_) = self {
+            true
+        } else {
+            false
+        }
+    }
+    pub fn is_track(&self) -> bool {
+        if let Spec::Track(_, _) = self {
             true
         } else {
             false
@@ -542,6 +556,7 @@ pub trait IRInterface: fmt::Debug {
     fn ite_to_string(ite: &IfThenElse) -> String;
     fn block_to_string(blk: &Vec<Box<Stmt>>) -> String;
     fn func_model_to_string(fm: &FuncModel, dwarf_ctx: &DwarfCtx) -> String;
+    fn track_proc(fm: &FuncModel, dwarf_ctx: &DwarfCtx) -> String;
     // IR to model string
     fn model_to_string(
         xlen: &u64,

@@ -117,6 +117,7 @@ where
         let mod_set = self.mod_set_from_spec_map(func_name);
         let requires = self.requires_from_spec_map(func_name, &arg_exprs).ok();
         let ensures = self.ensures_from_spec_map(func_name);
+        let tracked = self.tracked_from_spec_map(func_name);
         let ret = None;
         let entry_addr = *self
             .func_entry_addr(func_name)
@@ -128,6 +129,7 @@ where
             ret,
             requires,
             ensures,
+            tracked,
             mod_set,
             Stmt::Block(vec![]),
             false,
@@ -174,6 +176,7 @@ where
                     &bb_proc_name,
                     *addr,
                     vec![],
+                    None,
                     None,
                     None,
                     None,
@@ -242,7 +245,10 @@ where
         // Translate specs
         let requires = self.requires_from_spec_map(func_name, &arg_exprs).ok();
         let ensures = self.ensures_from_spec_map(func_name);
+        let tracked = self.tracked_from_spec_map(func_name);
+        // Create the procedure body
         let body = self.cfg_to_symbolic_blk(&func_entry, &func_cfg);
+        // Add the function to the verification model
         self.model.add_func_model(FuncModel::new(
             func_name,
             func_entry,
@@ -250,6 +256,7 @@ where
             None,
             requires,
             ensures,
+            tracked,
             Some(mod_set),
             body,
             true,
@@ -839,6 +846,23 @@ where
                 ),
             ])));
         Some(ensures)
+    }
+    fn tracked_from_spec_map(&self, func_name: &str) -> Option<Vec<Spec>> {
+        // Ensures statements from the specification file
+        let tracked = self
+            .specs_map
+            .get(func_name)
+            .and_then(|spec_vec| {
+                let tracked = spec_vec
+                    .iter()
+                    .cloned()
+                    .filter(|spec| spec.is_track())
+                    .map(|spec| spec)
+                    .collect::<Vec<Spec>>();
+                Some(tracked)
+            })
+            .map_or(vec![], |v| v);
+        Some(tracked)
     }
     /// ====================== DWARF RELATED FUNCTIONS =======================
     /// Translates DwarfTypeDefn to Type

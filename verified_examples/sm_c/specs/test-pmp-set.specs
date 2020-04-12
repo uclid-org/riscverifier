@@ -66,6 +66,7 @@ ensures ((((($exception == 0bv64) && ($returned == true))) ==> forall ($ti : bv6
 end_spec
 
 begin_spec(pmp_set)
+track [hello] regions[0bv64].addr;
 //requires ((0bv32 <=_u region_idx) && (region_idx <_u 16bv32));
 //requires ((0bv8 <=_u perm) && (perm <=_u 0bv8));     // What is this?
 requires (0bv64 == region_idx);
