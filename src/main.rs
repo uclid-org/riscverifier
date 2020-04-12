@@ -142,9 +142,7 @@ fn main() {
     // Get list of functions to verify
     let verify_funcs = matches
         .value_of("verify-funcs")
-        .map_or(vec![], |lst| {
-            lst.split(",").collect::<Vec<&str>>()
-        });
+        .map_or(vec![], |lst| lst.split(",").collect::<Vec<&str>>());
     // Translate and write to output file
     let mut translator: Translator<Uclid5Interface> = Translator::new(
         xlen,
