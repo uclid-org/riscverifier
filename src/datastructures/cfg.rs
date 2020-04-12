@@ -80,14 +80,6 @@ where
     pub fn entry_addr(&self) -> &u64 {
         &self.entry_addr
     }
-    /// Returns the CfgNode at the entry address
-    pub fn entry_node(&self) -> Rc<CfgNode<T>> {
-        let entry = self
-            .nodes
-            .get(&self.entry_addr)
-            .expect(&format!("Invalid CFG entry address {}.", self.entry_addr));
-        Rc::clone(entry)
-    }
     /// Returns a map of address to CFG nodes
     pub fn nodes(&self) -> &HashMap<u64, Rc<CfgNode<T>>> {
         &self.nodes

@@ -286,7 +286,7 @@ impl<'s> SpecReader<'s> {
                     if suffix == "ret" {
                         let ret_typ = self.dwarf_ctx
                             .func_sig(func_name)?
-                            .ret_typ_defn
+                            .ret_type
                             .clone()
                             .and_then(|typ| Some(typ.to_ir_type()))
                             .expect("Unable to determine type for return value or function does not return a value.");

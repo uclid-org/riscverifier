@@ -316,22 +316,6 @@ impl AssemblyLine {
             _ => None,
         }
     }
-    /// Returns immediate offset
-    pub fn offset(&self) -> Option<i64> {
-        match &self.op_code[..] {
-            "jalr" | "lb" | "lh" | "lw" | "lbu" | "lhu" | "lwu" | "ld" | "sb" | "sh" | "sw"
-            | "sd" => {
-                assert!(self.ops.len() == 2);
-                match &self.ops[1] {
-                    InstOperand::Register(_, offset) => {
-                        Some(offset.expect("Instruction has no offset!"))
-                    }
-                    _ => panic!("[offset] Operand has no offset!"),
-                }
-            }
-            _ => None,
-        }
-    }
     /// Returns immediate
     pub fn imm(&self) -> Option<&InstOperand> {
         match &self.op_code[..] {

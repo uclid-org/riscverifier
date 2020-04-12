@@ -243,11 +243,12 @@ where
         let requires = self.requires_from_spec_map(func_name, &arg_exprs).ok();
         let ensures = self.ensures_from_spec_map(func_name);
         let body = self.cfg_to_symbolic_blk(&func_entry, &func_cfg);
+        let ret = self.func_ret_type(func_name);
         self.model.add_func_model(FuncModel::new(
             func_name,
             func_entry,
             arg_exprs,
-            None,
+            ret,
             requires,
             ensures,
             Some(mod_set),
@@ -364,7 +365,11 @@ where
                             )
                         })
                         .collect::<Vec<_>>();
-                    let f_call_stmt = Box::new(Stmt::func_call(f_name, vec![], f_args));
+                    let mut lhss = vec![];
+                    if let Some(_) = self.func_ret_type(&f_name) {
+                        lhss.push(Expr::var(system_model::A0, system_model::bv_type(self.xlen)));
+                    }
+                    let f_call_stmt = Box::new(Stmt::func_call(f_name, lhss, f_args));
                     let mut then_stmts = vec![];
                     // Add function call to then statement
                     then_stmts.push(f_call_stmt);
@@ -644,7 +649,7 @@ where
             })
             .collect::<HashSet<Var>>()
     }
-    /// Computes the arguments of a function from the DWARF info
+    /// Returns the arguments of a function from the DWARF context
     fn func_args(&self, func_name: &str) -> Vec<Expr> {
         self.dwarf_ctx
             .func_sig(func_name)
@@ -659,6 +664,17 @@ where
             })
             .map_or(vec![], |v| v)
     }
+    /// Returns the return type of a function from the DWARF context
+    fn func_ret_type(&self, func_name: &str) -> Option<Type> {
+        self.dwarf_ctx
+            .func_sig(func_name)
+            .ok()
+            .and_then(|fs| {
+                // fs.ret_type.as_ref().and_then(|rd| Some(self.dwarf_typ_to_ir(rd.as_ref())))
+                fs.ret_type.as_ref().and_then(|_| Some(Type::Bv{ w: self.xlen }))
+            })
+    }
+
     /// Returns the modifies statments from the specificaiton map for the given function
     fn mod_set_from_spec_map(&mut self, func_name: &str) -> Option<HashSet<String>> {
         let mod_set = self.specs_map.get(func_name).and_then(|spec_vec| {

@@ -11,6 +11,7 @@ pub const PRIV_VAR: &'static str = "current_priv";
 pub const EXCEPT_VAR: &'static str = "exception";
 pub const SP: &'static str = "sp";
 pub const RA: &'static str = "ra";
+pub const A0: &'static str = "a0";
 pub const SYSTEM_VARS: [&'static str; 7] =
     [PC_VAR, RETURNED_FLAG, MEM_VAR, PRIV_VAR, EXCEPT_VAR, SP, RA];
 

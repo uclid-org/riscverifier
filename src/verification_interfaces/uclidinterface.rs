@@ -46,8 +46,8 @@ impl Uclid5Interface {
             for var in &func_sig.args {
                 defns.append(&mut Self::gen_array_defn(&var.typ_defn));
             }
-            if let Some(ret_typ) = &func_sig.ret_typ_defn {
-                defns.append(&mut Self::gen_array_defn(&ret_typ));
+            if let Some(ret_type) = &func_sig.ret_type {
+                defns.append(&mut Self::gen_array_defn(&ret_type));
             }
         }
         defns.sort();
@@ -156,8 +156,8 @@ impl Uclid5Interface {
             for var in &func_sig.args {
                 defns.append(&mut Self::gen_struct_defn(&var.typ_defn));
             }
-            if let Some(ret_typ) = &func_sig.ret_typ_defn {
-                defns.append(&mut Self::gen_struct_defn(&ret_typ));
+            if let Some(ret_type) = &func_sig.ret_type {
+                defns.append(&mut Self::gen_struct_defn(&ret_type));
             }
         }
         defns.sort();
@@ -302,15 +302,6 @@ impl Uclid5Interface {
             Self::var_to_string(var),
             Self::typ_to_string(&var.typ)
         )
-    }
-
-    /// UCLID5 string that zero extends an expression's bit width.
-    fn extend_to_match_width(expr: &str, from: u64, to: u64) -> String {
-        if to > from {
-            format!("bv_zero_extend({}, {})", to - from, expr)
-        } else {
-            expr.to_string()
-        }
     }
 }
 
@@ -523,7 +514,7 @@ impl IRInterface for Uclid5Interface {
             .collect::<Vec<_>>()
             .join(", ");
         let ret = if let Some(rd) = &fm.sig.ret_decl {
-            format!("returns ({})", Self::var_decl(rd.get_expect_var()))
+            format!(" returns (ret: {})", Self::typ_to_string(rd))
         } else {
             format!("")
         };
@@ -681,21 +672,12 @@ impl IRInterface for Uclid5Interface {
                 // Get expression expression type
                 let array = e1_str.unwrap();
                 let index = e2_str.unwrap();
-                let index_var = opapp.operands[1].typ();
-                let index_var_width = index_var.get_expect_bv_width();
                 let out_typ = opapp.operands[0].typ().get_array_out_type();
                 let out_typ_width = out_typ.get_expect_bv_width();
-                let in_typ = &opapp.operands[0].typ().get_array_in_type()[0];
-                let in_typ_width = in_typ.get_expect_bv_width();
                 format!(
                     "{}({}, {})",
                     Self::array_index_macro_name(&(out_typ_width / utils::BYTE_SIZE)),
                     array,
-                    // Self::extend_to_match_width(
-                    //     &index,
-                    //     index_var_width, // from
-                    //     in_typ_width,    // to
-                    // )
                     index
                 )
             }

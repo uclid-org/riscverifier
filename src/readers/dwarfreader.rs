@@ -35,14 +35,14 @@ pub struct DwarfFuncSig {
     /// Arguments to the function
     pub args: Vec<DwarfVar>,
     /// Return type of the function if it has one
-    pub ret_typ_defn: Option<Rc<DwarfTypeDefn>>,
+    pub ret_type: Option<Rc<DwarfTypeDefn>>,
 }
 impl DwarfFuncSig {
-    pub fn new(name: String, args: Vec<DwarfVar>, ret_typ_defn: Option<Rc<DwarfTypeDefn>>) -> Self {
+    pub fn new(name: String, args: Vec<DwarfVar>, ret_type: Option<Rc<DwarfTypeDefn>>) -> Self {
         DwarfFuncSig {
             name,
             args,
-            ret_typ_defn,
+            ret_type,
         }
     }
 }
@@ -526,9 +526,9 @@ where
                     Rc::clone(&arg.typ_defn),
                 );
             }
-            if let Some(ret_typ) = &fs.ret_typ_defn {
+            if let Some(ret_type) = &fs.ret_type {
                 // FIXME: remove magic string $ret
-                typ_map.insert(format!("{}$$ret", fun_name), Rc::clone(ret_typ));
+                typ_map.insert(format!("{}$$ret", fun_name), Rc::clone(ret_type));
             }
         }
         typ_map

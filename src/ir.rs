@@ -45,15 +45,6 @@ impl Type {
             _ => panic!("Not an array type: {:#?}.", self),
         }
     }
-    pub fn get_array_in_type(&self) -> &Vec<Box<Type>> {
-        match self {
-            Type::Array {
-                in_typs,
-                out_typ: _,
-            } => in_typs,
-            _ => panic!("Not an array type: {:#?}.", self),
-        }
-    }
     pub fn get_struct_id(&self) -> String {
         match self {
             Type::Struct {
@@ -337,7 +328,7 @@ impl FuncModel {
         name: &str,
         entry_addr: u64,
         arg_decls: Vec<Expr>,
-        ret_decl: Option<Expr>,
+        ret_decl: Option<Type>,
         requires: Option<Vec<Spec>>,
         ensures: Option<Vec<Spec>>,
         mod_set: Option<HashSet<String>>,
@@ -366,7 +357,7 @@ pub struct FuncSig {
     pub name: String,
     pub entry_addr: u64,
     pub arg_decls: Vec<Expr>,
-    pub ret_decl: Option<Expr>,
+    pub ret_decl: Option<Type>,
     pub requires: Vec<Spec>,
     pub ensures: Vec<Spec>,
     pub mod_set: HashSet<String>,
@@ -376,7 +367,7 @@ impl FuncSig {
         name: &str,
         entry_addr: u64,
         arg_decls: Vec<Expr>,
-        ret_decl: Option<Expr>,
+        ret_decl: Option<Type>,
         requires: Vec<Spec>,
         ensures: Vec<Spec>,
         mod_set: HashSet<String>,
@@ -385,12 +376,6 @@ impl FuncSig {
             arg_decls.iter().all(|v| v.is_var()),
             format!("An argument of {} is not a variable.", name)
         );
-        if let Some(rd) = &ret_decl {
-            assert!(
-                rd.is_var(),
-                format!("The return value of {} is {:?}; not a variable.", name, rd)
-            );
-        }
         FuncSig {
             name: String::from(name),
             entry_addr,
