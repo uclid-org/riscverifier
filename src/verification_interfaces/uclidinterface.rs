@@ -257,14 +257,21 @@ impl Uclid5Interface {
     /// Returns the control block for the UCLID5 model.
     /// This currently will automatically verify all functions with
     /// a specification.
-    fn control_blk(model: &Model, dwarf_ctx: &DwarfCtx, ignored_funcs: &HashSet<&str>, verify_funcs: &Vec<&str>) -> String {
+    fn control_blk(
+        model: &Model,
+        dwarf_ctx: &DwarfCtx,
+        ignored_funcs: &HashSet<&str>,
+        verify_funcs: &Vec<&str>,
+    ) -> String {
         let verif_fns_string = if verify_funcs.len() > 0 {
-            verify_funcs.iter().map(|f_name| {
-                format!("f{} = verify({});", f_name, f_name)
-            }).collect::<Vec<_>>()
-            .join("\n")
+            verify_funcs
+                .iter()
+                .map(|f_name| format!("f{} = verify({});", f_name, f_name))
+                .collect::<Vec<_>>()
+                .join("\n")
         } else {
-            model.func_models
+            model
+                .func_models
                 .iter()
                 .filter(|fm| dwarf_ctx.func_sig(&fm.sig.name).is_ok())
                 .map(|fm| {
@@ -567,12 +574,76 @@ impl IRInterface for Uclid5Interface {
         };
         let body = Self::block_to_string(fm.body.get_expect_block());
         let inline = if fm.inline { "[inline] " } else { "" };
+        // Track variable procedure
+        let vt_proc = if fm.sig.tracked.len() > 0 {
+            Self::track_proc(fm, dwarf_ctx)
+        } else {
+            String::from("")
+        };
         format!(
-            "procedure {}{}({}){}{}{}{}\n{}",
-            inline, fm.sig.name, args, ret, modifies, requires, ensures, body
+            "procedure {}{}({}){}{}{}{}\n{}\n\n{}",
+            inline, fm.sig.name, args, ret, modifies, requires, ensures, body, vt_proc
         )
     }
-
+    /// A "track procedure" for tracking specified expressions.
+    /// The procedure contains a list of assignments to variables to track.
+    ///
+    /// # EXAMPLE
+    /// Given a spec with:
+    ///     - begin_spec(fname)
+    ///     - track [vname] expression
+    ///     - ...
+    ///     - end_spec
+    /// This function will generate the following in the verificaiton model:
+    ///     - variables named vname with xlen width
+    ///     - a procedure named "fname_track" with assignments from variable names to expressions:
+    ///         - e.g. procedure fname_track() modifies vname { vname = expression; ... }
+    fn track_proc(fm: &FuncModel, dwarf_ctx: &DwarfCtx) -> String {
+        if fm.sig.tracked.len() == 0 {
+            panic!("No variables are tracked for the function {}.", fm.sig.name);
+        }
+        let var_decls = fm
+            .sig
+            .tracked
+            .iter()
+            .map(|spec| match spec {
+                Spec::Track(vname, _) => format!("var {}: xlen_t;", vname),
+                _ => panic!("Excepted Spec::Track."),
+            })
+            .collect::<Vec<String>>()
+            .join("\n");
+        let mod_var_list = fm
+            .sig
+            .tracked
+            .iter()
+            .map(|spec| match spec {
+                Spec::Track(vname, _) => vname.to_string(),
+                _ => panic!("Excepted Spec::Track."),
+            })
+            .collect::<Vec<String>>()
+            .join(", ");
+        let body = fm
+            .sig
+            .tracked
+            .iter()
+            .map(|spec| match spec {
+                Spec::Track(vname, expr) => format!(
+                    "{} = {};",
+                    vname,
+                    Self::spec_expr_to_string(&fm.sig.name, &expr, dwarf_ctx, false)
+                ),
+                _ => panic!("Excepted Spec::Track."),
+            })
+            .collect::<Vec<String>>()
+            .join("\n");
+        format!(
+            "{}\nprocedure [inline] {}_track_vars()\n{}\n{{\n{}\n}}\n\n",
+            var_decls,
+            fm.sig.name,
+            format!("modifies {};", mod_var_list),
+            utils::indent_text(body, 4),
+        )
+    }
     // Generate function model
     // NOTE: Replace string with write to file
     fn model_to_string(

@@ -116,6 +116,14 @@ impl<'s> SpecReader<'s> {
                 }
             }
             Rule::mod_stmt => Ok(ir::Spec::Modifies(self.translate_mod_set(pair)?)),
+            Rule::track_stmt => {
+                let mut spec_stmt_inner = pair.into_inner();
+                let tv_name = spec_stmt_inner.next().unwrap().as_str();
+                Ok(ir::Spec::Track(
+                    tv_name.to_string(),
+                    self.translate_expr(func_name, spec_stmt_inner.next().unwrap())?,
+                ))
+            }
             _ => Err(utils::Error::SpecParseError(
                 "Unable to translate spec statement.".to_string(),
             )),
@@ -257,11 +265,11 @@ impl<'s> SpecReader<'s> {
                     "bv_sign_extend" => {
                         expr_args.reverse();
                         Ok(ir::Expr::op_app(ir::Op::Bv(ir::BVOp::SignExt), expr_args))
-                    },
+                    }
                     "bv_zero_extend" => {
                         expr_args.reverse();
                         Ok(ir::Expr::op_app(ir::Op::Bv(ir::BVOp::ZeroExt), expr_args))
-                    },
+                    }
                     _ => panic!("Unimplemented function application in specreader."),
                 }
             }
