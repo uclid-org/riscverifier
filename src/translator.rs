@@ -34,6 +34,10 @@ where
     dwarf_ctx: &'t DwarfCtx,
     /// Map of specs from function name to a list of pre/post conditions
     specs_map: &'t HashMap<String, Vec<Spec>>,
+    /// Flag indicating if the translator will ignore specs
+    /// When true, all function pre and post conditions are ignored
+    /// and functions are all inlined
+    ignore_specs: bool,
     /// ========== Context ================
     /// Map of function names / labels to entry addresses
     labels_to_addr: HashMap<String, u64>,
@@ -60,6 +64,7 @@ where
         verify_funcs: &'t Vec<&'t str>,
         dwarf_ctx: &'t DwarfCtx,
         specs_map: &'t HashMap<String, Vec<Spec>>,
+        ignore_specs: bool,
     ) -> Self {
         Translator {
             xlen: xlen,
@@ -69,6 +74,7 @@ where
             verify_funcs: verify_funcs,
             dwarf_ctx: dwarf_ctx,
             specs_map: specs_map,
+            ignore_specs: ignore_specs,
             labels_to_addr: Translator::<I>::create_label_to_addr_map(bbs),
             cfg_memo: HashMap::new(),
             generated: HashSet::new(),
@@ -115,8 +121,16 @@ where
     pub fn gen_func_model_stub(&mut self, func_name: &str) {
         let arg_exprs = self.func_args(func_name);
         let mod_set = self.mod_set_from_spec_map(func_name);
-        let requires = self.requires_from_spec_map(func_name, &arg_exprs).ok();
-        let ensures = self.ensures_from_spec_map(func_name);
+        let requires = if !self.ignore_specs {
+            self.requires_from_spec_map(func_name, &arg_exprs).ok()
+        } else {
+            None
+        };
+        let ensures = if !self.ignore_specs {
+            self.ensures_from_spec_map(func_name)
+        } else {
+            None
+        };
         let tracked = self.tracked_from_spec_map(func_name);
         let ret = None;
         let entry_addr = *self
@@ -244,8 +258,16 @@ where
             })
             .collect();
         // Translate specs
-        let requires = self.requires_from_spec_map(func_name, &arg_exprs).ok();
-        let ensures = self.ensures_from_spec_map(func_name);
+        let requires = if !self.ignore_specs {
+            self.requires_from_spec_map(func_name, &arg_exprs).ok()
+        } else {
+            None
+        };
+        let ensures = if !self.ignore_specs {
+            self.ensures_from_spec_map(func_name)
+        } else {
+            None
+        };
         let tracked = self.tracked_from_spec_map(func_name);
         // Create the procedure body
         let body = self.cfg_to_symbolic_blk(&func_entry, &func_cfg);
@@ -261,7 +283,7 @@ where
             tracked,
             Some(mod_set),
             body,
-            true,
+            self.ignore_specs,
         ));
     }
     /// ========================== HELPER FUNCTIONS =========================

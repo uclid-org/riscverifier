@@ -101,6 +101,12 @@ fn main() {
                 .long("verify-funcs")
                 .takes_value(true),
         )
+        .arg(
+            Arg::with_name("ignore-specs")
+                .help("List of functions to verify.")
+                .long("ignore-specs")
+                .takes_value(false),
+        )
         .get_matches();
     let xlen = utils::dec_str_to_u64(matches.value_of("xlen").unwrap_or("64"))
         .expect("[main] Unable to parse numberic xlen.");
@@ -143,6 +149,9 @@ fn main() {
     let verify_funcs = matches
         .value_of("verify-funcs")
         .map_or(vec![], |lst| lst.split(",").collect::<Vec<&str>>());
+    // Flag for ignoring and inlining functions
+    let ignore_specs = matches
+        .is_present("ignore-specs");
     // Translate and write to output file
     let mut translator: Translator<Uclid5Interface> = Translator::new(
         xlen,
@@ -152,6 +161,7 @@ fn main() {
         &verify_funcs,
         dwarf_reader.ctx(),
         &specs_map,
+        ignore_specs,
     );
     for func_name in func_names {
         translator.gen_func_model(&func_name);
