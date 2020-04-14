@@ -27,6 +27,7 @@ use translator::Translator;
 
 mod verification_interfaces;
 use verification_interfaces::uclidinterface::Uclid5Interface;
+use verification_interfaces::boogieinterface::BoogieInterface;
 
 mod datastructures;
 use datastructures::cfg::BasicBlock;
@@ -107,6 +108,12 @@ fn main() {
                 .long("ignore-specs")
                 .takes_value(false),
         )
+        .arg(
+            Arg::with_name("verification-ir")
+                .help("List of functions to verify.")
+                .long("verification-ir")
+                .takes_value(true),
+        )
         .get_matches();
     let xlen = utils::dec_str_to_u64(matches.value_of("xlen").unwrap_or("64"))
         .expect("[main] Unable to parse numberic xlen.");
@@ -152,20 +159,46 @@ fn main() {
     // Flag for ignoring and inlining functions
     let ignore_specs = matches
         .is_present("ignore-specs");
+    // Verification IR to translate to
+    let vir = matches
+        .value_of("verification-ir")
+        .map_or("uclid5", |v| v);
     // Translate and write to output file
-    let mut translator: Translator<Uclid5Interface> = Translator::new(
-        xlen,
-        &module_name,
-        &bbs,
-        &ignored_funcs,
-        &verify_funcs,
-        dwarf_reader.ctx(),
-        &specs_map,
-        ignore_specs,
-    );
-    for func_name in func_names {
-        translator.gen_func_model(&func_name);
-    }
-    translator.print_model();
-    translator.clear();
+    match vir {
+        "uclid5" => {
+            let mut translator = Translator::<Uclid5Interface>::new(
+                xlen,
+                &module_name,
+                &bbs,
+                &ignored_funcs,
+                &verify_funcs,
+                dwarf_reader.ctx(),
+                &specs_map,
+                ignore_specs,
+            );
+            for func_name in func_names {
+                translator.gen_func_model(&func_name);
+            }
+            translator.print_model();
+            translator.clear();
+        },
+        "boogie" => {
+            let mut translator = Translator::<BoogieInterface>::new(
+                xlen,
+                &module_name,
+                &bbs,
+                &ignored_funcs,
+                &verify_funcs,
+                dwarf_reader.ctx(),
+                &specs_map,
+                ignore_specs,
+            );
+            for func_name in func_names {
+                translator.gen_func_model(&func_name);
+            }
+            translator.print_model();
+            translator.clear();
+        },
+        _ => panic!("Verification IR {} not supported.", vir),
+    };
 }

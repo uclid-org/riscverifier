@@ -62,5 +62,6 @@ pub fn global_func_addr_name(func_name: &str) -> String {
 
 /// Constants
 pub const PRELUDE_PATH: &str = "models/prelude.ucl";
+pub const BOOGIE_PRELUDE_PATH: &str = "models/boogieprelude.bpl";
 pub const INST_LENGTH: u64 = 4;
 pub const BYTE_SIZE: u64 = 8;
