@@ -151,7 +151,7 @@ procedure {:inline 1} rem_proc(rs1: bv64, rs2: bv64) returns (ret: bv64)
 procedure {:inline 1} sll_proc(rs1: bv64, rs2: bv64) returns (ret: bv64)
   modifies pc;
   {
-    ret := bv64shl(bv64and(rs2, 63bv64), rs1); // line 0
+    ret := bv64shl(rs1, bv64and(rs2, 63bv64)); // line 0
     pc := bv64add(pc, 4bv64); // line 0
   }
 procedure {:inline 1} slt_proc(rs1: bv64, rs2: bv64) returns (ret: bv64)
@@ -189,13 +189,13 @@ procedure {:inline 1} xor_proc(rs1: bv64, rs2: bv64) returns (ret: bv64)
 procedure {:inline 1} srl_proc(rs1: bv64, rs2: bv64) returns (ret: bv64)
   modifies pc;
   {
-    ret := bv64lshr(bv64and(rs2, 63bv64), rs1); // line 0
+    ret := bv64lshr(rs1, bv64and(rs2, 63bv64)); // line 0
     pc := bv64add(pc, 4bv64); // line 0
   }
 procedure {:inline 1} sra_proc(rs1: bv64, rs2: bv64) returns (ret: bv64)
   modifies pc;
   {
-    ret := bv64ashr(bv64and(rs2, 63bv64), rs1); // line 0
+    ret := bv64ashr(rs1, bv64and(rs2, 63bv64)); // line 0
     pc := bv64add(pc, 4bv64); // line 0
   }
 procedure {:inline 1} or_proc(rs1: bv64, rs2: bv64) returns (ret: bv64)
@@ -225,19 +225,19 @@ procedure {:inline 1} subw_proc(rs1: bv64, rs2: bv64) returns (ret: bv64)
 procedure {:inline 1} sllw_proc(rs1: bv64, rs2: bv64) returns (ret: bv64)
   modifies pc;
   {
-    ret := bv32_sign_extend32(bv32shl(bv5_zero_extend27((rs2)[5:0]), (rs1)[32:0])); // line 0
+    ret := bv32_sign_extend32(bv32shl(rs1[32:0], bv5_zero_extend27((rs2)[5:0]))); // line 0
     pc := bv64add(pc, 4bv64); // line 0
   }
 procedure {:inline 1} srlw_proc(rs1: bv64, rs2: bv64) returns (ret: bv64)
   modifies pc;
   {
-    ret := bv32_sign_extend32(bv32lshr(bv5_zero_extend27((rs2)[5:0]), (rs1)[32:0])); // line 0
+    ret := bv32_sign_extend32(bv32lshr(rs1[32:0], bv5_zero_extend27((rs2)[5:0]))); // line 0
     pc := bv64add(pc, 4bv64); // line 0
   }
 procedure {:inline 1} sraw_proc(rs1: bv64, rs2: bv64) returns (ret: bv64)
   modifies pc;
   {
-    ret := bv32_sign_extend32(bv32ashr(bv5_zero_extend27((rs2)[5:0]), (rs1)[32:0])); // line 0
+    ret := bv32_sign_extend32(bv32ashr(rs1[32:0], bv5_zero_extend27((rs2)[5:0]))); // line 0
     pc := bv64add(pc, 4bv64); // line 0
   }
 procedure {:inline 1} jalr_proc(rs1: bv64, imm: bv64) returns (ret: bv64)
@@ -342,7 +342,7 @@ procedure {:inline 1} slli_proc(rs1: bv64, imm: bv64) returns (ret: bv64)
       }
     else
       {
-        ret := bv64shl(imm, rs1); // line 0
+        ret := bv64shl(rs1, imm); // line 0
       }
     pc := bv64add(pc, 4bv64); // line 0
   }
@@ -355,7 +355,7 @@ procedure {:inline 1} srli_proc(rs1: bv64, imm: bv64) returns (ret: bv64)
       }
     else
       {
-        ret := bv64lshr(imm, rs1); // line 0
+        ret := bv64lshr(rs1, imm); // line 0
       }
     pc := bv64add(pc, 4bv64); // line 0
   }
@@ -368,7 +368,7 @@ procedure {:inline 1} srai_proc(rs1: bv64, imm: bv64) returns (ret: bv64)
       }
     else
       {
-        ret := bv64ashr(imm, rs1); // line 0
+        ret := bv64ashr(rs1, imm); // line 0
       }
     pc := bv64add(pc, 4bv64); // line 0
   }
@@ -414,19 +414,19 @@ procedure {:inline 1} addiw_proc(rs1: bv64, imm: bv64) returns (ret: bv64)
 procedure {:inline 1} slliw_proc(rs1: bv64, imm: bv64) returns (ret: bv64)
   modifies pc;
   {
-    ret := bv32_sign_extend32(bv32shl((imm)[32:0], (rs1)[32:0])); // line 0
+    ret := bv32_sign_extend32(bv32shl(rs1[32:0], imm[32:0])); // line 0
     pc := bv64add(pc, 4bv64); // line 0
   }
 procedure {:inline 1} srliw_proc(rs1: bv64, imm: bv64) returns (ret: bv64)
   modifies pc;
   {
-    ret := bv32_sign_extend32(bv32lshr((imm)[32:0], (rs1)[32:0])); // line 0
+    ret := bv32_sign_extend32(bv32lshr(rs1[32:0], imm[32:0])); // line 0
     pc := bv64add(pc, 4bv64); // line 0
   }
 procedure {:inline 1} sraiw_proc(rs1: bv64, imm: bv64) returns (ret: bv64)
   modifies pc;
   {
-    ret := bv32_sign_extend32(bv32ashr((imm)[32:0], (rs1)[32:0])); // line 0
+    ret := bv32_sign_extend32(bv32ashr(rs1[32:0], imm[32:0])); // line 0
     pc := bv64add(pc, 4bv64); // line 0
   }
 procedure {:inline 1} sb_proc(rs1: bv64, imm: bv64, rs2: bv64) returns ()
@@ -539,13 +539,13 @@ procedure {:inline 1} bgeu_proc(rs1: bv64, rs2: bv64, imm: bv64) returns ()
 procedure {:inline 1} lui_proc(imm: bv64) returns (ret: bv64)
   modifies pc;
   {
-    ret :=  bv32_sign_extend32(bv32shl(12bv32, 0bv12 ++ imm[20:0])); // line 0
+    ret :=  bv32_sign_extend32(bv32shl(0bv12 ++ imm[20:0], 12bv32)); // line 0
     pc := bv64add(pc, 4bv64); // line 0
   }
 procedure {:inline 1} auipc_proc(imm: bv64) returns (ret: bv64)
   modifies pc;
   {
-    ret := bv64add(pc, bv64shl(12bv64, imm)); // line 0
+    ret := bv64add(pc, bv64shl(imm, 12bv64)); // line 0
     pc := bv64add(pc, 4bv64); // line 0
   }
 procedure {:inline 1} jal_proc(imm: bv64) returns (ret: bv64)

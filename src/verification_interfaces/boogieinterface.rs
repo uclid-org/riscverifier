@@ -128,8 +128,8 @@ impl BoogieInterface {
                         format!(
                             "{}bv64shl({}, {}){}{}{}",
                             if acc.0.len() == 0 { "" } else { "bv64add(" },
-                            format!("to_xlen_t({}bv64)", acc.1),
                             expr,
+                            format!("to_xlen_t({}bv64)", acc.1),
                             if acc.0.len() == 0 { "" } else { ", " },
                             acc.0,
                             if acc.0.len() == 0 { "" } else { ")" },
@@ -278,7 +278,7 @@ impl IRInterface for BoogieInterface {
     /// IR translation functions
     fn lit_to_string(lit: &Literal) -> String {
         match lit {
-            Literal::Bv { val, width } => format!("{}bv{}", val, width),
+            Literal::Bv { val, width } => format!("{}bv{}", *val, width),
             Literal::Bool { val } => format!("{}", val),
         }
     }
@@ -305,11 +305,11 @@ impl IRInterface for BoogieInterface {
     }
     fn forall_to_string(v: &Var, expr: String) -> String {
         let typ_str = Self::typ_to_string(&v.typ);
-        format!("(forall ({}: {}) :: ({}))", &v.name[1..], typ_str, expr)
+        format!("(forall {}: {} :: ({}))", &v.name[1..], typ_str, expr)
     }
     fn exists_to_string(v: &Var, expr: String) -> String {
         let typ_str = Self::typ_to_string(&v.typ);
-        format!("(exists ({}: {}) :: ({}))", &v.name[1..], typ_str, expr)
+        format!("(exists {}: {} :: ({}))", &v.name[1..], typ_str, expr)
     }
     fn deref_app_to_string(bytes: u64, ptr: String, old: bool) -> String {
         format!(
@@ -323,14 +323,14 @@ impl IRInterface for BoogieInterface {
         match compop {
             CompOp::Equality => format!("({} == {})", e1.unwrap(), e2.unwrap()),
             CompOp::Inequality => format!("({} != {})", e1.unwrap(), e2.unwrap()),
-            CompOp::Lt => format!("({} < {})", e1.unwrap(), e2.unwrap()),
-            CompOp::Le => format!("({} <= {})", e1.unwrap(), e2.unwrap()),
-            CompOp::Gt => format!("({} > {})", e1.unwrap(), e2.unwrap()),
-            CompOp::Ge => format!("({} >= {})", e1.unwrap(), e2.unwrap()),
-            CompOp::Ltu => format!("({} <_u {})", e1.unwrap(), e2.unwrap()),
-            CompOp::Leu => format!("({} <=_u {})", e1.unwrap(), e2.unwrap()),
-            CompOp::Gtu => format!("({} >_u {})", e1.unwrap(), e2.unwrap()),
-            CompOp::Geu => format!("({} >=_u {})", e1.unwrap(), e2.unwrap()),
+            CompOp::Lt => format!("bv64slt({}, {})", e1.unwrap(), e2.unwrap()),
+            CompOp::Le => format!("bv64sle({}, {})", e1.unwrap(), e2.unwrap()),
+            CompOp::Gt => format!("bv64sgt({}, {})", e1.unwrap(), e2.unwrap()),
+            CompOp::Ge => format!("bv64sge({}, {})", e1.unwrap(), e2.unwrap()),
+            CompOp::Ltu => format!("bv64ult({}, {})", e1.unwrap(), e2.unwrap()),
+            CompOp::Leu => format!("bv64ule({}, {})", e1.unwrap(), e2.unwrap()),
+            CompOp::Gtu => format!("bv64ugt({}, {})", e1.unwrap(), e2.unwrap()),
+            CompOp::Geu => format!("bv64uge({}, {})", e1.unwrap(), e2.unwrap()),
         }
     }
     fn bv_app_to_string(bvop: &BVOp, e1: Option<String>, e2: Option<String>) -> String {
@@ -344,17 +344,17 @@ impl IRInterface for BoogieInterface {
             BVOp::Not => format!("bv64not({})", e1.unwrap()),
             BVOp::UnaryMinus => format!("-{}", e1.unwrap()),
             BVOp::SignExt => match e2.unwrap().split("bv").next().unwrap() {
-                width if width != "0" => format!("bv_sign_extend({}, {})", width, e1.unwrap()),
+                width if width != "0" => format!("bv32_sign_extend{}({})", width, e1.unwrap()),
                 _ => format!("{}", e1.unwrap()),
             },
             BVOp::ZeroExt => match e2.unwrap().split("bv").next().unwrap() {
-                width if width != "0" => format!("bv_zero_extend({}, {})", width, e1.unwrap()),
+                width if width != "0" => format!("bv32_zero_extend{}({})", width, e1.unwrap()),
                 _ => format!("{}", e1.unwrap()),
             },
-            BVOp::LeftShift => format!("bv_left_shift({}, {})", e2.unwrap(), e1.unwrap()),
-            BVOp::RightShift => format!("bv_l_right_shift({}, {})", e2.unwrap(), e1.unwrap()),
+            BVOp::LeftShift => format!("bv64shl({}, {})", e1.unwrap(), e2.unwrap()),
+            BVOp::RightShift => format!("bv64lshr({}, {})", e1.unwrap(), e2.unwrap()),
             BVOp::Concat => format!("({} ++ {})", e1.unwrap(), e2.unwrap()),
-            BVOp::Slice { l, r } => format!("{}[{}:{}]", e1.unwrap(), l, r),
+            BVOp::Slice { l, r } => format!("{}[{}:{}]", e1.unwrap(), l+1, r),
             _ => panic!("[bvop_to_string] Unimplemented."),
         }
     }
@@ -535,7 +535,8 @@ impl IRInterface for BoogieInterface {
             format!("")
         };
         let body = Self::block_to_string(fm.body.get_expect_block());
-        let inline = if fm.inline { "{:inline 1} " } else { "" };
+        // let inline = if fm.inline { "{:inline 1} " } else { "" };
+        let inline = "{:inline 1} ";
         // Track variable procedure
         let vt_proc = if fm.sig.tracked.len() > 0 {
             Self::track_proc(fm, dwarf_ctx)
