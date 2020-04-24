@@ -402,8 +402,8 @@ where
                     then_stmts.push(f_call_stmt);
                     // Reset the returned variable for the caller
                     then_stmts.push(Box::new(Stmt::assign(
-                        vec![Expr::var(system_model::RETURNED_FLAG, Type::Bool)],
-                        vec![Expr::bool_lit(false)],
+                        vec![Expr::var(system_model::RETURNED_FLAG, system_model::bv_type(1))],
+                        vec![Expr::bv_lit(0, 1)],
                     )));
                     let then_blk_stmt = Stmt::Block(then_stmts);
                     let guarded_call = Box::new(self.guarded_call(&target_addr, then_blk_stmt));
@@ -429,8 +429,8 @@ where
         let if_returned_guard = Expr::op_app(
             Op::Comp(CompOp::Equality),
             vec![
-                Expr::Var(system_model::returned_var(), Type::Bool),
-                Expr::bool_lit(false),
+                Expr::var(system_model::RETURNED_FLAG, system_model::bv_type(1)),
+                Expr::bv_lit(0, 1),
             ],
         );
         let if_exception_guard = Expr::op_app(
@@ -780,8 +780,8 @@ where
         requires.push(Spec::Requires(Expr::op_app(
             Op::Comp(CompOp::Equality),
             vec![
-                Expr::Var(system_model::returned_var(), Type::Bool),
-                Expr::bool_lit(false),
+                Expr::var(system_model::RETURNED_FLAG, system_model::bv_type(1)),
+                Expr::bv_lit(0, 1),
             ],
         )));
         // Add argument constraints
@@ -881,8 +881,8 @@ where
                 Expr::op_app(
                     Op::Comp(CompOp::Equality),
                     vec![
-                        Expr::var(system_model::RETURNED_FLAG, Type::Bool),
-                        Expr::bool_lit(true),
+                        Expr::var(system_model::RETURNED_FLAG, system_model::bv_type(1)),
+                        Expr::bv_lit(1, 1),
                     ],
                 ),
             ],

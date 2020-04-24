@@ -28,7 +28,7 @@ pub fn pc_var(xlen: u64) -> Var {
 pub fn returned_var() -> Var {
     Var {
         name: RETURNED_FLAG.to_string(),
-        typ: Type::Bool,
+        typ: bv_type(1),
     }
 }
 /// Memory state variable
