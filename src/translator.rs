@@ -346,8 +346,8 @@ where
         cfg_rc: &Rc<cfg::Cfg<disassembler::AssemblyLine>>,
     ) -> Stmt {
         let mut stmts_vec = vec![];
-        let sorted = self.topo_sort(cfg_rc);
-        for bb_entry in sorted {
+        let sorted_entries = self.topo_sort(cfg_rc);
+        for bb_entry in sorted_entries {
             let cfg_node = cfg_rc.nodes().get(&bb_entry).expect(&format!(
                 "Unable to find CFG node with entry address {}.",
                 bb_entry

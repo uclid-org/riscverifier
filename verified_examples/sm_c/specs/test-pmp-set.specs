@@ -62,7 +62,7 @@ ensures ((($exception == 0bv64) && ((regions[i].addr == 0bv64) && (regions[i].si
 ensures ((($exception == 0bv64) && (((regions[i].addr != 0bv64) || (regions[i].size != -1)) && (regions[i].addrmode == 24bv8))) ==> ($ret == (((regions[i].addr | ((regions[i].size >> 1bv64) - 1bv64)) >> 2bv64))));
 ensures ((($exception == 0bv64) && (((regions[i].addr != 0bv64) || (regions[i].size != -1)) && (regions[i].addrmode == 8bv8))) ==> ($ret == ((regions[i].addr + regions[i].size) >> 2)));
 ensures ((($exception == 0bv64) && (((regions[i].addr != 0bv64) || (regions[i].size != -1)) && ((regions[i].addrmode != 8bv8) && (regions[i].addrmode != 24bv8)))) ==> ($ret == 0));
-ensures ((((($exception == 0bv64) && ($returned == true))) ==> forall ($ti : bv64) :: ((($ti >_u $sp) ==> ($mem[$ti] == old($mem[$ti]))))));
+ensures ((((($exception == 0bv64) )) ==> forall ($ti : bv64) :: ((($ti >_u $sp) ==> ($mem[$ti] == old($mem[$ti]))))));
 end_spec
 
 begin_spec(pmp_set)
