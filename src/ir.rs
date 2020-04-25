@@ -487,23 +487,23 @@ impl Model {
 /// verification engine
 pub trait IRInterface: fmt::Debug {
     /// Expressions to string functions
-    fn expr_to_string(expr: &Expr) -> String {
+    fn expr_to_string(expr: &Expr, xlen: &u64) -> String {
         match expr {
             Expr::Literal(l, _) => Self::lit_to_string(l),
-            Expr::FuncApp(fapp, _) => Self::fapp_to_string(fapp),
-            Expr::OpApp(opapp, _) => Self::opapp_to_string(opapp),
+            Expr::FuncApp(fapp, _) => Self::fapp_to_string(fapp, xlen),
+            Expr::OpApp(opapp, _) => Self::opapp_to_string(opapp, xlen),
             Expr::Var(v, _) | Expr::Const(v, _) => Self::var_to_string(v),
         }
     }
-    fn opapp_to_string(opapp: &OpApp) -> String {
+    fn opapp_to_string(opapp: &OpApp, xlen: &u64) -> String {
         let e1_str = opapp
             .operands
             .get(0)
-            .map_or(None, |e| Some(Self::expr_to_string(e)));
+            .map_or(None, |e| Some(Self::expr_to_string(e, xlen)));
         let e2_str = opapp
             .operands
             .get(1)
-            .map_or(None, |e| Some(Self::expr_to_string(e)));
+            .map_or(None, |e| Some(Self::expr_to_string(e, xlen)));
         match &opapp.op {
             Op::Forall(v) => Self::forall_to_string(v, e1_str.unwrap()),
             Op::Exists(v) => Self::exists_to_string(v, e1_str.unwrap()),
@@ -516,7 +516,7 @@ pub trait IRInterface: fmt::Debug {
             Op::GetField(field) => Self::get_field_to_string(e1_str.unwrap(), field.clone()),
         }
     }
-    fn fapp_to_string(fapp: &FuncApp) -> String;
+    fn fapp_to_string(fapp: &FuncApp, xlen: &u64) -> String;
     fn var_to_string(v: &Var) -> String {
         format!("{}", v.name)
     }
@@ -531,16 +531,16 @@ pub trait IRInterface: fmt::Debug {
     fn array_index_to_string(e1: String, e2: String) -> String;
     fn get_field_to_string(e1: String, field: String) -> String;
     /// Statements to string
-    fn stmt_to_string(stmt: &Stmt) -> String;
+    fn stmt_to_string(stmt: &Stmt, xlen: &u64) -> String;
     fn skip_to_string() -> String;
-    fn assert_to_string(expr: &Expr) -> String;
-    fn assume_to_string(expr: &Expr) -> String;
+    fn assert_to_string(expr: &Expr, xlen: &u64) -> String;
+    fn assume_to_string(expr: &Expr, xlen: &u64) -> String;
     fn havoc_to_string(var: &Rc<Var>) -> String;
-    fn func_call_to_string(func_call: &FuncCall) -> String;
-    fn assign_to_string(assign: &Assign) -> String;
-    fn ite_to_string(ite: &IfThenElse) -> String;
-    fn block_to_string(blk: &Vec<Box<Stmt>>) -> String;
-    fn func_model_to_string(fm: &FuncModel, dwarf_ctx: &DwarfCtx) -> String;
+    fn func_call_to_string(func_call: &FuncCall, xlen: &u64) -> String;
+    fn assign_to_string(assign: &Assign, xlen: &u64) -> String;
+    fn ite_to_string(ite: &IfThenElse, xlen: &u64) -> String;
+    fn block_to_string(blk: &Vec<Box<Stmt>>, xlen: &u64) -> String;
+    fn func_model_to_string(fm: &FuncModel, dwarf_ctx: &DwarfCtx, xlen: &u64) -> String;
     fn track_proc(fm: &FuncModel, dwarf_ctx: &DwarfCtx) -> String;
     // IR to model string
     fn model_to_string(

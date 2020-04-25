@@ -37,17 +37,17 @@ impl Uclid5Interface {
     ///
     /// * `dwarf_ctx` - The DWARF information that contains all the global variables and function
     ///                 signatures for the binaries provided
-    fn gen_array_defns(dwarf_ctx: &DwarfCtx) -> String {
+    fn gen_array_defns(dwarf_ctx: &DwarfCtx, xlen: &u64) -> String {
         let mut defns: Vec<String> = vec![];
         for var in dwarf_ctx.global_vars() {
-            defns.append(&mut Self::gen_array_defn(&var.typ_defn));
+            defns.append(&mut Self::gen_array_defn(&var.typ_defn, xlen));
         }
         for (_, func_sig) in dwarf_ctx.func_sigs() {
             for var in &func_sig.args {
-                defns.append(&mut Self::gen_array_defn(&var.typ_defn));
+                defns.append(&mut Self::gen_array_defn(&var.typ_defn, xlen));
             }
             if let Some(ret_type) = &func_sig.ret_type {
-                defns.append(&mut Self::gen_array_defn(&ret_type));
+                defns.append(&mut Self::gen_array_defn(&ret_type, xlen));
             }
         }
         defns.sort();
@@ -66,16 +66,19 @@ impl Uclid5Interface {
     /// # Example
     ///
     /// define index_by_16(base: xlen_t, index: xlen_t): xlen_t = base + bv_left_shift(to_xlen_t(4bv64), index);
-    fn gen_array_defn(typ_defn: &DwarfTypeDefn) -> Vec<String> {
+    fn gen_array_defn(typ_defn: &DwarfTypeDefn, xlen: &u64) -> Vec<String> {
         let mut defns = vec![];
         match &typ_defn {
             DwarfTypeDefn::Primitive { bytes } => {
                 // Check if the type is valid (bytes > 0)
                 if *bytes > 0 {
                     defns.push(format!(
-                        "define {}(base: xlen_t, index: xlen_t): xlen_t = base + {};",
+                        "define {}(base: bv{}, index: bv{}): bv{} = base + {};",
                         Self::array_index_macro_name(bytes),
-                        Self::multiply_expr(bytes, "index")
+                        xlen,
+                        xlen,
+                        xlen,
+                        Self::multiply_expr(bytes, "index", xlen)
                     ))
                 }
             }
@@ -84,8 +87,8 @@ impl Uclid5Interface {
                 out_typ,
                 bytes: _,
             } => {
-                defns.append(&mut Self::gen_array_defn(in_typ));
-                defns.append(&mut Self::gen_array_defn(out_typ));
+                defns.append(&mut Self::gen_array_defn(in_typ, xlen));
+                defns.append(&mut Self::gen_array_defn(out_typ, xlen));
             }
             DwarfTypeDefn::Struct {
                 id: _,
@@ -93,20 +96,23 @@ impl Uclid5Interface {
                 bytes,
             } => {
                 for (_, field) in fields {
-                    defns.append(&mut Self::gen_array_defn(&field.typ));
+                    defns.append(&mut Self::gen_array_defn(&field.typ, xlen));
                 }
                 if *bytes > 0 {
                     defns.push(format!(
-                        "define {}(base: xlen_t, index: xlen_t): xlen_t = base + {};",
+                        "define {}(base: bv{}, index: bv{}): bv{} = base + {};",
                         Self::array_index_macro_name(bytes),
-                        Self::multiply_expr(bytes, "index")
+                        xlen,
+                        xlen,
+                        xlen,
+                        Self::multiply_expr(bytes, "index", xlen)
                     ))
                 }
             }
             DwarfTypeDefn::Pointer {
                 value_typ,
                 bytes: _,
-            } => defns.append(&mut Self::gen_array_defn(&value_typ)),
+            } => defns.append(&mut Self::gen_array_defn(&value_typ, xlen)),
         };
         defns
     }
@@ -116,7 +122,7 @@ impl Uclid5Interface {
     }
     /// Creates an expression that represents 'num_const * expr'
     /// TODO: Does SMT support precise multiplication? Maybe we can take this out
-    fn multiply_expr(num_const: &u64, expr: &str) -> String {
+    fn multiply_expr(num_const: &u64, expr: &str, xlen: &u64) -> String {
         format!("{:b}", num_const) // Binary expression
             .chars()
             .rev()
@@ -127,7 +133,7 @@ impl Uclid5Interface {
                         // Add multiple of 2 of the expression to the current expression
                         format!(
                             "bv_left_shift({}, {}){}{}",
-                            format!("to_xlen_t({}bv64)", acc.1),
+                            format!("{}bv{}", acc.1, xlen),
                             expr,
                             if acc.0.len() == 0 { "" } else { " + " },
                             acc.0
@@ -147,17 +153,17 @@ impl Uclid5Interface {
     /// # Arguments
     ///
     /// * `dwarf_ctx` - The DWARF context containing the variables and function signatures.
-    fn gen_struct_defns(dwarf_ctx: &DwarfCtx) -> String {
+    fn gen_struct_defns(dwarf_ctx: &DwarfCtx, xlen: &u64) -> String {
         let mut defns = vec![];
         for var in dwarf_ctx.global_vars() {
-            defns.append(&mut Self::gen_struct_defn(&var.typ_defn));
+            defns.append(&mut Self::gen_struct_defn(&var.typ_defn, xlen));
         }
         for (_, func_sig) in dwarf_ctx.func_sigs() {
             for var in &func_sig.args {
-                defns.append(&mut Self::gen_struct_defn(&var.typ_defn));
+                defns.append(&mut Self::gen_struct_defn(&var.typ_defn, xlen));
             }
             if let Some(ret_type) = &func_sig.ret_type {
-                defns.append(&mut Self::gen_struct_defn(&ret_type));
+                defns.append(&mut Self::gen_struct_defn(&ret_type, xlen));
             }
         }
         defns.sort();
@@ -173,7 +179,7 @@ impl Uclid5Interface {
     ///
     ///     This function returns the following definition to simplify 'c.a0', where c is of type ctx:
     ///     define ctx_a0(ptr: xlen_t): xlen_t = ptr + to_xlen_t(80bv64);
-    fn gen_struct_defn(typ: &DwarfTypeDefn) -> Vec<String> {
+    fn gen_struct_defn(typ: &DwarfTypeDefn, xlen: &u64) -> Vec<String> {
         let mut defns = vec![];
         match typ {
             DwarfTypeDefn::Struct {
@@ -182,11 +188,14 @@ impl Uclid5Interface {
                 bytes: _,
             } => {
                 for (field_name, field) in fields {
-                    defns.append(&mut Self::gen_struct_defn(&*field.typ));
+                    defns.append(&mut Self::gen_struct_defn(&*field.typ, xlen));
                     defns.push(format!(
-                        "define {}(ptr: xlen_t): xlen_t = ptr + to_xlen_t({}bv64);",
+                        "define {}(ptr: bv{}): bv{} = ptr + {}bv{};",
                         Self::get_field_macro_name(&id[..], field_name),
-                        field.loc
+                        xlen,
+                        xlen,
+                        field.loc,
+                        xlen
                     ));
                 }
             }
@@ -195,8 +204,8 @@ impl Uclid5Interface {
                 out_typ,
                 bytes: _,
             } => {
-                defns.append(&mut Self::gen_struct_defn(&in_typ));
-                defns.append(&mut Self::gen_struct_defn(&out_typ));
+                defns.append(&mut Self::gen_struct_defn(&in_typ, xlen));
+                defns.append(&mut Self::gen_struct_defn(&out_typ, xlen));
             }
             _ => (),
         }
@@ -207,49 +216,51 @@ impl Uclid5Interface {
         format!("{}_{}", struct_id, field_name)
     }
     /// Given the dwarf_ctx, returns a string of global variable definitions.
-    fn gen_global_defns(dwarf_ctx: &DwarfCtx) -> String {
+    fn gen_global_defns(dwarf_ctx: &DwarfCtx, xlen: &u64) -> String {
         let mut defns = String::from("// Global variables\n");
         for var in dwarf_ctx.global_vars() {
-            defns = format!("{}{}\n", defns, Self::gen_global_defn(&var));
+            defns = format!("{}{}\n", defns, Self::gen_global_defn(&var, xlen));
         }
         utils::indent_text(defns, 4)
     }
     /// Given a global variable, returns a string of a macro that refers to the static
     /// memory location of the variable.
-    fn gen_global_defn(global_var: &DwarfVar) -> String {
+    fn gen_global_defn(global_var: &DwarfVar, xlen: &u64) -> String {
         format!(
-            "define {}(): xlen_t = {};",
+            "define {}(): bv{} = {};",
             utils::global_var_ptr_name(&global_var.name[..]),
-            format!("to_xlen_t({}bv64)", global_var.memory_addr)
+            xlen,
+            format!("{}bv{}", global_var.memory_addr, xlen)
         )
     }
     /// Returns a string of macros to refer to a static function's entry address.
-    fn gen_global_func_defns(model: &Model) -> String {
+    fn gen_global_func_defns(model: &Model, xlen: &u64) -> String {
         let mut defns = String::from("// Global function entry addresses\n");
         for fm in &model.func_models {
             defns = format!(
                 "{}{}\n",
                 defns,
-                Self::gen_global_func_defn(&fm.sig.name, fm.sig.entry_addr)
+                Self::gen_global_func_defn(&fm.sig.name, fm.sig.entry_addr, xlen)
             );
         }
         utils::indent_text(defns, 4)
     }
     /// Returns a define macro that returns the `func_entry_addr`
-    fn gen_global_func_defn(func_name: &str, func_entry_addr: u64) -> String {
+    fn gen_global_func_defn(func_name: &str, func_entry_addr: u64, xlen: &u64) -> String {
         format!(
-            "define {}(): xlen_t = {};",
+            "define {}(): bv{} = {};",
             utils::global_func_addr_name(func_name),
-            format!("to_xlen_t({}bv64)", func_entry_addr)
+            xlen,
+            format!("{}bv{}", func_entry_addr, xlen)
         )
     }
     /// Returns a string of all the procedures in the model.
     /// This contains all of the function models.
-    fn gen_procs(model: &Model, dwarf_ctx: &DwarfCtx) -> String {
+    fn gen_procs(model: &Model, dwarf_ctx: &DwarfCtx, xlen: &u64) -> String {
         let procs_string = model
             .func_models
             .iter()
-            .map(|fm| Self::func_model_to_string(fm, dwarf_ctx))
+            .map(|fm| Self::func_model_to_string(fm, dwarf_ctx, xlen))
             .collect::<Vec<_>>()
             .join("\n\n");
         utils::indent_text(procs_string, 4)
@@ -405,13 +416,13 @@ impl IRInterface for Uclid5Interface {
             BoolOp::Neg => format!("!{}", e1.unwrap()),
         }
     }
-    fn fapp_to_string(fapp: &FuncApp) -> String {
+    fn fapp_to_string(fapp: &FuncApp, xlen: &u64) -> String {
         format!(
             "{}({})",
             fapp.func_name,
             fapp.operands
                 .iter()
-                .map(|x| { Self::expr_to_string(&*x) })
+                .map(|x| { Self::expr_to_string(&*x, xlen) })
                 .collect::<Vec<String>>()
                 .join(", ")
         )
@@ -424,44 +435,44 @@ impl IRInterface for Uclid5Interface {
     }
 
     /// Statements to string
-    fn stmt_to_string(stmt: &Stmt) -> String {
+    fn stmt_to_string(stmt: &Stmt, xlen: &u64) -> String {
         match stmt {
             Stmt::Skip => Self::skip_to_string(),
-            Stmt::Assert(expr) => Self::assert_to_string(&expr),
-            Stmt::Assume(expr) => Self::assume_to_string(&expr),
+            Stmt::Assert(expr) => Self::assert_to_string(&expr, xlen),
+            Stmt::Assume(expr) => Self::assume_to_string(&expr, xlen),
             Stmt::Havoc(var) => Self::havoc_to_string(var),
-            Stmt::FuncCall(fc) => Self::func_call_to_string(&fc),
-            Stmt::Assign(assign) => Self::assign_to_string(&assign),
-            Stmt::IfThenElse(ite) => Self::ite_to_string(&ite),
-            Stmt::Block(stmt_vec) => Self::block_to_string(&stmt_vec),
+            Stmt::FuncCall(fc) => Self::func_call_to_string(&fc, xlen),
+            Stmt::Assign(assign) => Self::assign_to_string(&assign, xlen),
+            Stmt::IfThenElse(ite) => Self::ite_to_string(&ite, xlen),
+            Stmt::Block(stmt_vec) => Self::block_to_string(&stmt_vec, xlen),
         }
     }
     fn skip_to_string() -> String {
         format!("")
     }
-    fn assert_to_string(expr: &Expr) -> String {
-        format!("assert ({});", Self::expr_to_string(expr))
+    fn assert_to_string(expr: &Expr, xlen: &u64) -> String {
+        format!("assert ({});", Self::expr_to_string(expr, xlen))
     }
-    fn assume_to_string(expr: &Expr) -> String {
-        format!("assume ({});", Self::expr_to_string(expr))
+    fn assume_to_string(expr: &Expr, xlen: &u64) -> String {
+        format!("assume ({});", Self::expr_to_string(expr, xlen))
     }
     fn havoc_to_string(var: &Rc<Var>) -> String {
         format!("havoc {};", Self::var_to_string(&*var))
     }
-    fn func_call_to_string(func_call: &FuncCall) -> String {
+    fn func_call_to_string(func_call: &FuncCall, xlen: &u64) -> String {
         let lhs = func_call
             .lhs
             .iter()
-            .map(|rc_expr| Self::expr_to_string(&*rc_expr))
+            .map(|rc_expr| Self::expr_to_string(&*rc_expr, xlen))
             .collect::<Vec<_>>()
             .join(", ");
         let args = func_call
             .operands
             .iter()
             .map(|rc_expr| {
-                let expr_str = Self::expr_to_string(&*rc_expr);
+                let expr_str = Self::expr_to_string(&*rc_expr, xlen);
                 if expr_str == "zero" {
-                    format!("to_xlen_t(0bv64)")
+                    format!("0bv{}", xlen)
                 } else {
                     expr_str
                 }
@@ -475,44 +486,44 @@ impl IRInterface for Uclid5Interface {
             args
         )
     }
-    fn assign_to_string(assign: &Assign) -> String {
+    fn assign_to_string(assign: &Assign, xlen: &u64) -> String {
         let lhs = assign
             .lhs
             .iter()
-            .map(|rc_expr| Self::expr_to_string(&*rc_expr))
+            .map(|rc_expr| Self::expr_to_string(&*rc_expr, xlen))
             .collect::<Vec<_>>()
             .join(", ");
         let rhs = assign
             .rhs
             .iter()
-            .map(|rc_expr| Self::expr_to_string(&*rc_expr))
+            .map(|rc_expr| Self::expr_to_string(&*rc_expr, xlen))
             .collect::<Vec<_>>()
             .join(", ");
         format!("{} = {};", lhs, rhs)
     }
-    fn ite_to_string(ite: &IfThenElse) -> String {
-        let cond = Self::expr_to_string(&ite.cond);
-        let thn = utils::indent_text(Self::stmt_to_string(&*ite.then_stmt), 4);
+    fn ite_to_string(ite: &IfThenElse, xlen: &u64) -> String {
+        let cond = Self::expr_to_string(&ite.cond, xlen);
+        let thn = utils::indent_text(Self::stmt_to_string(&*ite.then_stmt, xlen), 4);
         let els = if let Some(else_stmt) = &ite.else_stmt {
             format!(
                 "else {{\n{}\n}}",
-                utils::indent_text(Self::stmt_to_string(&*else_stmt), 4)
+                utils::indent_text(Self::stmt_to_string(&*else_stmt, xlen), 4)
             )
         } else {
             String::from("")
         };
         format!("if ({}) {{\n{}\n}}{}", cond, thn, els)
     }
-    fn block_to_string(blk: &Vec<Box<Stmt>>) -> String {
+    fn block_to_string(blk: &Vec<Box<Stmt>>, xlen: &u64) -> String {
         let inner = blk
             .iter()
-            .map(|rc_stmt| Self::stmt_to_string(rc_stmt))
+            .map(|rc_stmt| Self::stmt_to_string(rc_stmt, xlen))
             .collect::<Vec<_>>()
             .join("\n");
         let inner = utils::indent_text(inner, 4);
         format!("{{\n{}\n}}", inner)
     }
-    fn func_model_to_string(fm: &FuncModel, dwarf_ctx: &DwarfCtx) -> String {
+    fn func_model_to_string(fm: &FuncModel, dwarf_ctx: &DwarfCtx, xlen: &u64) -> String {
         let args = fm
             .sig
             .arg_decls
@@ -572,7 +583,7 @@ impl IRInterface for Uclid5Interface {
         } else {
             format!("")
         };
-        let body = Self::block_to_string(fm.body.get_expect_block());
+        let body = Self::block_to_string(fm.body.get_expect_block(), xlen);
         let inline = if fm.inline { "[inline] " } else { "" };
         // Track variable procedure
         let vt_proc = if fm.sig.tracked.len() > 0 {
@@ -653,30 +664,21 @@ impl IRInterface for Uclid5Interface {
         ignored_funcs: &HashSet<&str>,
         verify_funcs: &Vec<&str>,
     ) -> String {
-        let xlen_defn = utils::indent_text(
-            format!(
-                "type xlen_t = bv{};\ndefine to_xlen_t(x: bv64): xlen_t = x[{}:0];",
-                xlen,
-                xlen - 1
-            ),
-            4,
-        );
         // prelude
         let prelude = Self::prelude();
         // variables
         let var_defns = utils::indent_text(Self::gen_var_defns(model), 4);
         // definitions
-        let array_defns = Self::gen_array_defns(&dwarf_ctx); // Define macros that index for arrays (by muiltiplication)
-        let struct_defns = Self::gen_struct_defns(&dwarf_ctx); // Define macros for getting struct field values
-        let global_var_defns = Self::gen_global_defns(&dwarf_ctx); // Define macros for global variable pointers
-        let global_func_defns = Self::gen_global_func_defns(&model); // Define macros for function addresses                                              // procedures
-        let procs = Self::gen_procs(model, &dwarf_ctx);
+        let array_defns = Self::gen_array_defns(&dwarf_ctx, xlen); // Define macros that index for arrays (by muiltiplication)
+        let struct_defns = Self::gen_struct_defns(&dwarf_ctx, xlen); // Define macros for getting struct field values
+        let global_var_defns = Self::gen_global_defns(&dwarf_ctx, xlen); // Define macros for global variable pointers
+        let global_func_defns = Self::gen_global_func_defns(&model, xlen); // Define macros for function addresses                                              // procedures
+        let procs = Self::gen_procs(model, &dwarf_ctx, xlen);
         // control block
         let ctrl_blk = Self::control_blk(model, &dwarf_ctx, ignored_funcs, verify_funcs);
         format!(
-            "module {} {{\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n\n{}\n}}",
+            "module {} {{\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n\n{}\n}}",
             model.name,
-            xlen_defn,
             prelude,
             var_defns,
             array_defns,
