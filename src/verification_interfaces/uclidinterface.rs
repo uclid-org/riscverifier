@@ -618,7 +618,7 @@ impl IRInterface for Uclid5Interface {
             .tracked
             .iter()
             .map(|spec| match spec {
-                Spec::Track(vname, _) => format!("var {}: xlen_t;", vname),
+                Spec::Track(vname, _) => format!("var {}: bv64;", vname),
                 _ => panic!("Excepted Spec::Track."),
             })
             .collect::<Vec<String>>()
