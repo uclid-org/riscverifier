@@ -293,7 +293,6 @@ where
         mod_set.insert(system_model::PC_VAR.to_string());
         mod_set.insert(system_model::RETURNED_FLAG.to_string());
         mod_set.insert(system_model::MEM_VAR.to_string());
-        mod_set.insert(system_model::EXCEPT_VAR.to_string()); // Note: Doesn't always need to be modified
         match stmt {
             Stmt::Havoc(rc_var) => {
                 mod_set.insert(rc_var.name.clone());
@@ -394,7 +393,10 @@ where
                         .collect::<Vec<_>>();
                     let mut lhss = vec![];
                     if let Some(_) = self.func_ret_type(&f_name) {
-                        lhss.push(Expr::var(system_model::A0, system_model::bv_type(self.xlen)));
+                        lhss.push(Expr::var(
+                            system_model::A0,
+                            system_model::bv_type(self.xlen),
+                        ));
                     }
                     let f_call_stmt = Box::new(Stmt::func_call(f_name, lhss, f_args));
                     let mut then_stmts = vec![];
@@ -402,7 +404,10 @@ where
                     then_stmts.push(f_call_stmt);
                     // Reset the returned variable for the caller
                     then_stmts.push(Box::new(Stmt::assign(
-                        vec![Expr::var(system_model::RETURNED_FLAG, system_model::bv_type(1))],
+                        vec![Expr::var(
+                            system_model::RETURNED_FLAG,
+                            system_model::bv_type(1),
+                        )],
                         vec![Expr::bv_lit(0, 1)],
                     )));
                     let then_blk_stmt = Stmt::Block(then_stmts);
@@ -433,23 +438,7 @@ where
                 Expr::bv_lit(0, 1),
             ],
         );
-        let if_exception_guard = Expr::op_app(
-            Op::Comp(CompOp::Equality),
-            vec![
-                Expr::Var(
-                    system_model::except_var(self.xlen),
-                    system_model::bv_type(self.xlen),
-                ),
-                Expr::bv_lit(0, self.xlen),
-            ],
-        );
-        let if_guard = Expr::op_app(
-            Op::Bool(BoolOp::Conj),
-            vec![
-                Expr::op_app(Op::Bool(BoolOp::Conj), vec![if_pc_guard, if_returned_guard]),
-                if_exception_guard,
-            ],
-        );
+        let if_guard = Expr::op_app(Op::Bool(BoolOp::Conj), vec![if_pc_guard, if_returned_guard]);
         let then_blk_stmt = Box::new(blk);
         // Return the guarded call
         Stmt::if_then_else(if_guard, then_blk_stmt, None)
@@ -696,13 +685,12 @@ where
     }
     /// Returns the return type of a function from the DWARF context
     fn func_ret_type(&self, func_name: &str) -> Option<Type> {
-        self.dwarf_ctx
-            .func_sig(func_name)
-            .ok()
-            .and_then(|fs| {
-                // fs.ret_type.as_ref().and_then(|rd| Some(self.dwarf_typ_to_ir(rd.as_ref())))
-                fs.ret_type.as_ref().and_then(|_| Some(Type::Bv{ w: self.xlen }))
-            })
+        self.dwarf_ctx.func_sig(func_name).ok().and_then(|fs| {
+            // fs.ret_type.as_ref().and_then(|rd| Some(self.dwarf_typ_to_ir(rd.as_ref())))
+            fs.ret_type
+                .as_ref()
+                .and_then(|_| Some(Type::Bv { w: self.xlen }))
+        })
     }
 
     /// Returns the modifies statments from the specificaiton map for the given function
@@ -839,29 +827,17 @@ where
             Expr::var(system_model::RA, system_model::bv_type(self.xlen))
         };
         ensures.push(Spec::Ensures(Expr::op_app(
-            Op::Bool(BoolOp::Impl),
+            Op::Comp(CompOp::Equality),
             vec![
-                Expr::op_app(
-                    Op::Comp(CompOp::Equality),
-                    vec![
-                        Expr::var(system_model::EXCEPT_VAR, system_model::bv_type(self.xlen)),
-                        Expr::bv_lit(0, self.xlen),
-                    ],
+                Expr::Var(
+                    system_model::pc_var(self.xlen),
+                    system_model::bv_type(self.xlen),
                 ),
                 Expr::op_app(
-                    Op::Comp(CompOp::Equality),
+                    Op::Bv(BVOp::Concat),
                     vec![
-                        Expr::Var(
-                            system_model::pc_var(self.xlen),
-                            system_model::bv_type(self.xlen),
-                        ),
-                        Expr::op_app(
-                            Op::Bv(BVOp::Concat),
-                            vec![
-                                Expr::op_app(Op::Bv(BVOp::Slice { l: 63, r: 1 }), vec![ra]),
-                                Expr::bv_lit(0, 1),
-                            ],
-                        ),
+                        Expr::op_app(Op::Bv(BVOp::Slice { l: 63, r: 1 }), vec![ra]),
+                        Expr::bv_lit(0, 1),
                     ],
                 ),
             ],
@@ -869,22 +845,10 @@ where
         // (2) returned flag is true if there is no exception
         //      ensures (exception == 0bv64) ==> (returned == true);
         ensures.push(Spec::Ensures(Expr::op_app(
-            Op::Bool(BoolOp::Impl),
+            Op::Comp(CompOp::Equality),
             vec![
-                Expr::op_app(
-                    Op::Comp(CompOp::Equality),
-                    vec![
-                        Expr::var(system_model::EXCEPT_VAR, system_model::bv_type(self.xlen)),
-                        Expr::bv_lit(0, self.xlen),
-                    ],
-                ),
-                Expr::op_app(
-                    Op::Comp(CompOp::Equality),
-                    vec![
-                        Expr::var(system_model::RETURNED_FLAG, system_model::bv_type(1)),
-                        Expr::bv_lit(1, 1),
-                    ],
-                ),
+                Expr::var(system_model::RETURNED_FLAG, system_model::bv_type(1)),
+                Expr::bv_lit(1, 1),
             ],
         )));
         Some(ensures)
