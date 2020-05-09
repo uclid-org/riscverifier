@@ -9,7 +9,7 @@ use crate::datastructures::cfg;
 use crate::ir::*;
 use crate::readers::disassembler;
 use crate::readers::disassembler::Inst;
-use crate::readers::dwarfreader::{DwarfCtx, DwarfTypeDefn};
+use crate::readers::dwarfreader::DwarfCtx;
 use crate::system_model;
 use crate::utils;
 
@@ -119,7 +119,14 @@ where
     /// ========================= FUNCTION GENERATION ========================
     /// Generates a stub function model
     pub fn gen_func_model_stub(&mut self, func_name: &str) {
-        let arg_exprs = self.func_args(func_name);
+        let arg_exprs = self
+            .func_args(func_name)
+            .iter()
+            .map(|expr| {
+                let var = expr.get_expect_var();
+                Expr::var(&var.name, system_model::bv_type(self.xlen))
+            })
+            .collect();
         let mod_set = self.mod_set_from_spec_map(func_name);
         let requires = if !self.ignore_specs {
             self.requires_from_spec_map(func_name, &arg_exprs).ok()
@@ -271,7 +278,8 @@ where
         let tracked = self.tracked_from_spec_map(func_name);
         // Create the procedure body
         let body = self.cfg_to_symbolic_blk(&func_entry, &func_cfg);
-        let ret = self.func_ret_type(func_name);
+        // let ret = self.func_ret_type(func_name);
+        let ret = None;
         // Add the function to the verification model
         self.model.add_func_model(FuncModel::new(
             func_name,
@@ -293,7 +301,6 @@ where
         mod_set.insert(system_model::PC_VAR.to_string());
         mod_set.insert(system_model::RETURNED_FLAG.to_string());
         mod_set.insert(system_model::MEM_VAR.to_string());
-        mod_set.insert(system_model::EXCEPT_VAR.to_string()); // Note: Doesn't always need to be modified
         match stmt {
             Stmt::Havoc(rc_var) => {
                 mod_set.insert(rc_var.name.clone());
@@ -393,16 +400,22 @@ where
                         })
                         .collect::<Vec<_>>();
                     let mut lhss = vec![];
-                    if let Some(_) = self.func_ret_type(&f_name) {
-                        lhss.push(Expr::var(system_model::A0, system_model::bv_type(self.xlen)));
-                    }
+                    // if let Some(_) = self.func_ret_type(&f_name) {
+                    //     lhss.push(Expr::var(
+                    //         system_model::A0,
+                    //         system_model::bv_type(self.xlen),
+                    //     ));
+                    // }
                     let f_call_stmt = Box::new(Stmt::func_call(f_name, lhss, f_args));
                     let mut then_stmts = vec![];
                     // Add function call to then statement
                     then_stmts.push(f_call_stmt);
                     // Reset the returned variable for the caller
                     then_stmts.push(Box::new(Stmt::assign(
-                        vec![Expr::var(system_model::RETURNED_FLAG, system_model::bv_type(1))],
+                        vec![Expr::var(
+                            system_model::RETURNED_FLAG,
+                            system_model::bv_type(1),
+                        )],
                         vec![Expr::bv_lit(0, 1)],
                     )));
                     let then_blk_stmt = Stmt::Block(then_stmts);
@@ -411,10 +424,17 @@ where
                 }
             }
         }
+        stmts_vec.push(Box::new(Stmt::assign(
+                        vec![Expr::var(
+                            system_model::RETURNED_FLAG,
+                            system_model::bv_type(1),
+                        )],
+                        vec![Expr::bv_lit(1, 1)],
+                    )));
         Stmt::Block(stmts_vec)
     }
     /// Returns a guarded block statement
-    /// Guards are pc == target, exception == 0bv64, and returned == false
+    /// Guards are pc == target and returned == false
     fn guarded_call(&self, entry: &u64, blk: Stmt) -> Stmt {
         let if_pc_guard = Expr::op_app(
             Op::Comp(CompOp::Equality),
@@ -433,23 +453,7 @@ where
                 Expr::bv_lit(0, 1),
             ],
         );
-        let if_exception_guard = Expr::op_app(
-            Op::Comp(CompOp::Equality),
-            vec![
-                Expr::Var(
-                    system_model::except_var(self.xlen),
-                    system_model::bv_type(self.xlen),
-                ),
-                Expr::bv_lit(0, self.xlen),
-            ],
-        );
-        let if_guard = Expr::op_app(
-            Op::Bool(BoolOp::Conj),
-            vec![
-                Expr::op_app(Op::Bool(BoolOp::Conj), vec![if_pc_guard, if_returned_guard]),
-                if_exception_guard,
-            ],
-        );
+        let if_guard = Expr::op_app(Op::Bool(BoolOp::Conj), vec![if_pc_guard, if_returned_guard]);
         let then_blk_stmt = Box::new(blk);
         // Return the guarded call
         Stmt::if_then_else(if_guard, then_blk_stmt, None)
@@ -688,7 +692,8 @@ where
                 Some(
                     fs.args
                         .iter()
-                        .map(|x| Expr::var(&x.name[..], self.dwarf_typ_to_ir(&x.typ_defn)))
+                        // .map(|x| Expr::var(&x.name[..], self.dwarf_typ_to_ir(&x.typ_defn)))
+                        .map(|x| Expr::var(&x.name[..], x.typ_defn.to_ir_type()))
                         .collect::<Vec<Expr>>(),
                 )
             })
@@ -696,13 +701,12 @@ where
     }
     /// Returns the return type of a function from the DWARF context
     fn func_ret_type(&self, func_name: &str) -> Option<Type> {
-        self.dwarf_ctx
-            .func_sig(func_name)
-            .ok()
-            .and_then(|fs| {
-                // fs.ret_type.as_ref().and_then(|rd| Some(self.dwarf_typ_to_ir(rd.as_ref())))
-                fs.ret_type.as_ref().and_then(|_| Some(Type::Bv{ w: self.xlen }))
-            })
+        self.dwarf_ctx.func_sig(func_name).ok().and_then(|fs| {
+            // fs.ret_type.as_ref().and_then(|rd| Some(self.dwarf_typ_to_ir(rd.as_ref())))
+            fs.ret_type
+                .as_ref()
+                .and_then(|_| Some(Type::Bv { w: self.xlen }))
+        })
     }
 
     /// Returns the modifies statments from the specificaiton map for the given function
@@ -765,17 +769,6 @@ where
                 Expr::bv_lit(func_entry, self.xlen),
             ],
         )));
-        // Add no exception requirement
-        requires.push(Spec::Requires(Expr::op_app(
-            Op::Comp(CompOp::Equality),
-            vec![
-                Expr::Var(
-                    system_model::except_var(self.xlen),
-                    system_model::bv_type(self.xlen),
-                ),
-                Expr::bv_lit(0, self.xlen),
-            ],
-        )));
         // Add returned flag initially 0 constraint
         requires.push(Spec::Requires(Expr::op_app(
             Op::Comp(CompOp::Equality),
@@ -808,7 +801,7 @@ where
     /// Returns ensure statments from specification map for the given function
     /// Also adds various ensures common across all functions:
     ///     (1) callee return constraint
-    ///     (2) returned flag is true if there is no exception
+    ///     (2) returned flag is true
     fn ensures_from_spec_map(&self, func_name: &str) -> Option<Vec<Spec>> {
         // Ensures statements from the specification file
         let mut ensures = self
@@ -839,52 +832,28 @@ where
             Expr::var(system_model::RA, system_model::bv_type(self.xlen))
         };
         ensures.push(Spec::Ensures(Expr::op_app(
-            Op::Bool(BoolOp::Impl),
+            Op::Comp(CompOp::Equality),
             vec![
-                Expr::op_app(
-                    Op::Comp(CompOp::Equality),
-                    vec![
-                        Expr::var(system_model::EXCEPT_VAR, system_model::bv_type(self.xlen)),
-                        Expr::bv_lit(0, self.xlen),
-                    ],
+                Expr::Var(
+                    system_model::pc_var(self.xlen),
+                    system_model::bv_type(self.xlen),
                 ),
                 Expr::op_app(
-                    Op::Comp(CompOp::Equality),
+                    Op::Bv(BVOp::Concat),
                     vec![
-                        Expr::Var(
-                            system_model::pc_var(self.xlen),
-                            system_model::bv_type(self.xlen),
-                        ),
-                        Expr::op_app(
-                            Op::Bv(BVOp::Concat),
-                            vec![
-                                Expr::op_app(Op::Bv(BVOp::Slice { l: 63, r: 1 }), vec![ra]),
-                                Expr::bv_lit(0, 1),
-                            ],
-                        ),
+                        Expr::op_app(Op::Bv(BVOp::Slice { l: 63, r: 1 }), vec![ra]),
+                        Expr::bv_lit(0, 1),
                     ],
                 ),
             ],
         )));
-        // (2) returned flag is true if there is no exception
-        //      ensures (exception == 0bv64) ==> (returned == true);
+        // (2) returned flag is true at the end of the function
+        //      ensures (returned == true);
         ensures.push(Spec::Ensures(Expr::op_app(
-            Op::Bool(BoolOp::Impl),
+            Op::Comp(CompOp::Equality),
             vec![
-                Expr::op_app(
-                    Op::Comp(CompOp::Equality),
-                    vec![
-                        Expr::var(system_model::EXCEPT_VAR, system_model::bv_type(self.xlen)),
-                        Expr::bv_lit(0, self.xlen),
-                    ],
-                ),
-                Expr::op_app(
-                    Op::Comp(CompOp::Equality),
-                    vec![
-                        Expr::var(system_model::RETURNED_FLAG, system_model::bv_type(1)),
-                        Expr::bv_lit(1, 1),
-                    ],
-                ),
+                Expr::var(system_model::RETURNED_FLAG, system_model::bv_type(1)),
+                Expr::bv_lit(1, 1),
             ],
         )));
         Some(ensures)
@@ -905,17 +874,5 @@ where
             })
             .map_or(vec![], |v| v);
         Some(tracked)
-    }
-    /// ====================== DWARF RELATED FUNCTIONS =======================
-    /// Translates DwarfTypeDefn to Type
-    fn dwarf_typ_to_ir(&self, typ: &DwarfTypeDefn) -> Type {
-        match &typ {
-            DwarfTypeDefn::Primitive { bytes } => Type::Bv {
-                w: bytes * utils::BYTE_SIZE,
-            },
-            DwarfTypeDefn::Array { .. }
-            | DwarfTypeDefn::Struct { .. }
-            | DwarfTypeDefn::Pointer { .. } => Type::Bv { w: self.xlen },
-        }
     }
 }

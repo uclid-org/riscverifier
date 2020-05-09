@@ -150,8 +150,7 @@ fn main() {
         .value_of("verify-funcs")
         .map_or(vec![], |lst| lst.split(",").collect::<Vec<&str>>());
     // Flag for ignoring and inlining functions
-    let ignore_specs = matches
-        .is_present("ignore-specs");
+    let ignore_specs = matches.is_present("ignore-specs");
     // Translate and write to output file
     let mut translator: Translator<Uclid5Interface> = Translator::new(
         xlen,
