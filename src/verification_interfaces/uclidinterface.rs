@@ -146,6 +146,8 @@ impl Uclid5Interface {
                 }
             })
             .0
+        // SLOWER:
+        // format!("{} * {}bv{}", expr, num_const, xlen)
     }
     /// Return a string of get field macros for all the type definitions in the global variables
     /// and formal arguments of functions.
