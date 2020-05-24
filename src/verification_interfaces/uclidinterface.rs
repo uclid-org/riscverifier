@@ -331,12 +331,14 @@ impl IRInterface for Uclid5Interface {
         match lit {
             Literal::Bv { val, width } => format!("{}bv{}", *val as i64, width),
             Literal::Bool { val } => format!("{}", val),
+            Literal::Int { val } => format!("{}", val),
         }
     }
     fn typ_to_string(typ: &Type) -> String {
         match typ {
             Type::Unknown => panic!("Type is unknown!"),
             Type::Bool => format!("boolean"),
+            Type::Int => format!("integer"),
             Type::Bv { w } => format!("bv{}", w),
             Type::Array { in_typs, out_typ } => format!(
                 "[{}]{}",
@@ -404,9 +406,10 @@ impl IRInterface for Uclid5Interface {
             },
             BVOp::LeftShift => format!("bv_left_shift({}, {})", e2.unwrap(), e1.unwrap()),
             BVOp::RightShift => format!("bv_l_right_shift({}, {})", e2.unwrap(), e1.unwrap()),
+            BVOp::ARightShift => format!("bv_a_right_shift({}, {})", e2.unwrap(), e1.unwrap()),
             BVOp::Concat => format!("({} ++ {})", e1.unwrap(), e2.unwrap()),
             BVOp::Slice { l, r } => format!("{}[{}:{}]", e1.unwrap(), l, r),
-            _ => panic!("[bvop_to_string] Unimplemented."),
+            _ => panic!("[bvop_to_string] Unimplemented {:#?}.", bvop),
         }
     }
     fn bool_app_to_string(bop: &BoolOp, e1: Option<String>, e2: Option<String>) -> String {

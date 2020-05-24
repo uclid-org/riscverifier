@@ -322,7 +322,12 @@ where
                 let lhs_mod_set = a
                     .lhs
                     .iter()
-                    .map(|e| e.get_expect_var().name.clone())
+                    .map(|e| match e {
+                        // Either the LHS is a register, returned, pc, etc
+                        Expr::Var(v, t) | Expr::Const(v, t) => v.name.clone(),
+                        // Or memory (for stores)
+                        _ => system_model::MEM_VAR.to_string(),
+                    })
                     .collect::<HashSet<String>>();
                 mod_set = mod_set.union(&lhs_mod_set).cloned().collect();
             }
@@ -425,12 +430,12 @@ where
             }
         }
         stmts_vec.push(Box::new(Stmt::assign(
-                        vec![Expr::var(
-                            system_model::RETURNED_FLAG,
-                            system_model::bv_type(1),
-                        )],
-                        vec![Expr::bv_lit(1, 1)],
-                    )));
+            vec![Expr::var(
+                system_model::RETURNED_FLAG,
+                system_model::bv_type(1),
+            )],
+            vec![Expr::bv_lit(1, 1)],
+        )));
         Stmt::Block(stmts_vec)
     }
     /// Returns a guarded block statement
@@ -600,7 +605,8 @@ where
     fn cfg_node_to_block(&self, bb: &Rc<cfg::CfgNode<disassembler::AssemblyLine>>) -> Stmt {
         let mut stmt_vec = vec![];
         for al in bb.into_iter() {
-            stmt_vec.push(Box::new(self.al_to_ir(&al)));
+            // stmt_vec.push(Box::new(self.al_to_ir(&al)));
+            stmt_vec.push(Box::new(self.al_to_ir_stmt(&al)));
         }
         Stmt::Block(stmt_vec)
     }
@@ -637,6 +643,245 @@ where
             operands.push(Expr::bv_lit(imm.get_imm_val() as u64, self.xlen));
         }
         Stmt::func_call(op_call, lhs, operands)
+    }
+    /// Returns the statment containing the instruction specs
+    fn al_to_ir_stmt(&self, al: &Rc<disassembler::AssemblyLine>) -> Stmt {
+        // Destination registers
+        let mut dsts = vec![];
+        let mut regs: [Option<&disassembler::InstOperand>; 2] = [al.rd(), al.csr()];
+        for reg_op in regs.iter_mut() {
+            if let Some(reg) = reg_op {
+                dsts.push(Expr::var(
+                    &reg.get_reg_name()[..],
+                    system_model::bv_type(self.xlen),
+                ));
+                assert!(!reg.has_offset());
+            }
+        }
+        // Source registers
+        let mut srcs = vec![];
+        let mut regs: [Option<&disassembler::InstOperand>; 3] = [al.rs1(), al.rs2(), al.csr()];
+        for reg_op in regs.iter_mut() {
+            if let Some(reg) = reg_op {
+                srcs.push(Expr::var(
+                    &reg.get_reg_name()[..],
+                    system_model::bv_type(self.xlen),
+                ));
+                if reg.has_offset() {
+                    srcs.push(Expr::bv_lit(reg.get_reg_offset() as u64, self.xlen));
+                }
+            }
+        }
+        if let Some(operand) = al.imm() {
+            srcs.push(Expr::bv_lit(operand.get_imm_val() as u64, self.xlen));
+        }
+        match al.op() {
+            "add" => {
+                system_model::add_inst(dsts[0].clone(), srcs[0].clone(), srcs[1].clone(), self.xlen)
+            }
+            "sub" => {
+                system_model::sub_inst(dsts[0].clone(), srcs[0].clone(), srcs[1].clone(), self.xlen)
+            }
+            "mul" => {
+                system_model::mul_inst(dsts[0].clone(), srcs[0].clone(), srcs[1].clone(), self.xlen)
+            }
+            "sll" => {
+                system_model::sll_inst(dsts[0].clone(), srcs[0].clone(), srcs[1].clone(), self.xlen)
+            }
+            "slt" => {
+                system_model::slt_inst(dsts[0].clone(), srcs[0].clone(), srcs[1].clone(), self.xlen)
+            }
+            "sltu" => system_model::sltu_inst(
+                dsts[0].clone(),
+                srcs[0].clone(),
+                srcs[1].clone(),
+                self.xlen,
+            ),
+            "xor" => {
+                system_model::xor_inst(dsts[0].clone(), srcs[0].clone(), srcs[1].clone(), self.xlen)
+            }
+            "srl" => {
+                system_model::srl_inst(dsts[0].clone(), srcs[0].clone(), srcs[1].clone(), self.xlen)
+            }
+            "sra" => {
+                system_model::sra_inst(dsts[0].clone(), srcs[0].clone(), srcs[1].clone(), self.xlen)
+            }
+            "or" => {
+                system_model::or_inst(dsts[0].clone(), srcs[0].clone(), srcs[1].clone(), self.xlen)
+            }
+            "addw" => system_model::addw_inst(
+                dsts[0].clone(),
+                srcs[0].clone(),
+                srcs[1].clone(),
+                self.xlen,
+            ),
+            "subw" => system_model::subw_inst(
+                dsts[0].clone(),
+                srcs[0].clone(),
+                srcs[1].clone(),
+                self.xlen,
+            ),
+            "sllw" => system_model::sllw_inst(
+                dsts[0].clone(),
+                srcs[0].clone(),
+                srcs[1].clone(),
+                self.xlen,
+            ),
+            "srlw" => system_model::srlw_inst(
+                dsts[0].clone(),
+                srcs[0].clone(),
+                srcs[1].clone(),
+                self.xlen,
+            ),
+            "sraw" => system_model::sraw_inst(
+                dsts[0].clone(),
+                srcs[0].clone(),
+                srcs[1].clone(),
+                self.xlen,
+            ),
+            "jalr" => system_model::jalr_inst(
+                dsts[0].clone(),
+                srcs[0].clone(),
+                srcs[1].clone(),
+                self.xlen,
+            ),
+            "lb" => {
+                system_model::lb_inst(dsts[0].clone(), srcs[0].clone(), srcs[1].clone(), self.xlen)
+            }
+            "lh" => {
+                system_model::lh_inst(dsts[0].clone(), srcs[0].clone(), srcs[1].clone(), self.xlen)
+            }
+            "lw" => {
+                system_model::lw_inst(dsts[0].clone(), srcs[0].clone(), srcs[1].clone(), self.xlen)
+            }
+            "lbu" => {
+                system_model::lbu_inst(dsts[0].clone(), srcs[0].clone(), srcs[1].clone(), self.xlen)
+            }
+            "lhu" => {
+                system_model::lhu_inst(dsts[0].clone(), srcs[0].clone(), srcs[1].clone(), self.xlen)
+            }
+            "addi" => system_model::addi_inst(
+                dsts[0].clone(),
+                srcs[0].clone(),
+                srcs[1].clone(),
+                self.xlen,
+            ),
+            "slti" => system_model::slti_inst(
+                dsts[0].clone(),
+                srcs[0].clone(),
+                srcs[1].clone(),
+                self.xlen,
+            ),
+            "sltiu" => system_model::sltiu_inst(
+                dsts[0].clone(),
+                srcs[0].clone(),
+                srcs[1].clone(),
+                self.xlen,
+            ),
+            "xori" => system_model::xori_inst(
+                dsts[0].clone(),
+                srcs[0].clone(),
+                srcs[1].clone(),
+                self.xlen,
+            ),
+            "ori" => {
+                system_model::ori_inst(dsts[0].clone(), srcs[0].clone(), srcs[1].clone(), self.xlen)
+            }
+            "andi" => system_model::andi_inst(
+                dsts[0].clone(),
+                srcs[0].clone(),
+                srcs[1].clone(),
+                self.xlen,
+            ),
+            "slli" => system_model::slli_inst(
+                dsts[0].clone(),
+                srcs[0].clone(),
+                srcs[1].clone(),
+                self.xlen,
+            ),
+            "srli" => system_model::srli_inst(
+                dsts[0].clone(),
+                srcs[0].clone(),
+                srcs[1].clone(),
+                self.xlen,
+            ),
+            "srai" => system_model::srai_inst(
+                dsts[0].clone(),
+                srcs[0].clone(),
+                srcs[1].clone(),
+                self.xlen,
+            ),
+            "lwu" => {
+                system_model::lwu_inst(dsts[0].clone(), srcs[0].clone(), srcs[1].clone(), self.xlen)
+            }
+            "ld" => {
+                system_model::ld_inst(dsts[0].clone(), srcs[0].clone(), srcs[1].clone(), self.xlen)
+            }
+            "addiw" => system_model::addiw_inst(
+                dsts[0].clone(),
+                srcs[0].clone(),
+                srcs[1].clone(),
+                self.xlen,
+            ),
+            "slliw" => system_model::slliw_inst(
+                dsts[0].clone(),
+                srcs[0].clone(),
+                srcs[1].clone(),
+                self.xlen,
+            ),
+            "srliw" => system_model::srliw_inst(
+                dsts[0].clone(),
+                srcs[0].clone(),
+                srcs[1].clone(),
+                self.xlen,
+            ),
+            "sraiw" => system_model::sraiw_inst(
+                dsts[0].clone(),
+                srcs[0].clone(),
+                srcs[1].clone(),
+                self.xlen,
+            ),
+            "sb" => {
+                system_model::sb_inst(srcs[0].clone(), srcs[1].clone(), srcs[2].clone(), self.xlen)
+            }
+            "sh" => {
+                system_model::sh_inst(srcs[0].clone(), srcs[1].clone(), srcs[2].clone(), self.xlen)
+            }
+            "sw" => {
+                system_model::sw_inst(srcs[0].clone(), srcs[1].clone(), srcs[2].clone(), self.xlen)
+            }
+            "sd" => {
+                system_model::sd_inst(srcs[0].clone(), srcs[1].clone(), srcs[2].clone(), self.xlen)
+            }
+            "beq" => {
+                system_model::beq_inst(srcs[0].clone(), srcs[1].clone(), srcs[2].clone(), self.xlen)
+            }
+            "bne" => {
+                system_model::bne_inst(srcs[0].clone(), srcs[1].clone(), srcs[2].clone(), self.xlen)
+            }
+            "blt" => {
+                system_model::blt_inst(srcs[0].clone(), srcs[1].clone(), srcs[2].clone(), self.xlen)
+            }
+            "bge" => {
+                system_model::bge_inst(srcs[0].clone(), srcs[1].clone(), srcs[2].clone(), self.xlen)
+            }
+            "bltu" => system_model::bltu_inst(
+                srcs[0].clone(),
+                srcs[1].clone(),
+                srcs[2].clone(),
+                self.xlen,
+            ),
+            "bgeu" => system_model::bgeu_inst(
+                srcs[0].clone(),
+                srcs[1].clone(),
+                srcs[2].clone(),
+                self.xlen,
+            ),
+            "lui" => system_model::lui_inst(dsts[0].clone(), srcs[0].clone(), self.xlen),
+            "auipc" => system_model::auipc_inst(dsts[0].clone(), srcs[0].clone(), self.xlen),
+            "jal" => system_model::jal_inst(dsts[0].clone(), srcs[0].clone(), self.xlen),
+            _ => system_model::unimplemented_inst(self.xlen),
+        }
     }
     /// Returns the procedure name corresponding to the instruction given
     fn inst_proc_name(&self, al: &Rc<disassembler::AssemblyLine>) -> String {

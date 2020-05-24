@@ -11,6 +11,7 @@ use crate::readers::dwarfreader::DwarfCtx;
 pub enum Type {
     Unknown,
     Bool,
+    Int,
     Bv {
         w: u64,
     },
@@ -89,7 +90,7 @@ impl Expr {
     pub fn get_expect_var(&self) -> &Var {
         match self {
             Expr::Var(v, _) | Expr::Const(v, _) => v,
-            _ => panic!("Not a variable/constant."),
+            _ => panic!("Not a variable/constant: {:#?}.", self),
         }
     }
     pub fn is_var(&self) -> bool {
@@ -101,6 +102,9 @@ impl Expr {
     }
     pub fn bv_lit(val: u64, width: u64) -> Self {
         Expr::Literal(Literal::Bv { val, width }, Type::Bv { w: width })
+    }
+    pub fn int_lit(val: u64) -> Self {
+        Expr::Literal(Literal::Int { val }, Type::Int)
     }
     pub fn bool_lit(val: bool) -> Self {
         Expr::Literal(Literal::Bool { val }, Type::Bool)
@@ -153,6 +157,7 @@ impl Expr {
 pub enum Literal {
     Bv { val: u64, width: u64 },
     Bool { val: bool },
+    Int { val: u64 },
 }
 
 /// Variable
