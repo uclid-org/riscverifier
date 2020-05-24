@@ -101,16 +101,19 @@ pub fn unimplemented_inst(xlen: u64) -> Stmt {
 /// add
 pub fn add_inst(rd: Expr, rs1: Expr, rs2: Expr, xlen: u64) -> Stmt {
     let mut stmts = vec![];
+    // rd := rs1 + rs2
     stmts.push(Stmt::assign(
         vec![rd],
         vec![Expr::op_app(Op::Bv(BVOp::Add), vec![rs1, rs2])],
     ));
+    // pc := pc + 4bv64
     stmts.push(update_pc(xlen));
     Stmt::Block(stmts.iter().map(|x| Box::new(x.clone())).collect())
 }
 /// sub
 pub fn sub_inst(rd: Expr, rs1: Expr, rs2: Expr, xlen: u64) -> Stmt {
     let mut stmts = vec![];
+    // rd := rs1 - rs2
     stmts.push(Stmt::assign(
         vec![rd],
         vec![Expr::op_app(Op::Bv(BVOp::Sub), vec![rs1, rs2])],
@@ -121,10 +124,12 @@ pub fn sub_inst(rd: Expr, rs1: Expr, rs2: Expr, xlen: u64) -> Stmt {
 /// mul
 pub fn mul_inst(rd: Expr, rs1: Expr, rs2: Expr, xlen: u64) -> Stmt {
     let mut stmts = vec![];
+    // rd := rs1 * rs2
     stmts.push(Stmt::assign(
         vec![rd],
         vec![Expr::op_app(Op::Bv(BVOp::Mul), vec![rs1, rs2])],
     ));
+    // pc := pc + 4bv64
     stmts.push(update_pc(xlen));
     Stmt::Block(stmts.iter().map(|x| Box::new(x.clone())).collect())
 }
@@ -141,6 +146,7 @@ pub fn sll_inst(rd: Expr, rs1: Expr, rs2: Expr, xlen: u64) -> Stmt {
             ],
         )],
     ));
+    // pc := pc + 4bv64
     stmts.push(update_pc(xlen));
     Stmt::Block(stmts.iter().map(|x| Box::new(x.clone())).collect())
 }
@@ -416,7 +422,7 @@ pub fn lw_inst(rd: Expr, rs1: Expr, imm: Expr, xlen: u64) -> Stmt {
 pub fn lbu_inst(rd: Expr, rs1: Expr, imm: Expr, xlen: u64) -> Stmt {
     let mut stmts = vec![];
     let ret = Expr::op_app(
-        Op::Bv(BVOp::SignExt),
+        Op::Bv(BVOp::ZeroExt),
         vec![
             Expr::func_app(
                 "loadByte_macro".to_string(),
@@ -438,7 +444,7 @@ pub fn lbu_inst(rd: Expr, rs1: Expr, imm: Expr, xlen: u64) -> Stmt {
 pub fn lhu_inst(rd: Expr, rs1: Expr, imm: Expr, xlen: u64) -> Stmt {
     let mut stmts = vec![];
     let ret = Expr::op_app(
-        Op::Bv(BVOp::SignExt),
+        Op::Bv(BVOp::ZeroExt),
         vec![
             Expr::func_app(
                 "loadHalf_macro".to_string(),
@@ -545,7 +551,7 @@ pub fn slli_inst(rd: Expr, rs1: Expr, imm: Expr, xlen: u64) -> Stmt {
 pub fn srli_inst(rd: Expr, rs1: Expr, imm: Expr, xlen: u64) -> Stmt {
     let mut stmts = vec![];
     stmts.push(Stmt::Assume(Expr::op_app(
-        Op::Comp(CompOp::Leu),
+        Op::Comp(CompOp::Ltu),
         vec![imm.clone(), Expr::bv_lit(64, xlen)],
     )));
     stmts.push(Stmt::assign(
@@ -559,7 +565,7 @@ pub fn srli_inst(rd: Expr, rs1: Expr, imm: Expr, xlen: u64) -> Stmt {
 pub fn srai_inst(rd: Expr, rs1: Expr, imm: Expr, xlen: u64) -> Stmt {
     let mut stmts = vec![];
     stmts.push(Stmt::Assume(Expr::op_app(
-        Op::Comp(CompOp::Leu),
+        Op::Comp(CompOp::Ltu),
         vec![imm.clone(), Expr::bv_lit(64, xlen)],
     )));
     stmts.push(Stmt::assign(
@@ -570,11 +576,10 @@ pub fn srai_inst(rd: Expr, rs1: Expr, imm: Expr, xlen: u64) -> Stmt {
     Stmt::Block(stmts.iter().map(|x| Box::new(x.clone())).collect())
 }
 /// lwu
-/// FIXME
 pub fn lwu_inst(rd: Expr, rs1: Expr, imm: Expr, xlen: u64) -> Stmt {
     let mut stmts = vec![];
     let ret = Expr::op_app(
-        Op::Bv(BVOp::SignExt),
+        Op::Bv(BVOp::ZeroExt),
         vec![
             Expr::func_app(
                 "loadWord_macro".to_string(),

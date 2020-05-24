@@ -663,10 +663,17 @@ where
         let mut regs: [Option<&disassembler::InstOperand>; 3] = [al.rs1(), al.rs2(), al.csr()];
         for reg_op in regs.iter_mut() {
             if let Some(reg) = reg_op {
-                srcs.push(Expr::var(
-                    &reg.get_reg_name()[..],
-                    system_model::bv_type(self.xlen),
-                ));
+                let reg_name = &reg.get_reg_name()[..];
+                match reg_name {
+                    // Replace the zero register with a 0 constant
+                    // the zero register is used as a placeholder for
+                    // writing to in the verification models
+                    "zero" => srcs.push(Expr::bv_lit(0, self.xlen)),
+                    _ => srcs.push(Expr::var(
+                        reg_name,
+                        system_model::bv_type(self.xlen),
+                    )),
+                }
                 if reg.has_offset() {
                     srcs.push(Expr::bv_lit(reg.get_reg_offset() as u64, self.xlen));
                 }
