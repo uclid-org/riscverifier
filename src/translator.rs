@@ -324,7 +324,7 @@ where
                     .iter()
                     .map(|e| match e {
                         // Either the LHS is a register, returned, pc, etc
-                        Expr::Var(v, t) | Expr::Const(v, t) => v.name.clone(),
+                        Expr::Var(v, _) | Expr::Const(v, _) => v.name.clone(),
                         // Or memory (for stores)
                         _ => system_model::MEM_VAR.to_string(),
                     })
@@ -716,6 +716,9 @@ where
             "or" => {
                 system_model::or_inst(dsts[0].clone(), srcs[0].clone(), srcs[1].clone(), self.xlen)
             }
+            "and" => {
+                system_model::and_inst(dsts[0].clone(), srcs[0].clone(), srcs[1].clone(), self.xlen)
+            }
             "addw" => system_model::addw_inst(
                 dsts[0].clone(),
                 srcs[0].clone(),
@@ -887,7 +890,7 @@ where
             "lui" => system_model::lui_inst(dsts[0].clone(), srcs[0].clone(), self.xlen),
             "auipc" => system_model::auipc_inst(dsts[0].clone(), srcs[0].clone(), self.xlen),
             "jal" => system_model::jal_inst(dsts[0].clone(), srcs[0].clone(), self.xlen),
-            _ => system_model::unimplemented_inst(self.xlen),
+            _ => system_model::unimplemented_inst(al.op(), self.xlen),
         }
     }
     /// Returns the procedure name corresponding to the instruction given

@@ -1,25 +1,25 @@
 begin_spec(region_get_addr)
 requires ((0x0bv64 <= i) && (i < 16bv64));
 ensures ($ret == regions[i].addr);
-ensures (forall ($ti : bv64) :: (($mem[$ti] == old($mem[$ti]))));
+ensures ($mem == old($mem));
 end_spec
 
 begin_spec(is_pmp_region_valid)
-requires ((0bv64 <= region_idx) && (region_idx < 16bv64));
+requires ((0bv64 <= region_idx) && (region_idx < 31bv64));
 ensures ($ret == (bv_sign_extend(32, region_def_bitmap) & (0x1bv64 << region_idx)));
-ensures (forall ($ti : bv64) :: (($mem[$ti] == old($mem[$ti]))));
+ensures ($mem == old($mem));
 end_spec
 
 begin_spec(region_pmpcfg_val)
-requires ((0bv64 <= i) && (i < 16bv64));
+//requires ((0bv64 <= i) && (i < 31bv64));
 ensures ($ret == ((((bv_zero_extend(56, regions[i].addrmode) | (perm_bits)) << ((((reg_idx) & 7bv64) << 3bv64))))));
-ensures (forall ($ti : bv64) :: (($mem[$ti] == old($mem[$ti]))));
+ensures ($mem == old($mem));
 end_spec
 
 begin_spec(region_register_idx)
-requires ((0bv64 <= i) && (i < 16bv64));
+//requires ((0bv64 <= i) && (i < 20000bv64));
 ensures ( ($ret == bv_sign_extend(32, regions[i].reg_idx)));
-ensures ( forall ($ti : bv64) :: (($mem[$ti] == old($mem[$ti]))));
+ensures ($mem == old($mem));
 end_spec
 
 begin_spec(region_is_tor)
@@ -27,7 +27,7 @@ modifies a5, returned, a0, mem, zero, pc;
 requires ((0bv64 <= i) && (i < 16bv64));
 ensures (((regions[i].addrmode == 8bv8)) ==> ($ret == 1bv64));
 ensures (((regions[i].addrmode != 8bv8)) ==> ($ret == 0bv64));
-ensures ( forall ($ti : bv64) :: (($mem[$ti] == old($mem[$ti]))));
+ensures ($mem == old($mem));
 end_spec
 
 begin_spec(region_needs_two_entries)
@@ -43,7 +43,7 @@ modifies mem, a5, returned, a0, pc, zero;
 requires ((0bv64 <= i) && (i < 16bv64));
 ensures (((regions[i].addrmode == 24bv8)) ==> ($ret == 1bv64));
 ensures (((regions[i].addrmode != 24bv8)) ==> ($ret == 0bv64));
-ensures ( forall ($ti : bv64) :: (($mem[$ti] == old($mem[$ti]))));
+ensures ($mem == old($mem));
 end_spec
 
 begin_spec(region_is_napot_all)
@@ -51,11 +51,11 @@ modifies mem, zero, pc, returned, a0, a5;
 requires ((0bv64 <= i) && (i < 16bv64));
 ensures ((((regions[i].addr == 0bv64) && (regions[i].size == -1))) ==> ($ret == 1bv64));
 ensures ((((regions[i].addr != 0bv64) || (regions[i].size != -1))) ==> ($ret == 0bv64));
-ensures ( forall ($ti : bv64) :: (($mem[$ti] == old($mem[$ti]))));
+ensures ($mem == old($mem));
 end_spec
 
 begin_spec(region_pmpaddr_val)
-requires ((0bv64 <= i) && (i < 16bv64));
+//requires ((0bv64 <= i) && (i < 16bv64));
 //requires ((regions[i].addr != 0bv64) || (regions[i].size != -1));
 requires ($sp >_u 0xFbv64);
 ensures ((((regions[i].addr == 0bv64) && (regions[i].size == -1))) ==> ($ret == -1));
@@ -66,10 +66,6 @@ ensures (forall ($ti : bv64) :: ((($ti >_u $sp) ==> ($mem[$ti] == old($mem[$ti])
 end_spec
 
 begin_spec(pmp_set)
-track [hello] regions[0bv64].addr;
-//requires ((0bv32 <=_u region_idx) && (region_idx <_u 16bv32));
-//requires ((0bv8 <=_u perm) && (perm <=_u 0bv8));     // What is this?
-requires (0bv64 == region_idx);
-requires (0bv64 == perm); 
+//track [hello] regions[0bv64].addr;
 requires ($sp >_u 0xFbv64);
 end_spec

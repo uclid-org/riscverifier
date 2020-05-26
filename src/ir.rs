@@ -34,6 +34,10 @@ impl Type {
                 fields: _,
                 w,
             } => *w,
+            Type::Array {
+                in_typs: _,
+                out_typ,
+            } => out_typ.get_expect_bv_width(),
             _ => panic!("Not a bitvector: {:#?}.", self),
         }
     }
@@ -266,6 +270,7 @@ pub enum Stmt {
     Assign(Assign),
     IfThenElse(IfThenElse),
     Block(Vec<Box<Stmt>>),
+    Comment(String),
 }
 impl Stmt {
     pub fn get_expect_block(&self) -> &Vec<Box<Stmt>> {
@@ -545,6 +550,7 @@ pub trait IRInterface: fmt::Debug {
     fn assign_to_string(assign: &Assign, xlen: &u64) -> String;
     fn ite_to_string(ite: &IfThenElse, xlen: &u64) -> String;
     fn block_to_string(blk: &Vec<Box<Stmt>>, xlen: &u64) -> String;
+    fn comment_to_string(comment: &String) -> String;
     fn func_model_to_string(fm: &FuncModel, dwarf_ctx: &DwarfCtx, xlen: &u64) -> String;
     fn track_proc(fm: &FuncModel, dwarf_ctx: &DwarfCtx) -> String;
     // IR to model string
@@ -561,22 +567,24 @@ pub trait IRInterface: fmt::Debug {
         expr: &Expr,
         dwarf_ctx: &DwarfCtx,
         old: bool,
+        bound_vars: &mut HashSet<String>,
     ) -> String {
         match expr {
             Expr::Literal(l, _) => Self::lit_to_string(l),
-            Expr::FuncApp(fapp, _) => Self::spec_fapp_to_string(func_name, fapp, dwarf_ctx),
-            Expr::OpApp(opapp, _) => Self::spec_opapp_to_string(func_name, opapp, dwarf_ctx, old),
+            Expr::FuncApp(fapp, _) => Self::spec_fapp_to_string(func_name, fapp, dwarf_ctx, old, bound_vars),
+            Expr::OpApp(opapp, _) => Self::spec_opapp_to_string(func_name, opapp, dwarf_ctx, old, bound_vars),
             Expr::Var(v, _) | Expr::Const(v, _) => {
-                Self::spec_var_to_string(func_name, v, dwarf_ctx, old)
+                Self::spec_var_to_string(func_name, v, dwarf_ctx, old, bound_vars)
             }
         }
     }
-    fn spec_fapp_to_string(func_name: &str, fapp: &FuncApp, dwarf_ctx: &DwarfCtx) -> String;
+    fn spec_fapp_to_string(func_name: &str, fapp: &FuncApp, dwarf_ctx: &DwarfCtx, old: bool, bound_vars: &mut HashSet<String>) -> String;
     fn spec_opapp_to_string(
         func_name: &str,
         opapp: &OpApp,
         dwarf_ctx: &DwarfCtx,
         old: bool,
+        bound_vars: &mut HashSet<String>,
     ) -> String;
-    fn spec_var_to_string(func_name: &str, v: &Var, dwarf_ctx: &DwarfCtx, old: bool) -> String;
+    fn spec_var_to_string(func_name: &str, v: &Var, dwarf_ctx: &DwarfCtx, old: bool, bound_vars: &mut HashSet<String>) -> String;
 }

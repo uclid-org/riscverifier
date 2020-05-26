@@ -303,7 +303,7 @@ impl Uclid5Interface {
         };
         let verif_fns_string = format!("{}\ncheck;\nprint_results;", verif_fns_string);
         let verif_fns_string = utils::indent_text(verif_fns_string, 4);
-        let solver_opts = utils::indent_text(format!("set_solver_option(\":mbqi\", false);\nset_solver_option(\":case_split\", 0);\nset_solver_option(\":relevancy\", 0);\nset_solver_option(\":threads\", 4);\nset_solver_option(\":blast_full\", true);"), 4);
+        let solver_opts = utils::indent_text(format!("set_solver_option(\":mbqi\", false);\nset_solver_option(\":case_split\", 0);\nset_solver_option(\":relevancy\", 0);\nset_solver_option(\":blast_full\", true);"), 4);
         let control_string = format!("control {{\n{}\n{}\n}}", solver_opts, verif_fns_string);
         utils::indent_text(control_string, 4)
     }
@@ -450,6 +450,7 @@ impl IRInterface for Uclid5Interface {
             Stmt::Assign(assign) => Self::assign_to_string(&assign, xlen),
             Stmt::IfThenElse(ite) => Self::ite_to_string(&ite, xlen),
             Stmt::Block(stmt_vec) => Self::block_to_string(&stmt_vec, xlen),
+            Stmt::Comment(comment) => Self::comment_to_string(&comment),
         }
     }
     fn skip_to_string() -> String {
@@ -528,6 +529,9 @@ impl IRInterface for Uclid5Interface {
         let inner = utils::indent_text(inner, 4);
         format!("{{\n{}\n}}", inner)
     }
+    fn comment_to_string(string: &String) -> String {
+        format!("// {}\n", string)
+    }
     fn func_model_to_string(fm: &FuncModel, dwarf_ctx: &DwarfCtx, xlen: &u64) -> String {
         let args = fm
             .sig
@@ -552,7 +556,8 @@ impl IRInterface for Uclid5Interface {
                         &fm.sig.name[..],
                         spec.expr(),
                         dwarf_ctx,
-                        spec.expr().contains_old()
+                        false,
+                        &mut HashSet::new(),
                     )
                 )
             })
@@ -569,7 +574,8 @@ impl IRInterface for Uclid5Interface {
                         &fm.sig.name[..],
                         spec.expr(),
                         dwarf_ctx,
-                        spec.expr().contains_old()
+                        false,
+                        &mut HashSet::new(),
                     )
                 )
             })
@@ -646,7 +652,7 @@ impl IRInterface for Uclid5Interface {
                 Spec::Track(vname, expr) => format!(
                     "{} = {};",
                     vname,
-                    Self::spec_expr_to_string(&fm.sig.name, &expr, dwarf_ctx, false)
+                    Self::spec_expr_to_string(&fm.sig.name, &expr, dwarf_ctx, false, &mut HashSet::new())
                 ),
                 _ => panic!("Excepted Spec::Track."),
             })
@@ -696,13 +702,13 @@ impl IRInterface for Uclid5Interface {
     }
 
     /// Specification langauge translation functions
-    fn spec_fapp_to_string(name: &str, fapp: &FuncApp, dwarf_ctx: &DwarfCtx) -> String {
+    fn spec_fapp_to_string(name: &str, fapp: &FuncApp, dwarf_ctx: &DwarfCtx, old: bool, bound_vars: &mut HashSet<String>) -> String {
         format!(
             "{}({})",
             fapp.func_name,
             fapp.operands
                 .iter()
-                .map(|x| Self::spec_expr_to_string(name, &*x, dwarf_ctx, false))
+                .map(|x| Self::spec_expr_to_string(name, &*x, dwarf_ctx, old, bound_vars))
                 .collect::<Vec<String>>()
                 .join(", ")
         )
@@ -712,12 +718,19 @@ impl IRInterface for Uclid5Interface {
         opapp: &OpApp,
         dwarf_ctx: &DwarfCtx,
         old: bool,
+        bound_vars: &mut HashSet<String>,
     ) -> String {
+        let mut bound_vars_p = bound_vars.clone();
+        match &opapp.op {
+            Op::Forall(v) => bound_vars_p.insert(v.name.clone()),
+            Op::Exists(v) => bound_vars_p.insert(v.name.clone()),
+            _ => true,
+        };
         let e1_str = opapp.operands.get(0).map_or(None, |e| {
-            Some(Self::spec_expr_to_string(func_name, e, dwarf_ctx, old))
+            Some(Self::spec_expr_to_string(func_name, e, dwarf_ctx, old, &mut bound_vars_p))
         });
         let e2_str = opapp.operands.get(1).map_or(None, |e| {
-            Some(Self::spec_expr_to_string(func_name, e, dwarf_ctx, old))
+            Some(Self::spec_expr_to_string(func_name, e, dwarf_ctx, old, &mut bound_vars_p))
         });
         match &opapp.op {
             Op::Forall(v) => Self::forall_to_string(v, e1_str.unwrap()),
@@ -725,7 +738,8 @@ impl IRInterface for Uclid5Interface {
             Op::Deref(width) => {
                 Self::deref_app_to_string(width / utils::BYTE_SIZE, e1_str.unwrap(), old)
             }
-            Op::Old => Self::spec_expr_to_string(
+            Op::Old => {
+                Self::spec_expr_to_string(
                 func_name,
                 opapp
                     .operands
@@ -733,7 +747,9 @@ impl IRInterface for Uclid5Interface {
                     .expect("Old operator is missing an expression."),
                 dwarf_ctx,
                 true,
-            ),
+                bound_vars,
+                )
+            },
             Op::Comp(cop) => Self::comp_app_to_string(cop, e1_str, e2_str),
             Op::Bv(bvop) => Self::bv_app_to_string(bvop, e1_str, e2_str),
             Op::Bool(bop) => Self::bool_app_to_string(bop, e1_str, e2_str),
@@ -745,6 +761,7 @@ impl IRInterface for Uclid5Interface {
                         &opapp.operands[1],
                         dwarf_ctx,
                         old,
+                        bound_vars,
                     );
                 }
                 // Get expression expression type
@@ -773,14 +790,14 @@ impl IRInterface for Uclid5Interface {
 
     /// Specification variable to Uclid5 variable
     /// Globals are shadowed by function variables
-    fn spec_var_to_string(_func_name: &str, v: &Var, dwarf_ctx: &DwarfCtx, old: bool) -> String {
+    fn spec_var_to_string(_func_name: &str, v: &Var, dwarf_ctx: &DwarfCtx, old: bool, bound_vars: &mut HashSet<String>) -> String {
         if v.name.chars().next().unwrap() == '$' {
             // Special identifier
             let name = &v.name[1..];
             if name == "ret" {
-                format!("{}(a0)", if old { "old" } else { "" },)
+                format!("{}(a0)", if old && !bound_vars.contains(&v.name) { "old" } else { "" },)
             } else {
-                format!("{}({})", if old { "old" } else { "" }, name)
+                format!("{}({})", if old && !bound_vars.contains(&v.name) { "old" } else { "" }, name)
             }
         } else if dwarf_ctx
             .func_sigs()
@@ -790,7 +807,7 @@ impl IRInterface for Uclid5Interface {
             || system_model::SYSTEM_VARS.contains(&&v.name[..])
         {
             // Function argument
-            format!("{}({})", if old { "old" } else { "" }, v.name.clone())
+            format!("{}({})", if old && !bound_vars.contains(&v.name) { "old" } else { "" }, v.name.clone())
         } else if dwarf_ctx
             .global_vars()
             .iter()

@@ -223,9 +223,13 @@ impl<'s> SpecReader<'s> {
                     .is_some();
                 // FIXME: Fix how memory is translated
                 let is_mem = path.get_expect_var().name == system_model::MEM_VAR;
+                let mut index_mem = false;
                 while let Some(e) = inner.next() {
                     match e.as_rule() {
                         Rule::array_index => {
+                            if is_mem {
+                                index_mem = true;
+                            }
                             path = ir::Expr::op_app(
                                 ir::Op::ArrayIndex,
                                 vec![path, self._translate_expr(func_name, e, bound_var_map)?],
@@ -242,8 +246,9 @@ impl<'s> SpecReader<'s> {
                         _ => panic!("[translate_expr] Not a valid path."),
                     }
                 }
-                // TODO: Are globals usually always pointers?
-                if !path_ref && (is_global_var || is_ptr_type || is_mem) {
+                // FIXME: Globals don't always need to be pointers...
+                //        How can we generally deal with this?
+                if !path_ref && (is_global_var || is_ptr_type || (is_mem && index_mem)) {
                     path = ir::Expr::op_app(
                         ir::Op::Deref(path.typ().get_expect_bv_width()),
                         vec![path],
@@ -270,7 +275,7 @@ impl<'s> SpecReader<'s> {
                         expr_args.reverse();
                         Ok(ir::Expr::op_app(ir::Op::Bv(ir::BVOp::ZeroExt), expr_args))
                     }
-                    _ => panic!("Unimplemented function application in specreader."),
+                    _ => panic!("Unimplemented function application in specreader: {:#?}.", f_name),
                 }
             }
             Rule::identifier => {
