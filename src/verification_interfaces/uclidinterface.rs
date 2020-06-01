@@ -4,7 +4,7 @@ use std::rc::Rc;
 
 use crate::ir::*;
 use crate::readers::dwarfreader::{DwarfCtx, DwarfTypeDefn, DwarfVar};
-use crate::system_model;
+// use crate::system_model;
 use crate::utils;
 
 #[derive(Debug)]
@@ -539,42 +539,42 @@ impl IRInterface for Uclid5Interface {
         } else {
             format!("")
         };
-        let requires = fm
-            .sig
-            .requires
-            .iter()
-            .map(|spec| {
-                format!(
-                    "\n    requires ({});",
-                    Self::spec_expr_to_string(
-                        &fm.sig.name[..],
-                        spec.expr(),
-                        dwarf_ctx,
-                        false,
-                        &mut HashSet::new(),
-                    )
-                )
-            })
-            .collect::<Vec<_>>()
-            .join("");
-        let ensures = fm
-            .sig
-            .ensures
-            .iter()
-            .map(|spec| {
-                format!(
-                    "\n    ensures ({});",
-                    Self::spec_expr_to_string(
-                        &fm.sig.name[..],
-                        spec.expr(),
-                        dwarf_ctx,
-                        false,
-                        &mut HashSet::new(),
-                    )
-                )
-            })
-            .collect::<Vec<_>>()
-            .join("");
+        // let requires = fm
+        //     .sig
+        //     .requires
+        //     .iter()
+        //     .map(|spec| {
+        //         format!(
+        //             "\n    requires ({});",
+        //             Self::spec_expr_to_string(
+        //                 &fm.sig.name[..],
+        //                 spec.expr(),
+        //                 dwarf_ctx,
+        //                 false,
+        //                 &mut HashSet::new(),
+        //             )
+        //         )
+        //     })
+        //     .collect::<Vec<_>>()
+        //     .join("");
+        // let ensures = fm
+        //     .sig
+        //     .ensures
+        //     .iter()
+        //     .map(|spec| {
+        //         format!(
+        //             "\n    ensures ({});",
+        //             Self::spec_expr_to_string(
+        //                 &fm.sig.name[..],
+        //                 spec.expr(),
+        //                 dwarf_ctx,
+        //                 false,
+        //                 &mut HashSet::new(),
+        //             )
+        //         )
+        //     })
+        //     .collect::<Vec<_>>()
+        //     .join("");
         let modifies = if fm.sig.mod_set.len() > 0 {
             format!(
                 "\n    modifies {};",
@@ -588,14 +588,17 @@ impl IRInterface for Uclid5Interface {
         } else {
             format!("")
         };
+        let requires = "";
+        let ensures = "";
         let body = Self::block_to_string(fm.body.get_expect_block(), xlen);
         let inline = if fm.inline { "[inline] " } else { "" };
         // Track variable procedure
-        let vt_proc = if fm.sig.tracked.len() > 0 {
-            Self::track_proc(fm, dwarf_ctx)
-        } else {
-            String::from("")
-        };
+        // let vt_proc = if fm.sig.tracked.len() > 0 {
+        //     Self::track_proc(fm, dwarf_ctx)
+        // } else {
+        //     String::from("")
+        // };
+        let vt_proc = "";
         format!(
             "procedure {}{}({}){}{}{}{}\n{}\n\n{}",
             inline, fm.sig.name, args, ret, modifies, requires, ensures, body, vt_proc
@@ -614,52 +617,52 @@ impl IRInterface for Uclid5Interface {
     ///     - variables named vname with xlen width
     ///     - a procedure named "fname_track" with assignments from variable names to expressions:
     ///         - e.g. procedure fname_track() modifies vname { vname = expression; ... }
-    fn track_proc(fm: &FuncModel, dwarf_ctx: &DwarfCtx) -> String {
-        if fm.sig.tracked.len() == 0 {
-            panic!("No variables are tracked for the function {}.", fm.sig.name);
-        }
-        let var_decls = fm
-            .sig
-            .tracked
-            .iter()
-            .map(|spec| match spec {
-                Spec::Track(vname, _) => format!("var {}: bv64;", vname),
-                _ => panic!("Excepted Spec::Track."),
-            })
-            .collect::<Vec<String>>()
-            .join("\n");
-        let mod_var_list = fm
-            .sig
-            .tracked
-            .iter()
-            .map(|spec| match spec {
-                Spec::Track(vname, _) => vname.to_string(),
-                _ => panic!("Excepted Spec::Track."),
-            })
-            .collect::<Vec<String>>()
-            .join(", ");
-        let body = fm
-            .sig
-            .tracked
-            .iter()
-            .map(|spec| match spec {
-                Spec::Track(vname, expr) => format!(
-                    "{} = {};",
-                    vname,
-                    Self::spec_expr_to_string(&fm.sig.name, &expr, dwarf_ctx, false, &mut HashSet::new())
-                ),
-                _ => panic!("Excepted Spec::Track."),
-            })
-            .collect::<Vec<String>>()
-            .join("\n");
-        format!(
-            "{}\nprocedure [inline] {}_track_vars()\n{}\n{{\n{}\n}}\n\n",
-            var_decls,
-            fm.sig.name,
-            format!("modifies {};", mod_var_list),
-            utils::indent_text(body, 4),
-        )
-    }
+    // fn track_proc(fm: &FuncModel, dwarf_ctx: &DwarfCtx) -> String {
+    //     if fm.sig.tracked.len() == 0 {
+    //         panic!("No variables are tracked for the function {}.", fm.sig.name);
+    //     }
+    //     let var_decls = fm
+    //         .sig
+    //         .tracked
+    //         .iter()
+    //         .map(|spec| match spec {
+    //             Spec::Track(vname, _) => format!("var {}: bv64;", vname),
+    //             _ => panic!("Excepted Spec::Track."),
+    //         })
+    //         .collect::<Vec<String>>()
+    //         .join("\n");
+    //     let mod_var_list = fm
+    //         .sig
+    //         .tracked
+    //         .iter()
+    //         .map(|spec| match spec {
+    //             Spec::Track(vname, _) => vname.to_string(),
+    //             _ => panic!("Excepted Spec::Track."),
+    //         })
+    //         .collect::<Vec<String>>()
+    //         .join(", ");
+    //     let body = fm
+    //         .sig
+    //         .tracked
+    //         .iter()
+    //         .map(|spec| match spec {
+    //             Spec::Track(vname, expr) => format!(
+    //                 "{} = {};",
+    //                 vname,
+    //                 Self::spec_expr_to_string(&fm.sig.name, &expr, dwarf_ctx, false, &mut HashSet::new())
+    //             ),
+    //             _ => panic!("Excepted Spec::Track."),
+    //         })
+    //         .collect::<Vec<String>>()
+    //         .join("\n");
+    //     format!(
+    //         "{}\nprocedure [inline] {}_track_vars()\n{}\n{{\n{}\n}}\n\n",
+    //         var_decls,
+    //         fm.sig.name,
+    //         format!("modifies {};", mod_var_list),
+    //         utils::indent_text(body, 4),
+    //     )
+    // }
     // Generate function model
     // NOTE: Replace string with write to file
     fn model_to_string(
@@ -695,125 +698,125 @@ impl IRInterface for Uclid5Interface {
         )
     }
 
-    /// Specification langauge translation functions
-    fn spec_fapp_to_string(name: &str, fapp: &FuncApp, dwarf_ctx: &DwarfCtx, old: bool, bound_vars: &mut HashSet<String>) -> String {
-        format!(
-            "{}({})",
-            fapp.func_name,
-            fapp.operands
-                .iter()
-                .map(|x| Self::spec_expr_to_string(name, &*x, dwarf_ctx, old, bound_vars))
-                .collect::<Vec<String>>()
-                .join(", ")
-        )
-    }
-    fn spec_opapp_to_string(
-        func_name: &str,
-        opapp: &OpApp,
-        dwarf_ctx: &DwarfCtx,
-        old: bool,
-        bound_vars: &mut HashSet<String>,
-    ) -> String {
-        let mut bound_vars_p = bound_vars.clone();
-        match &opapp.op {
-            Op::Forall(v) => bound_vars_p.insert(v.name.clone()),
-            Op::Exists(v) => bound_vars_p.insert(v.name.clone()),
-            _ => true,
-        };
-        let e1_str = opapp.operands.get(0).map_or(None, |e| {
-            Some(Self::spec_expr_to_string(func_name, e, dwarf_ctx, old, &mut bound_vars_p))
-        });
-        let e2_str = opapp.operands.get(1).map_or(None, |e| {
-            Some(Self::spec_expr_to_string(func_name, e, dwarf_ctx, old, &mut bound_vars_p))
-        });
-        match &opapp.op {
-            Op::Forall(v) => Self::forall_to_string(v, e1_str.unwrap()),
-            Op::Exists(v) => Self::exists_to_string(v, e1_str.unwrap()),
-            Op::Deref(width) => {
-                Self::deref_app_to_string(width / utils::BYTE_SIZE, e1_str.unwrap(), old)
-            }
-            Op::Old => {
-                Self::spec_expr_to_string(
-                func_name,
-                opapp
-                    .operands
-                    .get(0)
-                    .expect("Old operator is missing an expression."),
-                dwarf_ctx,
-                true,
-                bound_vars,
-                )
-            },
-            Op::Comp(cop) => Self::comp_app_to_string(cop, e1_str, e2_str),
-            Op::Bv(bvop) => Self::bv_app_to_string(bvop, e1_str, e2_str),
-            Op::Bool(bop) => Self::bool_app_to_string(bop, e1_str, e2_str),
-            Op::ArrayIndex => {
-                // Memory index is just the address itself
-                if opapp.operands[0].get_expect_var().name == system_model::MEM_VAR {
-                    return Self::spec_expr_to_string(
-                        func_name,
-                        &opapp.operands[1],
-                        dwarf_ctx,
-                        old,
-                        bound_vars,
-                    );
-                }
-                // Get expression expression type
-                let array = e1_str.unwrap();
-                let index = e2_str.unwrap();
-                let out_typ = opapp.operands[0].typ().get_array_out_type();
-                let out_typ_width = out_typ.get_expect_bv_width();
-                format!(
-                    "{}({}, {})",
-                    Self::array_index_macro_name(&(out_typ_width / utils::BYTE_SIZE)),
-                    array,
-                    index
-                )
-            }
-            Op::GetField(field) => {
-                let typ = opapp.operands[0].typ();
-                let struct_id = typ.get_struct_id();
-                format!(
-                    "{}({})",
-                    Self::get_field_macro_name(&struct_id, field),
-                    e1_str.unwrap()
-                )
-            }
-        }
-    }
+    // /// Specification langauge translation functions
+    // fn spec_fapp_to_string(name: &str, fapp: &FuncApp, dwarf_ctx: &DwarfCtx, old: bool, bound_vars: &mut HashSet<String>) -> String {
+    //     format!(
+    //         "{}({})",
+    //         fapp.func_name,
+    //         fapp.operands
+    //             .iter()
+    //             .map(|x| Self::spec_expr_to_string(name, &*x, dwarf_ctx, old, bound_vars))
+    //             .collect::<Vec<String>>()
+    //             .join(", ")
+    //     )
+    // }
+    // fn spec_opapp_to_string(
+    //     func_name: &str,
+    //     opapp: &OpApp,
+    //     dwarf_ctx: &DwarfCtx,
+    //     old: bool,
+    //     bound_vars: &mut HashSet<String>,
+    // ) -> String {
+    //     let mut bound_vars_p = bound_vars.clone();
+    //     match &opapp.op {
+    //         Op::Forall(v) => bound_vars_p.insert(v.name.clone()),
+    //         Op::Exists(v) => bound_vars_p.insert(v.name.clone()),
+    //         _ => true,
+    //     };
+    //     let e1_str = opapp.operands.get(0).map_or(None, |e| {
+    //         Some(Self::spec_expr_to_string(func_name, e, dwarf_ctx, old, &mut bound_vars_p))
+    //     });
+    //     let e2_str = opapp.operands.get(1).map_or(None, |e| {
+    //         Some(Self::spec_expr_to_string(func_name, e, dwarf_ctx, old, &mut bound_vars_p))
+    //     });
+    //     match &opapp.op {
+    //         Op::Forall(v) => Self::forall_to_string(v, e1_str.unwrap()),
+    //         Op::Exists(v) => Self::exists_to_string(v, e1_str.unwrap()),
+    //         Op::Deref(width) => {
+    //             Self::deref_app_to_string(width / utils::BYTE_SIZE, e1_str.unwrap(), old)
+    //         }
+    //         Op::Old => {
+    //             Self::spec_expr_to_string(
+    //             func_name,
+    //             opapp
+    //                 .operands
+    //                 .get(0)
+    //                 .expect("Old operator is missing an expression."),
+    //             dwarf_ctx,
+    //             true,
+    //             bound_vars,
+    //             )
+    //         },
+    //         Op::Comp(cop) => Self::comp_app_to_string(cop, e1_str, e2_str),
+    //         Op::Bv(bvop) => Self::bv_app_to_string(bvop, e1_str, e2_str),
+    //         Op::Bool(bop) => Self::bool_app_to_string(bop, e1_str, e2_str),
+    //         Op::ArrayIndex => {
+    //             // Memory index is just the address itself
+    //             if opapp.operands[0].get_expect_var().name == system_model::MEM_VAR {
+    //                 return Self::spec_expr_to_string(
+    //                     func_name,
+    //                     &opapp.operands[1],
+    //                     dwarf_ctx,
+    //                     old,
+    //                     bound_vars,
+    //                 );
+    //             }
+    //             // Get expression expression type
+    //             let array = e1_str.unwrap();
+    //             let index = e2_str.unwrap();
+    //             let out_typ = opapp.operands[0].typ().get_array_out_type();
+    //             let out_typ_width = out_typ.get_expect_bv_width();
+    //             format!(
+    //                 "{}({}, {})",
+    //                 Self::array_index_macro_name(&(out_typ_width / utils::BYTE_SIZE)),
+    //                 array,
+    //                 index
+    //             )
+    //         }
+    //         Op::GetField(field) => {
+    //             let typ = opapp.operands[0].typ();
+    //             let struct_id = typ.get_struct_id();
+    //             format!(
+    //                 "{}({})",
+    //                 Self::get_field_macro_name(&struct_id, field),
+    //                 e1_str.unwrap()
+    //             )
+    //         }
+    //     }
+    // }
 
-    /// Specification variable to Uclid5 variable
-    /// Globals are shadowed by function variables
-    fn spec_var_to_string(_func_name: &str, v: &Var, dwarf_ctx: &DwarfCtx, old: bool, bound_vars: &mut HashSet<String>) -> String {
-        if v.name.chars().next().unwrap() == '$' {
-            // Special identifier
-            let name = &v.name[1..];
-            if name == "ret" {
-                format!("{}(a0)", if old && !bound_vars.contains(&v.name) { "old" } else { "" },)
-            } else {
-                format!("{}({})", if old && !bound_vars.contains(&v.name) { "old" } else { "" }, name)
-            }
-        } else if dwarf_ctx
-            .func_sigs()
-            .iter()
-            .find(|(_, fs)| fs.args.iter().find(|arg| arg.name == v.name).is_some())
-            .is_some()
-            || system_model::SYSTEM_VARS.contains(&&v.name[..])
-        {
-            // Function argument
-            format!("{}({})", if old && !bound_vars.contains(&v.name) { "old" } else { "" }, v.name.clone())
-        } else if dwarf_ctx
-            .global_vars()
-            .iter()
-            .find(|x| x.name == v.name)
-            .is_some()
-        {
-            // Global variable
-            format!("{}()", utils::global_var_ptr_name(&v.name[..]))
-        } else {
-            panic!("Unable to find variable {:?}", v);
-        }
-    }
+    // /// Specification variable to Uclid5 variable
+    // /// Globals are shadowed by function variables
+    // fn spec_var_to_string(_func_name: &str, v: &Var, dwarf_ctx: &DwarfCtx, old: bool, bound_vars: &mut HashSet<String>) -> String {
+    //     if v.name.chars().next().unwrap() == '$' {
+    //         // Special identifier
+    //         let name = &v.name[1..];
+    //         if name == "ret" {
+    //             format!("{}(a0)", if old && !bound_vars.contains(&v.name) { "old" } else { "" },)
+    //         } else {
+    //             format!("{}({})", if old && !bound_vars.contains(&v.name) { "old" } else { "" }, name)
+    //         }
+    //     } else if dwarf_ctx
+    //         .func_sigs()
+    //         .iter()
+    //         .find(|(_, fs)| fs.args.iter().find(|arg| arg.name == v.name).is_some())
+    //         .is_some()
+    //         || system_model::SYSTEM_VARS.contains(&&v.name[..])
+    //     {
+    //         // Function argument
+    //         format!("{}({})", if old && !bound_vars.contains(&v.name) { "old" } else { "" }, v.name.clone())
+    //     } else if dwarf_ctx
+    //         .global_vars()
+    //         .iter()
+    //         .find(|x| x.name == v.name)
+    //         .is_some()
+    //     {
+    //         // Global variable
+    //         format!("{}()", utils::global_var_ptr_name(&v.name[..]))
+    //     } else {
+    //         panic!("Unable to find variable {:?}", v);
+    //     }
+    // }
 }
 
 #[cfg(test)]

@@ -1,0 +1,174 @@
+use std::collections::HashSet;
+
+use crate::spec_lang::sl_ast as ast;
+use crate::spec_lang::sl_lexer::{Tok, LexError};
+
+grammar<'input>(input: &'input str);
+
+pub Spec: Box<ast::Spec> = {
+    "ensures" <e:BExpr> ";" => Box::new(ast::Spec::Ensures(e)),
+    "requires" <e:BExpr> ";" => Box::new(ast::Spec::Requires(e)),
+    "modifies" <ids:ModSet> ";" => Box::new(ast::Spec::Modifies(ids.iter().map(|s| s.to_string()).collect())),
+    "track" "[" <id:"id"> "]" <e:VExpr> ";" => Box::new(ast::Spec::Track(id.to_string(), e)),
+}
+
+pub ModSet: HashSet<&'input str> = {
+    <mut ms: ModSet> "," <id: "id"> => {
+        ms.insert(id);
+        ms
+    },
+    "id" => {
+        let mut ms = HashSet::new();
+        ms.insert(<>);
+        ms
+    },
+}
+
+pub Specs: Vec<Box<ast::Spec>> = {
+    <Spec*> => <>,
+}
+
+pub FuncSpec: Box<ast::FuncSpec> = {
+    "fun" <id:"id"> "{" <ss:Specs> "}" => Box::new(ast::FuncSpec{fname: id.to_string(), specs: ss}),
+}
+
+pub FuncSpecs: Vec<Box<ast::FuncSpec>> = {
+    <FuncSpec*> => <>,
+}
+
+pub BExpr: Box<ast::BExpr> = {
+    <e1:BExpr2> <op:BoolOp> <e2:BExpr> => Box::new(ast::BExpr::BOpApp(op, vec![e1, e2])),
+    <e1:VExpr> <op:CompOp> <e2:VExpr> => Box::new(ast::BExpr::COpApp(op, vec![e1, e2])),
+    BExpr2,
+}
+
+pub BExpr2: Box<ast::BExpr> = {
+    "true" => Box::new(ast::BExpr::True),
+    "false" => Box::new(ast::BExpr::False),
+    "(" <e: BExpr> ")" => e,
+}
+
+pub BoolOp: ast::BoolOp = {
+    "&" "&" => ast::BoolOp::Conj,
+    "!" => ast::BoolOp::Neg,
+    "=" "=" ">" => ast::BoolOp::Implies,
+}
+
+pub CompOp: ast::CompOp = {
+    ">" => ast::CompOp::Gt,
+    "<" => ast::CompOp::Lt,
+    ">" "=" => ast::CompOp::Geq,
+    "<" "=" => ast::CompOp::Leq,
+    ">" "_u" => ast::CompOp::Gtu,
+    "<" "_u" => ast::CompOp::Ltu,
+    ">" "=" "_u" => ast::CompOp::Geu,
+    "<" "=" "_u" => ast::CompOp::Leu,
+    "=" "=" => ast::CompOp::Equal,
+    "!" "=" => ast::CompOp::Nequal,
+}
+
+pub VExpr: Box<ast::VExpr> = {
+    <e1:VExpr> <op:ValueOp1> <e2:VExpr2> => Box::new(ast::VExpr::OpApp(op, vec![e1, e2])),
+    <a:Ident> "[" <ind:VExpr> "]" => Box::new(ast::VExpr::OpApp(ast::ValueOp::ArrayIndex, vec![a, ind])),
+    <s:VExpr> "." <f:Ident> => Box::new(ast::VExpr::OpApp(ast::ValueOp::GetField, vec![s, f])),
+    <bv:Ident> "[" <lo:VExpr> ":" <hi:VExpr> "]" => Box::new(ast::VExpr::OpApp(ast::ValueOp::Slice, vec![bv, lo, hi])),
+    VExpr2,
+}
+
+// Last precedence value operators
+pub ValueOp1: ast::ValueOp = {
+    "+" => ast::ValueOp::Add,
+    "-" => ast::ValueOp::Sub,
+}
+
+pub VExpr2: Box<ast::VExpr> = {
+    <e1:VExpr2> <op:ValueOp2> <e2:Term> => Box::new(ast::VExpr::OpApp(op, vec![e1, e2])),
+    Term,
+}
+
+// Second last precedence value operators
+pub ValueOp2: ast::ValueOp = {
+    "/" => ast::ValueOp::Div,
+    "*" => ast::ValueOp::Mul,
+}
+
+pub Term: Box<ast::VExpr> = {
+    "bool" => {
+        if let Tok::Bool(b) = <> {
+            Box::new(ast::VExpr::Bool(b))
+        } else {
+            panic!("Implementation error: bool should be Tok::Bool(..) enum type.")
+        }
+    },
+    "int" => {
+        if let Tok::Int(i) = <> {
+            Box::new(ast::VExpr::Int(i))
+        } else {
+            panic!("Implementation error: bool should be Tok::Int(..) enum type.")
+        }
+    },
+    "bv" => {
+        if let Tok::Bv { value, width } = <> {
+            Box::new(ast::VExpr::Bv{value, width})
+        } else {
+            panic!("Implementation error: bool should be Tok::Bv(..) enum type.")
+        }
+    },
+    Ident,
+    "(" <e:VExpr> ")" => e,
+}
+
+pub Ident: Box<ast::VExpr> = {
+    <d:"$"?> <id:"id"> => match d {
+        None => Box::new(ast::VExpr::Var(id.to_string())),
+        // FIXME: Special case for $ variables
+        Some(d) => Box::new(ast::VExpr::Var(id.to_string())),
+    }
+}
+
+extern {
+    type Location = usize;
+    type Error = LexError;
+    
+    enum Tok<'input> {
+        // Keywords;
+        "ensures" => Tok::Ensures,
+        "requires" => Tok::Requires,
+        "modifies" => Tok::Modifies,
+        "track" => Tok::Track,
+        "fun" => Tok::Fun,
+        "true" => Tok::True,
+        "false" => Tok::False,
+        "_u" => Tok::Nil,
+        // Identifier:
+        "id" => Tok::Id(<&'input str>),
+        // Primitives
+        "int" => Tok::Int(i64),
+        "bv" => Tok::Bv { value: u64, width: u16 },
+        "bool" => Tok::Bool(bool),
+        // Symbols:
+        ":" => Tok::Colon,          // :
+        ";" => Tok::Semi,           // ;
+        "," => Tok::Comma,          // ,
+        "." => Tok::Dot,            // .
+        "=" => Tok::Equals,         // =
+        ">" => Tok::GreaterThan,    // >
+        "<" => Tok::LessThan,       // <
+        "+" => Tok::Plus,           // +
+        "-" => Tok::Minus,          // -
+        "?" => Tok::Question,       // ?
+        "*" => Tok::Asterisk,       // *
+        "/" => Tok::Slash,          // /
+        "&" => Tok::Ampersand,      // &
+        "~" => Tok::Tilde,          // ~
+        "!" => Tok::Bang,           // !
+        "^" => Tok::Caret,          // ^
+        "$" => Tok::Dollar,         // $
+        "{" => Tok::LeftBrace,      // {
+        "[" => Tok::LeftBracket,    // [
+        "(" => Tok::LeftParen,      // (
+        "}" => Tok::RightBrace,     // }
+        "]" => Tok::RightBracket,   // ]
+        ")" => Tok::RightParen,     // )
+    }
+}

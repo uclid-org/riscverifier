@@ -10,10 +10,10 @@ use crate::ir::*;
 use crate::readers::disassembler;
 use crate::readers::disassembler::Inst;
 use crate::readers::dwarfreader::DwarfCtx;
+use crate::spec_lang::sl_ast;
 use crate::system_model;
 use crate::utils;
 
-/// ========== Translator ==========================================
 /// Instruction level translator from RISC-V to verification IR
 pub struct Translator<'t, I>
 where
@@ -33,7 +33,7 @@ where
     /// DWARF debugging information
     dwarf_ctx: &'t DwarfCtx,
     /// Map of specs from function name to a list of pre/post conditions
-    specs_map: &'t HashMap<String, Vec<Spec>>,
+    specs_map: &'t HashMap<String, Vec<Box<sl_ast::Spec>>>,
     /// Flag indicating if the translator will ignore specs
     /// When true, all function pre and post conditions are ignored
     /// and functions are all inlined
@@ -63,7 +63,7 @@ where
         ignored_funcs: &'t HashSet<&'t str>,
         verify_funcs: &'t Vec<&'t str>,
         dwarf_ctx: &'t DwarfCtx,
-        specs_map: &'t HashMap<String, Vec<Spec>>,
+        specs_map: &'t HashMap<String, Vec<Box<sl_ast::Spec>>>,
         ignore_specs: bool,
     ) -> Self {
         Translator {
@@ -82,7 +82,10 @@ where
             _phantom_i: PhantomData,
         }
     }
-    /// ================== TRANSLATOR CONTEXT =====================
+    // =============================================================================
+    // ==================== Translator context =====================================
+    // =============================================================================
+
     /// Clear translator context
     pub fn clear(&mut self) {
         self.model = Model::new(&self.model.name);
@@ -102,7 +105,10 @@ where
         }
         label_to_addr
     }
-    /// =================== TRANSLATOR OUTPUT ====================
+
+    // =============================================================================
+    // ==================== Printing functions =====================================
+    // =============================================================================
     /// Outputs the model into output stream
     pub fn print_model(&self) {
         println!(
@@ -116,7 +122,10 @@ where
             )
         );
     }
-    /// ========================= FUNCTION GENERATION ========================
+    // =============================================================================
+    // ==================== Main translation functions =============================
+    // =============================================================================
+
     /// Generates a stub function model
     pub fn gen_func_model_stub(&mut self, func_name: &str) {
         let arg_exprs = self
@@ -129,7 +138,7 @@ where
             .collect();
         let mod_set = self.mod_set_from_spec_map(func_name);
         let requires = if !self.ignore_specs {
-            self.requires_from_spec_map(func_name, &arg_exprs).ok()
+            self.requires_from_spec_map(func_name)
         } else {
             None
         };
@@ -191,7 +200,6 @@ where
             .map(|(addr, bb)| {
                 let bb_proc_name = self.bb_proc_name(*addr);
                 let body = self.cfg_node_to_block(bb);
-                // let mod_set = self.mod_set(bb);
                 let mod_set = self.infer_mod_set(&body);
                 FuncModel::new(
                     &bb_proc_name,
@@ -265,17 +273,20 @@ where
             })
             .collect();
         // Translate specs
-        let requires = if !self.ignore_specs {
-            self.requires_from_spec_map(func_name, &arg_exprs).ok()
-        } else {
-            None
-        };
-        let ensures = if !self.ignore_specs {
-            self.ensures_from_spec_map(func_name)
-        } else {
-            None
-        };
-        let tracked = self.tracked_from_spec_map(func_name);
+        // let requires = if !self.ignore_specs {
+        //     self.requires_from_spec_map(func_name, &arg_exprs).ok()
+        // } else {
+        //     None
+        // };
+        // let ensures = if !self.ignore_specs {
+        //     self.ensures_from_spec_map(func_name)
+        // } else {
+        //     None
+        // };
+        // let tracked = self.tracked_from_spec_map(func_name);
+        let requires = None;
+        let ensures = None;
+        let tracked = None;
         // Create the procedure body
         let body = self.cfg_to_symbolic_blk(&func_entry, &func_cfg);
         // let ret = self.func_ret_type(func_name);
@@ -294,7 +305,7 @@ where
             self.ignore_specs,
         ));
     }
-    /// ========================== HELPER FUNCTIONS =========================
+
     /// Returns the inferred modifies set
     fn infer_mod_set(&self, stmt: &Stmt) -> HashSet<String> {
         let mut mod_set = HashSet::new();
@@ -632,10 +643,7 @@ where
                     // the zero register is used as a placeholder for
                     // writing to in the verification models
                     "zero" => srcs.push(Expr::bv_lit(0, self.xlen)),
-                    _ => srcs.push(Expr::var(
-                        reg_name,
-                        system_model::bv_type(self.xlen),
-                    )),
+                    _ => srcs.push(Expr::var(reg_name, system_model::bv_type(self.xlen))),
                 }
                 if reg.has_offset() {
                     srcs.push(Expr::bv_lit(reg.get_reg_offset() as u64, self.xlen));
@@ -927,170 +935,83 @@ where
         })
     }
 
-    /// Returns the modifies statments from the specificaiton map for the given function
-    fn mod_set_from_spec_map(&mut self, func_name: &str) -> Option<HashSet<String>> {
-        let mod_set = self.specs_map.get(func_name).and_then(|spec_vec| {
-            let flat_mod_set = spec_vec
-                .iter()
-                .cloned()
-                .filter(|spec| spec.is_modifies())
-                .map(|spec| {
-                    spec.mod_set()
-                        .iter()
-                        .map(|v| v.name.clone())
-                        .collect::<Vec<String>>()
-                })
-                .flatten()
-                .collect::<HashSet<String>>();
-            Some(flat_mod_set)
-        });
-        if let Some(ms) = &mod_set {
-            self.mod_set_map.insert(func_name.to_string(), ms.clone());
-        }
-        mod_set
-    }
     /// Returns the entry address of the function named `func_name`
     fn func_entry_addr(&self, func_name: &str) -> Option<&u64> {
         self.labels_to_addr.get(func_name)
     }
-    /// Returns the requires statments from the specification map for the given function
-    fn requires_from_spec_map(
+
+    // =============================================================================
+    // ==================== Specification translation ==============================
+    // =============================================================================
+
+    /// Returns a vector of specifications from function named `func_name` if
+    /// it exists in the specification map `spec_map`
+    /// It filters out the specifications according to sfilter
+    fn filter_from_spec_map(
         &self,
         func_name: &str,
-        arg_decls: &Vec<Expr>,
-    ) -> Result<Vec<Spec>, utils::Error> {
-        let mut requires = self
-            .specs_map
-            .get(func_name)
-            .and_then(|spec_vec| {
-                Some(
-                    spec_vec
-                        .iter()
-                        .cloned()
-                        .filter(|spec| spec.is_requires())
-                        .map(|spec| spec)
-                        .collect::<Vec<Spec>>(),
-                )
-            })
-            .map_or(vec![], |v| v);
-        // Add pc entry constraint
-        let func_entry = *self
-            .func_entry_addr(func_name)
-            .expect(&format!("Could not find {}'s entry address.", func_name));
-        requires.push(Spec::Requires(Expr::op_app(
-            Op::Comp(CompOp::Equality),
-            vec![
-                Expr::Var(
-                    system_model::pc_var(self.xlen),
-                    system_model::bv_type(self.xlen),
-                ),
-                Expr::bv_lit(func_entry, self.xlen),
-            ],
-        )));
-        // Add returned flag initially 0 constraint
-        requires.push(Spec::Requires(Expr::op_app(
-            Op::Comp(CompOp::Equality),
-            vec![
-                Expr::var(system_model::RETURNED_FLAG, system_model::bv_type(1)),
-                Expr::bv_lit(0, 1),
-            ],
-        )));
-        // Add argument constraints
-        for (i, arg) in arg_decls.iter().enumerate() {
-            let var = arg.get_expect_var();
-            let extend_width = self.xlen - var.typ.get_expect_bv_width();
-            requires.push(Spec::Requires(Expr::op_app(
-                Op::Comp(CompOp::Equality),
-                vec![
-                    Expr::var(&format!("$a{}", i), Type::Bv { w: self.xlen }),
-                    Expr::op_app(
-                        Op::Bv(BVOp::ZeroExt),
-                        vec![
-                            arg.clone(),
-                            Expr::bv_lit(extend_width, var.typ.get_expect_bv_width()),
-                        ],
-                    ),
-                ],
-            )));
-        }
-        Ok(requires)
-    }
-    /// TODO: Add this to the models/prelude.ucl file as a define macro?
-    /// Returns ensure statments from specification map for the given function
-    /// Also adds various ensures common across all functions:
-    ///     (1) callee return constraint
-    ///     (2) returned flag is true
-    fn ensures_from_spec_map(&self, func_name: &str) -> Option<Vec<Spec>> {
-        // Ensures statements from the specification file
-        let mut ensures = self
-            .specs_map
-            .get(func_name)
-            .and_then(|spec_vec| {
-                let ensures = spec_vec
-                    .iter()
-                    .cloned()
-                    .filter(|spec| spec.is_ensures())
-                    .map(|spec| spec)
-                    .collect::<Vec<Spec>>();
-                Some(ensures)
-            })
-            .map_or(vec![], |v| v);
-        // (1) callee return constraint:
-        //          ensures (pc == old(ra)[63:1] ++ 0bv1)
-        let mod_set = self.mod_set_map.get(func_name);
-        let ra = if mod_set.is_some() && mod_set.unwrap().contains("ra") {
-            Expr::op_app(
-                Op::Old,
-                vec![Expr::var(
-                    system_model::RA,
-                    system_model::bv_type(self.xlen),
-                )],
-            )
-        } else {
-            Expr::var(system_model::RA, system_model::bv_type(self.xlen))
+        sfilter: fn(&sl_ast::Spec) -> bool,
+    ) -> Option<Vec<Box<sl_ast::Spec>>> {
+        let specs = match self.specs_map.get(func_name) {
+            Some(spec_vec) => spec_vec
+                .iter()
+                .filter(|spec| sfilter(&***spec))
+                .map(|spec| Box::clone(spec))
+                .collect::<Vec<Box<sl_ast::Spec>>>(),
+            None => return None,
         };
-        ensures.push(Spec::Ensures(Expr::op_app(
-            Op::Comp(CompOp::Equality),
-            vec![
-                Expr::Var(
-                    system_model::pc_var(self.xlen),
-                    system_model::bv_type(self.xlen),
-                ),
-                Expr::op_app(
-                    Op::Bv(BVOp::Concat),
-                    vec![
-                        Expr::op_app(Op::Bv(BVOp::Slice { l: 63, r: 1 }), vec![ra]),
-                        Expr::bv_lit(0, 1),
-                    ],
-                ),
-            ],
-        )));
-        // (2) returned flag is true at the end of the function
-        //      ensures (returned == true);
-        ensures.push(Spec::Ensures(Expr::op_app(
-            Op::Comp(CompOp::Equality),
-            vec![
-                Expr::var(system_model::RETURNED_FLAG, system_model::bv_type(1)),
-                Expr::bv_lit(1, 1),
-            ],
-        )));
-        Some(ensures)
+        Some(specs)
     }
-    fn tracked_from_spec_map(&self, func_name: &str) -> Option<Vec<Spec>> {
-        // Ensures statements from the specification file
-        let tracked = self
-            .specs_map
-            .get(func_name)
-            .and_then(|spec_vec| {
-                let tracked = spec_vec
+
+    /// Returns a single hash set containing all variables in the modifies set(s)
+    fn mod_set_from_spec_map(&mut self, func_name: &str) -> Option<HashSet<String>> {
+        let sfilter = |s: &sl_ast::Spec| match s {
+            sl_ast::Spec::Modifies(..) => true,
+            _ => false,
+        };
+        let specs = self.filter_from_spec_map(func_name, sfilter);
+        // Combine the modifies set if there are any (we only need one)
+        match specs {
+            Some(specs) => {
+                let combined_modset = specs
                     .iter()
+                    .map(|spec| match &**spec {
+                        sl_ast::Spec::Modifies(hs) => hs,
+                        _ => panic!("Should have filtered non modifies specifications."),
+                    })
+                    .flatten()
                     .cloned()
-                    .filter(|spec| spec.is_track())
-                    .map(|spec| spec)
-                    .collect::<Vec<Spec>>();
-                Some(tracked)
-            })
-            .map_or(vec![], |v| v);
-        Some(tracked)
+                    .collect::<HashSet<String>>();
+                Some(combined_modset)
+            }
+            None => None,
+        }
+    }
+
+    /// Returns a vector of require statements for function `func_name`
+    fn requires_from_spec_map(&self, func_name: &str) -> Option<Vec<Box<sl_ast::Spec>>> {
+        let sfilter = |s: &sl_ast::Spec| match s {
+            sl_ast::Spec::Requires(..) => true,
+            _ => false,
+        };
+        self.filter_from_spec_map(func_name, sfilter)
+    }
+
+    /// Returns a vector of ensure statements for function `func_name`
+    fn ensures_from_spec_map(&self, func_name: &str) -> Option<Vec<Box<sl_ast::Spec>>> {
+        let sfilter = |s: &sl_ast::Spec| match s {
+            sl_ast::Spec::Ensures(..) => true,
+            _ => false,
+        };
+        self.filter_from_spec_map(func_name, sfilter)
+    }
+
+    /// Returns a vector of track statements for function `func_name`
+    fn tracked_from_spec_map(&self, func_name: &str) -> Option<Vec<Box<sl_ast::Spec>>> {
+        let sfilter = |s: &sl_ast::Spec| match s {
+            sl_ast::Spec::Track(..) => true,
+            _ => false,
+        };
+        self.filter_from_spec_map(func_name, sfilter)
     }
 }

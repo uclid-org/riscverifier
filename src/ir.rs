@@ -4,6 +4,7 @@ use std::fmt;
 use std::rc::Rc;
 
 use crate::readers::dwarfreader::DwarfCtx;
+use crate::spec_lang::sl_ast;
 
 /// =======================================================
 /// ==================== Types ============================
@@ -76,10 +77,7 @@ pub enum Expr {
 impl Expr {
     pub fn typ(&self) -> &Type {
         match self {
-            Expr::Literal(_, t)
-            | Expr::Var(_, t)
-            | Expr::OpApp(_, t)
-            | Expr::FuncApp(_, t) => &t,
+            Expr::Literal(_, t) | Expr::Var(_, t) | Expr::OpApp(_, t) | Expr::FuncApp(_, t) => &t,
         }
     }
     pub fn get_expect_var(&self) -> &Var {
@@ -323,9 +321,9 @@ impl FuncModel {
         entry_addr: u64,
         arg_decls: Vec<Expr>,
         ret_decl: Option<Type>,
-        requires: Option<Vec<Spec>>,
-        ensures: Option<Vec<Spec>>,
-        tracked: Option<Vec<Spec>>,
+        requires: Option<Vec<Box<sl_ast::Spec>>>,
+        ensures: Option<Vec<Box<sl_ast::Spec>>>,
+        tracked: Option<Vec<Box<sl_ast::Spec>>>,
         mod_set: Option<HashSet<String>>,
         body: Stmt,
         inline: bool,
@@ -354,9 +352,9 @@ pub struct FuncSig {
     pub entry_addr: u64,
     pub arg_decls: Vec<Expr>,
     pub ret_decl: Option<Type>,
-    pub requires: Vec<Spec>,
-    pub ensures: Vec<Spec>,
-    pub tracked: Vec<Spec>,
+    pub requires: Vec<Box<sl_ast::Spec>>,
+    pub ensures: Vec<Box<sl_ast::Spec>>,
+    pub tracked: Vec<Box<sl_ast::Spec>>,
     pub mod_set: HashSet<String>,
 }
 impl FuncSig {
@@ -365,9 +363,9 @@ impl FuncSig {
         entry_addr: u64,
         arg_decls: Vec<Expr>,
         ret_decl: Option<Type>,
-        requires: Vec<Spec>,
-        ensures: Vec<Spec>,
-        tracked: Vec<Spec>,
+        requires: Vec<Box<sl_ast::Spec>>,
+        ensures: Vec<Box<sl_ast::Spec>>,
+        tracked: Vec<Box<sl_ast::Spec>>,
         mod_set: HashSet<String>,
     ) -> Self {
         assert!(
@@ -386,61 +384,6 @@ impl FuncSig {
         }
     }
 }
-
-/// =======================================================
-/// ==================== Specification ====================
-/// =======================================================
-#[derive(Debug, Clone, PartialEq)]
-pub enum Spec {
-    Requires(Expr),
-    Ensures(Expr),
-    Modifies(HashSet<Var>),
-    /// Tracking variable name and the corresponding expression
-    Track(String, Expr),
-}
-impl Spec {
-    pub fn expr(&self) -> &Expr {
-        match &self {
-            Spec::Requires(e) | Spec::Ensures(e) | Spec::Track(_, e) => e,
-            _ => panic!("Spec does not contain an expression."),
-        }
-    }
-    pub fn mod_set(&self) -> &HashSet<Var> {
-        match &self {
-            Spec::Modifies(hs) => hs,
-            _ => panic!("Spec is not a modifies statement."),
-        }
-    }
-    pub fn is_requires(&self) -> bool {
-        if let Spec::Requires(_) = self {
-            true
-        } else {
-            false
-        }
-    }
-    pub fn is_ensures(&self) -> bool {
-        if let Spec::Ensures(_) = self {
-            true
-        } else {
-            false
-        }
-    }
-    pub fn is_modifies(&self) -> bool {
-        if let Spec::Modifies(_) = self {
-            true
-        } else {
-            false
-        }
-    }
-    pub fn is_track(&self) -> bool {
-        if let Spec::Track(_, _) = self {
-            true
-        } else {
-            false
-        }
-    }
-}
-
 
 /// =======================================================
 /// ============== Verification Model =====================
@@ -547,7 +490,7 @@ pub trait IRInterface: fmt::Debug {
     fn block_to_string(blk: &Vec<Box<Stmt>>, xlen: &u64) -> String;
     fn comment_to_string(comment: &String) -> String;
     fn func_model_to_string(fm: &FuncModel, dwarf_ctx: &DwarfCtx, xlen: &u64) -> String;
-    fn track_proc(fm: &FuncModel, dwarf_ctx: &DwarfCtx) -> String;
+    // fn track_proc(fm: &FuncModel, dwarf_ctx: &DwarfCtx) -> String;
     // IR to model string
     fn model_to_string(
         xlen: &u64,
@@ -556,30 +499,6 @@ pub trait IRInterface: fmt::Debug {
         ignored_funcs: &HashSet<&str>,
         verify_funcs: &Vec<&str>,
     ) -> String;
-    // Specification langauge
-    fn spec_expr_to_string(
-        func_name: &str,
-        expr: &Expr,
-        dwarf_ctx: &DwarfCtx,
-        old: bool,
-        bound_vars: &mut HashSet<String>,
-    ) -> String {
-        match expr {
-            Expr::Literal(l, _) => Self::lit_to_string(l),
-            Expr::FuncApp(fapp, _) => Self::spec_fapp_to_string(func_name, fapp, dwarf_ctx, old, bound_vars),
-            Expr::OpApp(opapp, _) => Self::spec_opapp_to_string(func_name, opapp, dwarf_ctx, old, bound_vars),
-            Expr::Var(v, _) => {
-                Self::spec_var_to_string(func_name, v, dwarf_ctx, old, bound_vars)
-            }
-        }
-    }
-    fn spec_fapp_to_string(func_name: &str, fapp: &FuncApp, dwarf_ctx: &DwarfCtx, old: bool, bound_vars: &mut HashSet<String>) -> String;
-    fn spec_opapp_to_string(
-        func_name: &str,
-        opapp: &OpApp,
-        dwarf_ctx: &DwarfCtx,
-        old: bool,
-        bound_vars: &mut HashSet<String>,
-    ) -> String;
-    fn spec_var_to_string(func_name: &str, v: &Var, dwarf_ctx: &DwarfCtx, old: bool, bound_vars: &mut HashSet<String>) -> String;
+    /// Specifications
+    
 }

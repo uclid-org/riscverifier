@@ -2,6 +2,10 @@
 extern crate log;
 extern crate env_logger;
 
+#[macro_use]
+extern crate lalrpop_util;
+lalrpop_mod!(pub riscv_spec_lang, "/spec_lang/riscv_spec_lang.rs"); // synthesized by LALRPOP
+
 extern crate clap;
 use clap::{App, Arg};
 
@@ -20,7 +24,9 @@ use dwarf_interfaces::cdwarfinterface::CDwarfInterface;
 mod readers;
 use readers::disassembler::Disassembler;
 use readers::dwarfreader::DwarfReader;
-use readers::specreader::SpecReader;
+
+mod spec_lang;
+use spec_lang::sl_parser;
 
 mod translator;
 use translator::Translator;
@@ -132,12 +138,12 @@ fn main() {
         .value_of("function")
         .map_or(vec![], |lst| lst.split(",").collect::<Vec<&str>>());
     // Specification
-    let spec_reader = SpecReader::new(xlen, dwarf_reader.ctx());
+    let spec_parser = sl_parser::SpecParser::new(xlen, dwarf_reader.ctx());
     let spec_files = matches
         .value_of("spec")
         .map_or(vec![], |lst| lst.split(",").collect::<Vec<&str>>());
-    let specs_map = spec_reader
-        .process_specs_files(&spec_files)
+    let specs_map = spec_parser
+        .process_spec_files(&spec_files)
         .expect("Could not read spec.");
     // Get ignored functions
     let ignored_funcs = matches
