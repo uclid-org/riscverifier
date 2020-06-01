@@ -302,9 +302,6 @@ where
         mod_set.insert(system_model::RETURNED_FLAG.to_string());
         mod_set.insert(system_model::MEM_VAR.to_string());
         match stmt {
-            Stmt::Havoc(rc_var) => {
-                mod_set.insert(rc_var.name.clone());
-            }
             Stmt::FuncCall(fc) => {
                 // Add modifies set if it's a function call
                 if let Some(fc_mod_set) = self.mod_set_map.get(&fc.func_name) {
@@ -324,7 +321,7 @@ where
                     .iter()
                     .map(|e| match e {
                         // Either the LHS is a register, returned, pc, etc
-                        Expr::Var(v, _) | Expr::Const(v, _) => v.name.clone(),
+                        Expr::Var(v, _) => v.name.clone(),
                         // Or memory (for stores)
                         _ => system_model::MEM_VAR.to_string(),
                     })
@@ -404,7 +401,7 @@ where
                             Expr::var(&format!("a{}", i), arg_var.typ.clone())
                         })
                         .collect::<Vec<_>>();
-                    let mut lhss = vec![];
+                    let lhss = vec![];
                     // if let Some(_) = self.func_ret_type(&f_name) {
                     //     lhss.push(Expr::var(
                     //         system_model::A0,
@@ -609,40 +606,6 @@ where
             stmt_vec.push(Box::new(self.al_to_ir_stmt(&al)));
         }
         Stmt::Block(stmt_vec)
-    }
-    /// Returns a call to the corresponding instruction
-    fn al_to_ir(&self, al: &Rc<disassembler::AssemblyLine>) -> Stmt {
-        let op_call = self.inst_proc_name(al);
-        // Outputs of the function call
-        let mut lhs = vec![];
-        let mut regs: [Option<&disassembler::InstOperand>; 2] = [al.rd(), al.csr()];
-        for reg_op in regs.iter_mut() {
-            if let Some(reg) = reg_op {
-                lhs.push(Expr::var(
-                    &reg.get_reg_name()[..],
-                    system_model::bv_type(self.xlen),
-                ));
-                assert!(!reg.has_offset());
-            }
-        }
-        // Inputs to the function call
-        let mut operands = vec![];
-        let mut regs: [Option<&disassembler::InstOperand>; 3] = [al.rs1(), al.rs2(), al.csr()];
-        for reg_op in regs.iter_mut() {
-            if let Some(reg) = reg_op {
-                operands.push(Expr::var(
-                    &reg.get_reg_name()[..],
-                    system_model::bv_type(self.xlen),
-                ));
-                if reg.has_offset() {
-                    operands.push(Expr::bv_lit(reg.get_reg_offset() as u64, self.xlen));
-                }
-            }
-        }
-        if let Some(imm) = al.imm() {
-            operands.push(Expr::bv_lit(imm.get_imm_val() as u64, self.xlen));
-        }
-        Stmt::func_call(op_call, lhs, operands)
     }
     /// Returns the statment containing the instruction specs
     fn al_to_ir_stmt(&self, al: &Rc<disassembler::AssemblyLine>) -> Stmt {
@@ -893,10 +856,6 @@ where
             _ => system_model::unimplemented_inst(al.op(), self.xlen),
         }
     }
-    /// Returns the procedure name corresponding to the instruction given
-    fn inst_proc_name(&self, al: &Rc<disassembler::AssemblyLine>) -> String {
-        format!("{}_proc", al.op())
-    }
     /// Constructs and returns a pointer to a Cfg with entry address addr
     fn get_func_cfg(&mut self, addr: u64) -> Rc<cfg::Cfg<disassembler::AssemblyLine>> {
         if let Some(cfg_rc) = self.cfg_memo.get(&addr) {
@@ -954,6 +913,10 @@ where
             })
             .map_or(vec![], |v| v)
     }
+
+    #[allow(dead_code)]
+    /// DEAD_CODE: Function is currently not used because we don't
+    ///            use the return type in the function sig (for now).
     /// Returns the return type of a function from the DWARF context
     fn func_ret_type(&self, func_name: &str) -> Option<Type> {
         self.dwarf_ctx.func_sig(func_name).ok().and_then(|fs| {

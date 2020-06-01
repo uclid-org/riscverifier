@@ -196,7 +196,6 @@ pub enum DwarfAttributeValue {
     StringAttr(String),
     BooleanAttr(bool),
 }
-#[allow(dead_code)]
 impl DwarfAttributeValue {
     /// Returns the numeric value if it's a NumericAttr
     pub fn get_expect_num_val(&self) -> &u64 {
@@ -209,13 +208,6 @@ impl DwarfAttributeValue {
     pub fn get_expect_str_val(&self) -> &String {
         match self {
             DwarfAttributeValue::StringAttr(v) => v,
-            _ => panic!("[get_expect_num_val] Not a numeric attribute."),
-        }
-    }
-    /// Returns the boolean value if it's a BooleanAttr
-    pub fn get_expect_bool_val(&self) -> &bool {
-        match self {
-            DwarfAttributeValue::BooleanAttr(v) => v,
             _ => panic!("[get_expect_num_val] Not a numeric attribute."),
         }
     }

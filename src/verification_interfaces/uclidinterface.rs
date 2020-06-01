@@ -394,8 +394,6 @@ impl IRInterface for Uclid5Interface {
             BVOp::And => format!("({} & {})", e1.unwrap(), e2.unwrap()),
             BVOp::Or => format!("({} | {})", e1.unwrap(), e2.unwrap()),
             BVOp::Xor => format!("({} ^ {})", e1.unwrap(), e2.unwrap()),
-            BVOp::Not => format!("~{}", e1.unwrap()),
-            BVOp::UnaryMinus => format!("-{}", e1.unwrap()),
             BVOp::SignExt => match e2.unwrap().split("bv").next().unwrap() {
                 width if width != "0" => format!("bv_sign_extend({}, {})", width, e1.unwrap()),
                 _ => format!("{}", e1.unwrap()),
@@ -409,7 +407,6 @@ impl IRInterface for Uclid5Interface {
             BVOp::ARightShift => format!("bv_a_right_shift({}, {})", e2.unwrap(), e1.unwrap()),
             BVOp::Concat => format!("({} ++ {})", e1.unwrap(), e2.unwrap()),
             BVOp::Slice { l, r } => format!("{}[{}:{}]", e1.unwrap(), l, r),
-            _ => panic!("[bvop_to_string] Unimplemented {:#?}.", bvop),
         }
     }
     fn bool_app_to_string(bop: &BoolOp, e1: Option<String>, e2: Option<String>) -> String {
@@ -442,10 +439,7 @@ impl IRInterface for Uclid5Interface {
     /// Statements to string
     fn stmt_to_string(stmt: &Stmt, xlen: &u64) -> String {
         match stmt {
-            Stmt::Skip => Self::skip_to_string(),
-            Stmt::Assert(expr) => Self::assert_to_string(&expr, xlen),
             Stmt::Assume(expr) => Self::assume_to_string(&expr, xlen),
-            Stmt::Havoc(var) => Self::havoc_to_string(var),
             Stmt::FuncCall(fc) => Self::func_call_to_string(&fc, xlen),
             Stmt::Assign(assign) => Self::assign_to_string(&assign, xlen),
             Stmt::IfThenElse(ite) => Self::ite_to_string(&ite, xlen),

@@ -5,8 +5,9 @@ use std::rc::Rc;
 
 use crate::readers::dwarfreader::DwarfCtx;
 
-/// Types
-#[allow(dead_code)]
+/// =======================================================
+/// ==================== Types ============================
+/// =======================================================
 #[derive(Debug, PartialEq, Eq, Hash, Clone)]
 pub enum Type {
     Unknown,
@@ -62,13 +63,13 @@ impl Type {
     }
 }
 
-/// Expressions
-#[allow(dead_code)]
+/// =======================================================
+/// ==================== Expressions ======================
+/// =======================================================
 #[derive(Debug, PartialEq, Eq, Hash, Clone)]
 pub enum Expr {
     Literal(Literal, Type),
     Var(Var, Type),
-    Const(Var, Type),
     OpApp(OpApp, Type),
     FuncApp(FuncApp, Type),
 }
@@ -77,23 +78,13 @@ impl Expr {
         match self {
             Expr::Literal(_, t)
             | Expr::Var(_, t)
-            | Expr::Const(_, t)
             | Expr::OpApp(_, t)
             | Expr::FuncApp(_, t) => &t,
         }
     }
-    pub fn contains_old(&self) -> bool {
-        match self {
-            Expr::OpApp(opapp, _) => opapp
-                .operands
-                .iter()
-                .fold(false, |acc, operand| acc || operand.contains_old()),
-            _ => false,
-        }
-    }
     pub fn get_expect_var(&self) -> &Var {
         match self {
-            Expr::Var(v, _) | Expr::Const(v, _) => v,
+            Expr::Var(v, _) => v,
             _ => panic!("Not a variable/constant: {:#?}.", self),
         }
     }
@@ -156,7 +147,6 @@ impl Expr {
     }
 }
 /// Literals
-#[allow(dead_code)]
 #[derive(Debug, PartialEq, Eq, Hash, Clone)]
 pub enum Literal {
     Bv { val: u64, width: u64 },
@@ -193,7 +183,6 @@ pub struct OpApp {
     pub operands: Vec<Expr>,
 }
 /// Operators
-#[allow(dead_code)]
 #[derive(Debug, PartialEq, Eq, Hash, Clone)]
 pub enum Op {
     Forall(Var),
@@ -207,7 +196,6 @@ pub enum Op {
     GetField(String),
 }
 /// Comparison operators
-#[allow(dead_code)]
 #[derive(Debug, PartialEq, Eq, Hash, Clone)]
 pub enum CompOp {
     Equality,
@@ -222,7 +210,6 @@ pub enum CompOp {
     Geu, // >=_u
 }
 /// BV operators
-#[allow(dead_code)]
 #[derive(Debug, PartialEq, Eq, Hash, Clone)]
 pub enum BVOp {
     Add,
@@ -231,8 +218,6 @@ pub enum BVOp {
     And,
     Or,
     Xor,
-    Not,
-    UnaryMinus,
     SignExt,
     ZeroExt,
     LeftShift,
@@ -242,7 +227,6 @@ pub enum BVOp {
     Slice { l: u64, r: u64 },
 }
 /// Boolean operators
-#[allow(dead_code)]
 #[derive(Debug, PartialEq, Eq, Hash, Clone)]
 pub enum BoolOp {
     Conj, // and: &&
@@ -258,14 +242,12 @@ pub struct FuncApp {
     pub operands: Vec<Expr>,
 }
 
-/// Statements
-#[allow(dead_code)]
+/// =======================================================
+/// ==================== Statements =======================
+/// =======================================================
 #[derive(Debug, Clone)]
 pub enum Stmt {
-    Skip,
-    Assert(Expr),
     Assume(Expr),
-    Havoc(Rc<Var>),
     FuncCall(FuncCall),
     Assign(Assign),
     IfThenElse(IfThenElse),
@@ -304,7 +286,6 @@ impl Stmt {
         Stmt::Assign(Assign { lhs, rhs })
     }
 }
-
 /// Function call statement
 #[derive(Debug, Clone)]
 pub struct FuncCall {
@@ -325,7 +306,10 @@ pub struct IfThenElse {
     pub then_stmt: Box<Stmt>,
     pub else_stmt: Option<Box<Stmt>>,
 }
-/// Verification model datatypes
+
+/// =======================================================
+/// ==================== Procedure Model ==================
+/// =======================================================
 #[derive(Debug, Clone)]
 pub struct FuncModel {
     pub sig: FuncSig,
@@ -402,6 +386,10 @@ impl FuncSig {
         }
     }
 }
+
+/// =======================================================
+/// ==================== Specification ====================
+/// =======================================================
 #[derive(Debug, Clone, PartialEq)]
 pub enum Spec {
     Requires(Expr),
@@ -452,7 +440,11 @@ impl Spec {
         }
     }
 }
-/// Verification Model
+
+
+/// =======================================================
+/// ============== Verification Model =====================
+/// =======================================================
 #[derive(Debug)]
 pub struct Model {
     pub name: String,
@@ -492,6 +484,9 @@ impl Model {
     }
 }
 
+/// =======================================================
+/// ==================== IR Interface =====================
+/// =======================================================
 /// This intermediate representation (IR) interface
 /// contains the function declarations to define for a
 /// verification engine
@@ -502,7 +497,7 @@ pub trait IRInterface: fmt::Debug {
             Expr::Literal(l, _) => Self::lit_to_string(l),
             Expr::FuncApp(fapp, _) => Self::fapp_to_string(fapp, xlen),
             Expr::OpApp(opapp, _) => Self::opapp_to_string(opapp, xlen),
-            Expr::Var(v, _) | Expr::Const(v, _) => Self::var_to_string(v),
+            Expr::Var(v, _) => Self::var_to_string(v),
         }
     }
     fn opapp_to_string(opapp: &OpApp, xlen: &u64) -> String {
@@ -573,7 +568,7 @@ pub trait IRInterface: fmt::Debug {
             Expr::Literal(l, _) => Self::lit_to_string(l),
             Expr::FuncApp(fapp, _) => Self::spec_fapp_to_string(func_name, fapp, dwarf_ctx, old, bound_vars),
             Expr::OpApp(opapp, _) => Self::spec_opapp_to_string(func_name, opapp, dwarf_ctx, old, bound_vars),
-            Expr::Var(v, _) | Expr::Const(v, _) => {
+            Expr::Var(v, _) => {
                 Self::spec_var_to_string(func_name, v, dwarf_ctx, old, bound_vars)
             }
         }
