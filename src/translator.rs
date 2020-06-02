@@ -6,7 +6,8 @@ use std::rc::Rc;
 use topological_sort::TopologicalSort;
 
 use crate::datastructures::cfg;
-use crate::ir::*;
+use crate::ast::*;
+use crate::ir_interface::IRInterface;
 use crate::readers::disassembler;
 use crate::readers::disassembler::Inst;
 use crate::readers::dwarfreader::DwarfCtx;

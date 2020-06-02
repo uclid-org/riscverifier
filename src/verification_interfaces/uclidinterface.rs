@@ -2,7 +2,8 @@ use std::collections::HashSet;
 use std::fs;
 use std::rc::Rc;
 
-use crate::ir::*;
+use crate::ast::*;
+use crate::ir_interface::IRInterface;
 use crate::readers::dwarfreader::{DwarfCtx, DwarfTypeDefn, DwarfVar};
 // use crate::system_model;
 use crate::utils;

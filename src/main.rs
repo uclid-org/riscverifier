@@ -39,7 +39,9 @@ use datastructures::cfg::BasicBlock;
 
 mod system_model;
 
-mod ir;
+mod ast;
+
+mod ir_interface;
 
 mod utils;
 

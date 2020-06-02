@@ -1,6 +1,6 @@
 use std::collections::HashSet;
 
-use crate::ir::*;
+use crate::ast::*;
 use crate::utils;
 
 /// ========== Constants ==========================================
