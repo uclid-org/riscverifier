@@ -2,8 +2,7 @@ use std::collections::HashSet;
 
 #[derive(Debug, Clone)]
 pub enum BExpr {
-    True,
-    False,
+    Bool(bool),
     // Boolean operator application
     BOpApp(BoolOp, Vec<Box<BExpr>>),
     // Comparison operator application

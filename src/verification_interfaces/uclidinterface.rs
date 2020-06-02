@@ -357,22 +357,6 @@ impl IRInterface for Uclid5Interface {
             } => panic!("Should not need to print struct types in this model."),
         }
     }
-    fn forall_to_string(v: &Var, expr: String) -> String {
-        let typ_str = Self::typ_to_string(&v.typ);
-        format!("(forall ({}: {}) :: ({}))", &v.name[1..], typ_str, expr)
-    }
-    fn exists_to_string(v: &Var, expr: String) -> String {
-        let typ_str = Self::typ_to_string(&v.typ);
-        format!("(exists ({}: {}) :: ({}))", &v.name[1..], typ_str, expr)
-    }
-    fn deref_app_to_string(bytes: u64, ptr: String, old: bool) -> String {
-        format!(
-            "deref_{}({}(mem), {})",
-            bytes,
-            if old { "old" } else { "" },
-            ptr
-        )
-    }
     fn comp_app_to_string(compop: &CompOp, e1: Option<String>, e2: Option<String>) -> String {
         match compop {
             CompOp::Equality => format!("({} == {})", e1.unwrap(), e2.unwrap()),
@@ -429,6 +413,9 @@ impl IRInterface for Uclid5Interface {
                 .collect::<Vec<String>>()
                 .join(", ")
         )
+    }
+    fn var_to_string(var: &Var) -> String {
+        format!("{}", var.name)
     }
     fn array_index_to_string(e1: String, e2: String) -> String {
         format!("{}[{}]", e1, e2)
@@ -698,126 +685,6 @@ impl IRInterface for Uclid5Interface {
             ctrl_blk
         )
     }
-
-    // /// Specification langauge translation functions
-    // fn spec_fapp_to_string(name: &str, fapp: &FuncApp, dwarf_ctx: &DwarfCtx, old: bool, bound_vars: &mut HashSet<String>) -> String {
-    //     format!(
-    //         "{}({})",
-    //         fapp.func_name,
-    //         fapp.operands
-    //             .iter()
-    //             .map(|x| Self::spec_expr_to_string(name, &*x, dwarf_ctx, old, bound_vars))
-    //             .collect::<Vec<String>>()
-    //             .join(", ")
-    //     )
-    // }
-    // fn spec_opapp_to_string(
-    //     func_name: &str,
-    //     opapp: &OpApp,
-    //     dwarf_ctx: &DwarfCtx,
-    //     old: bool,
-    //     bound_vars: &mut HashSet<String>,
-    // ) -> String {
-    //     let mut bound_vars_p = bound_vars.clone();
-    //     match &opapp.op {
-    //         Op::Forall(v) => bound_vars_p.insert(v.name.clone()),
-    //         Op::Exists(v) => bound_vars_p.insert(v.name.clone()),
-    //         _ => true,
-    //     };
-    //     let e1_str = opapp.operands.get(0).map_or(None, |e| {
-    //         Some(Self::spec_expr_to_string(func_name, e, dwarf_ctx, old, &mut bound_vars_p))
-    //     });
-    //     let e2_str = opapp.operands.get(1).map_or(None, |e| {
-    //         Some(Self::spec_expr_to_string(func_name, e, dwarf_ctx, old, &mut bound_vars_p))
-    //     });
-    //     match &opapp.op {
-    //         Op::Forall(v) => Self::forall_to_string(v, e1_str.unwrap()),
-    //         Op::Exists(v) => Self::exists_to_string(v, e1_str.unwrap()),
-    //         Op::Deref(width) => {
-    //             Self::deref_app_to_string(width / utils::BYTE_SIZE, e1_str.unwrap(), old)
-    //         }
-    //         Op::Old => {
-    //             Self::spec_expr_to_string(
-    //             func_name,
-    //             opapp
-    //                 .operands
-    //                 .get(0)
-    //                 .expect("Old operator is missing an expression."),
-    //             dwarf_ctx,
-    //             true,
-    //             bound_vars,
-    //             )
-    //         },
-    //         Op::Comp(cop) => Self::comp_app_to_string(cop, e1_str, e2_str),
-    //         Op::Bv(bvop) => Self::bv_app_to_string(bvop, e1_str, e2_str),
-    //         Op::Bool(bop) => Self::bool_app_to_string(bop, e1_str, e2_str),
-    //         Op::ArrayIndex => {
-    //             // Memory index is just the address itself
-    //             if opapp.operands[0].get_expect_var().name == system_model::MEM_VAR {
-    //                 return Self::spec_expr_to_string(
-    //                     func_name,
-    //                     &opapp.operands[1],
-    //                     dwarf_ctx,
-    //                     old,
-    //                     bound_vars,
-    //                 );
-    //             }
-    //             // Get expression expression type
-    //             let array = e1_str.unwrap();
-    //             let index = e2_str.unwrap();
-    //             let out_typ = opapp.operands[0].typ().get_array_out_type();
-    //             let out_typ_width = out_typ.get_expect_bv_width();
-    //             format!(
-    //                 "{}({}, {})",
-    //                 Self::array_index_macro_name(&(out_typ_width / utils::BYTE_SIZE)),
-    //                 array,
-    //                 index
-    //             )
-    //         }
-    //         Op::GetField(field) => {
-    //             let typ = opapp.operands[0].typ();
-    //             let struct_id = typ.get_struct_id();
-    //             format!(
-    //                 "{}({})",
-    //                 Self::get_field_macro_name(&struct_id, field),
-    //                 e1_str.unwrap()
-    //             )
-    //         }
-    //     }
-    // }
-
-    // /// Specification variable to Uclid5 variable
-    // /// Globals are shadowed by function variables
-    // fn spec_var_to_string(_func_name: &str, v: &Var, dwarf_ctx: &DwarfCtx, old: bool, bound_vars: &mut HashSet<String>) -> String {
-    //     if v.name.chars().next().unwrap() == '$' {
-    //         // Special identifier
-    //         let name = &v.name[1..];
-    //         if name == "ret" {
-    //             format!("{}(a0)", if old && !bound_vars.contains(&v.name) { "old" } else { "" },)
-    //         } else {
-    //             format!("{}({})", if old && !bound_vars.contains(&v.name) { "old" } else { "" }, name)
-    //         }
-    //     } else if dwarf_ctx
-    //         .func_sigs()
-    //         .iter()
-    //         .find(|(_, fs)| fs.args.iter().find(|arg| arg.name == v.name).is_some())
-    //         .is_some()
-    //         || system_model::SYSTEM_VARS.contains(&&v.name[..])
-    //     {
-    //         // Function argument
-    //         format!("{}({})", if old && !bound_vars.contains(&v.name) { "old" } else { "" }, v.name.clone())
-    //     } else if dwarf_ctx
-    //         .global_vars()
-    //         .iter()
-    //         .find(|x| x.name == v.name)
-    //         .is_some()
-    //     {
-    //         // Global variable
-    //         format!("{}()", utils::global_var_ptr_name(&v.name[..]))
-    //     } else {
-    //         panic!("Unable to find variable {:?}", v);
-    //     }
-    // }
 }
 
 #[cfg(test)]

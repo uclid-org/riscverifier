@@ -113,9 +113,8 @@ impl Expr {
     }
     pub fn op_app(op: Op, operands: Vec<Self>) -> Self {
         let typ = match &op {
-            Op::Forall(_) | Op::Exists(_) | Op::Comp(_) | Op::Bool(_) => Type::Bool,
-            Op::Old | Op::Bv(_) => operands[0].typ().clone(),
-            Op::Deref(width) => Type::Bv { w: *width },
+            Op::Comp(_) | Op::Bool(_) => Type::Bool,
+            Op::Bv(_) => operands[0].typ().clone(),
             Op::ArrayIndex => match operands[0].typ() {
                 Type::Array {
                     in_typs: _,
@@ -183,10 +182,6 @@ pub struct OpApp {
 /// Operators
 #[derive(Debug, PartialEq, Eq, Hash, Clone)]
 pub enum Op {
-    Forall(Var),
-    Exists(Var),
-    Deref(u64),
-    Old,
     Comp(CompOp),
     Bv(BVOp),
     Bool(BoolOp),

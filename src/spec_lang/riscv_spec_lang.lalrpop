@@ -43,8 +43,8 @@ pub BExpr: Box<ast::BExpr> = {
 }
 
 pub BExpr2: Box<ast::BExpr> = {
-    "true" => Box::new(ast::BExpr::True),
-    "false" => Box::new(ast::BExpr::False),
+    "true" => Box::new(ast::BExpr::Bool(true)),
+    "false" => Box::new(ast::BExpr::Bool(false)),
     "(" <e: BExpr> ")" => e,
 }
 
