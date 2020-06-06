@@ -18,7 +18,7 @@ pub enum Error {
     NoSuchDwarfFieldError,
     CouldNotFindDwarfChild,
     CouldNotFindType,
-    MissingVar,
+    MissingVar(String),
     MissingFuncSig(String),
     // Translator errors
     TranslatorErr(String),

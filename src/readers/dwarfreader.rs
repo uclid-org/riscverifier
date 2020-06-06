@@ -227,9 +227,9 @@ pub trait DwarfInterface: std::fmt::Debug {
 /// This intermediate format enables more natural recursive implementations (as opposed
 /// to an iterator in gimli). Refer to source language specific implementations in
 /// dwarf_interfaces.
-/// 
+///
 /// A different interface (e.g. cdwarfinterface for the C langauge) will have to be written
-/// for each source language being translated because the the DWARF info can be in a 
+/// for each source language being translated because the the DWARF info can be in a
 /// different format depending on the language (or compiler?).
 
 /// Representation for a DWARF debugging information entry
@@ -323,12 +323,11 @@ impl DwarfAttributeValue {
 /// This section contains the struct definitions and implementations used to construct
 /// the dwarf context (struct DwarfCtx) object containing the relevant DWARF information
 /// within a binary and used in the translator.
-/// 
+///
 /// The object contains the following information that is currently required
 /// for the translation (the processing is implemented in /dwarf_interfaces):
 ///   - static function formal arguments' names and types
 ///   - global variable names and types
-
 
 /// Variable from the DWARF debugging information
 #[derive(Debug, Clone)]
@@ -455,6 +454,8 @@ pub struct StructField {
 /// translating specifications
 #[derive(Debug)]
 pub struct DwarfCtx {
+    /// XLEN
+    pub xlen: u64,
     /// Function signatures from the DWARF debugging information
     func_sigs: HashMap<String, DwarfFuncSig>,
     /// Global variables from the DWARF debugging information
@@ -468,25 +469,54 @@ impl DwarfCtx {
         self.global_vars
             .iter()
             .find(|v| v.name == name)
-            .ok_or(utils::Error::MissingVar)
+            .ok_or(utils::Error::MissingVar(format!(
+                "Missing global var {}.",
+                name
+            )))
     }
     /// Returns all the global variables
     pub fn global_vars(&self) -> &Vec<DwarfVar> {
         &self.global_vars
     }
     /// Returns true if and only if the function named `func_name` exists
-    pub fn func_sig_exists(&self, func_name: &str) -> bool {
-        self.func_sigs.get(func_name).is_some()
+    pub fn func_sig_exists(&self, fname: &str) -> bool {
+        self.func_sigs.get(fname).is_some()
     }
     /// Returns the function signature of the function named `func_name`
-    pub fn func_sig(&self, func_name: &str) -> Result<&DwarfFuncSig, utils::Error> {
+    pub fn func_sig(&self, fname: &str) -> Result<&DwarfFuncSig, utils::Error> {
         self.func_sigs
-            .get(func_name)
-            .ok_or(utils::Error::MissingFuncSig(func_name.to_string()))
+            .get(fname)
+            .ok_or(utils::Error::MissingFuncSig(fname.to_string()))
     }
     /// Returns a map of all the function signatures
     pub fn func_sigs(&self) -> &HashMap<String, DwarfFuncSig> {
         &self.func_sigs
+    }
+    /// Returns function argument type
+    pub fn func_arg_type(
+        &self,
+        fname: &str,
+        arg_name: &str,
+    ) -> Result<Rc<DwarfTypeDefn>, utils::Error> {
+        let fsig = self
+            .func_sigs
+            .get(fname)
+            .ok_or(utils::Error::MissingFuncSig(fname.to_string()))?;
+        let typ = &fsig
+            .args
+            .iter()
+            .find(|arg| arg.name == arg_name)
+            .ok_or(utils::Error::MissingVar(format!(
+                "Argument {} not found in {}.",
+                arg_name, fname
+            )))?
+            .typ_defn;
+        Ok(Rc::clone(typ))
+    }
+    /// Returns global variable type
+    pub fn global_var_type(&self, name: &str) -> Result<Rc<DwarfTypeDefn>, utils::Error> {
+        let typ = &self.global_var(name)?.typ_defn;
+        Ok(Rc::clone(typ))
     }
 }
 
@@ -532,6 +562,7 @@ where
             .collect();
         let typ_map = Self::compute_typ_map(&func_sigs, &global_vars);
         let ctx = DwarfCtx {
+            xlen: *xlen,
             func_sigs,
             global_vars,
             typ_map,

@@ -1,15 +1,24 @@
 use std::collections::HashSet;
 
+use crate::readers::dwarfreader::{DwarfCtx, DwarfTypeDefn};
 use crate::spec_lang::sl_ast as ast;
 use crate::spec_lang::sl_lexer::{Tok, LexError};
+use crate::system_model;
 
-grammar<'input>(input: &'input str);
+/// A grammar defined with
+/// (1) an input string of the specification `input`,
+/// (2) a DWARF context `dwarf_ctx` containing information about the
+///     function signatures, global variables, and types
+/// (3) `curr_fn` is a stateful variable that keeps track of which function
+///     the parser is currently parsing specifications for.
+///     `curr_fn` is set whenever a new FuncSpec is parsed
+grammar<'input>(input: &'input str, dwarf_ctx: &DwarfCtx, curr_fn: &mut String);
 
-pub Spec: Box<ast::Spec> = {
-    "ensures" <e:BExpr> ";" => Box::new(ast::Spec::Ensures(e)),
-    "requires" <e:BExpr> ";" => Box::new(ast::Spec::Requires(e)),
-    "modifies" <ids:ModSet> ";" => Box::new(ast::Spec::Modifies(ids.iter().map(|s| s.to_string()).collect())),
-    "track" "[" <id:"id"> "]" <e:VExpr> ";" => Box::new(ast::Spec::Track(id.to_string(), e)),
+pub Spec: ast::Spec = {
+    "ensures" <e:BExpr> ";" => ast::Spec::Ensures(e),
+    "requires" <e:BExpr> ";" => ast::Spec::Requires(e),
+    "modifies" <ids:ModSet> ";" => ast::Spec::Modifies(ids.iter().map(|s| s.to_string()).collect()),
+    "track" "[" <id:"id"> "]" <e:VExpr> ";" => ast::Spec::Track(id.to_string(), e),
 }
 
 pub ModSet: HashSet<&'input str> = {
@@ -24,27 +33,36 @@ pub ModSet: HashSet<&'input str> = {
     },
 }
 
-pub Specs: Vec<Box<ast::Spec>> = {
+pub Specs: Vec<ast::Spec> = {
     <Spec*> => <>,
 }
 
-pub FuncSpec: Box<ast::FuncSpec> = {
-    "fun" <id:"id"> "{" <ss:Specs> "}" => Box::new(ast::FuncSpec{fname: id.to_string(), specs: ss}),
+pub FuncSpec: ast::FuncSpec = {
+    "fun" <id:FuncId> "{" <ss:Specs> "}" => {
+        ast::FuncSpec{fname: id, specs: ss}
+    },
 }
 
-pub FuncSpecs: Vec<Box<ast::FuncSpec>> = {
+pub FuncId: String = {
+    "id" => {
+        *curr_fn = <>.to_string();
+        <>.to_string()
+    }
+}
+
+pub FuncSpecs: Vec<ast::FuncSpec> = {
     <FuncSpec*> => <>,
 }
 
-pub BExpr: Box<ast::BExpr> = {
-    <e1:BExpr2> <op:BoolOp> <e2:BExpr> => Box::new(ast::BExpr::BOpApp(op, vec![e1, e2])),
-    <e1:VExpr> <op:CompOp> <e2:VExpr> => Box::new(ast::BExpr::COpApp(op, vec![e1, e2])),
+pub BExpr: ast::BExpr = {
+    <e1:BExpr2> <op:BoolOp> <e2:BExpr> => ast::BExpr::BOpApp(op, vec![e1, e2]),
+    <e1:VExpr> <op:CompOp> <e2:VExpr> => ast::BExpr::COpApp(op, vec![e1, e2]),
     BExpr2,
 }
 
-pub BExpr2: Box<ast::BExpr> = {
-    "true" => Box::new(ast::BExpr::Bool(true)),
-    "false" => Box::new(ast::BExpr::Bool(false)),
+pub BExpr2: ast::BExpr = {
+    "true" => ast::BExpr::Bool(true),
+    "false" => ast::BExpr::Bool(false),
     "(" <e: BExpr> ")" => e,
 }
 
@@ -67,11 +85,35 @@ pub CompOp: ast::CompOp = {
     "!" "=" => ast::CompOp::Nequal,
 }
 
-pub VExpr: Box<ast::VExpr> = {
-    <e1:VExpr> <op:ValueOp1> <e2:VExpr2> => Box::new(ast::VExpr::OpApp(op, vec![e1, e2])),
-    <a:Ident> "[" <ind:VExpr> "]" => Box::new(ast::VExpr::OpApp(ast::ValueOp::ArrayIndex, vec![a, ind])),
-    <s:VExpr> "." <f:Ident> => Box::new(ast::VExpr::OpApp(ast::ValueOp::GetField, vec![s, f])),
-    <bv:Ident> "[" <lo:VExpr> ":" <hi:VExpr> "]" => Box::new(ast::VExpr::OpApp(ast::ValueOp::Slice, vec![bv, lo, hi])),
+pub VExpr: ast::VExpr = {
+    <e1:VExpr> <op:ValueOp1> <e2:VExpr2> => {
+        let operands = vec![e1, e2];
+        let typ = ast::VType::infer_op_type(&op, &operands);
+        ast::VExpr::OpApp(op, operands, typ)
+    },
+    <a:VExpr> "[" <ind:VExpr> "]" => {
+        let operands = vec![a, ind];
+        let op = ast::ValueOp::ArrayIndex;
+        let typ = ast::VType::infer_op_type(&op, &operands);
+        ast::VExpr::OpApp(op, operands, typ)
+    },
+    <s:VExpr> "." <f:"id"> => {
+        let op = ast::ValueOp::GetField;
+        let operands = vec![s, ast::VExpr::Ident(f.to_string(), ast::VType::Unknown)];
+        let typ = ast::VType::infer_op_type(&op, &operands);
+        ast::VExpr::OpApp(op, operands, typ)
+    },
+    <bv:VExpr> "[" <lo:"int"> ":" <hi:"int"> "]" => {
+        if let Tok::Int(lo_u64) = lo {
+            if let Tok::Int(hi_u64) = hi {
+                ast::VExpr::OpApp(ast::ValueOp::Slice{lo: lo_u64 as u16, hi: hi_u64 as u16}, vec![bv], ast::VType::Unknown)
+            } else {
+                panic!("Invalid right (high) slice value.");
+            }
+        } else {
+            panic!("Invalid left (low) slice value.");
+        }
+    },
     VExpr2,
 }
 
@@ -81,8 +123,12 @@ pub ValueOp1: ast::ValueOp = {
     "-" => ast::ValueOp::Sub,
 }
 
-pub VExpr2: Box<ast::VExpr> = {
-    <e1:VExpr2> <op:ValueOp2> <e2:Term> => Box::new(ast::VExpr::OpApp(op, vec![e1, e2])),
+pub VExpr2: ast::VExpr = {
+    <e1:VExpr2> <op:ValueOp2> <e2:Term> => {
+        let operands = vec![e1, e2];
+        let typ = ast::VType::infer_op_type(&op, &operands);
+        ast::VExpr::OpApp(op, operands, typ)
+    },
     Term,
 }
 
@@ -92,24 +138,24 @@ pub ValueOp2: ast::ValueOp = {
     "*" => ast::ValueOp::Mul,
 }
 
-pub Term: Box<ast::VExpr> = {
+pub Term: ast::VExpr = {
     "bool" => {
         if let Tok::Bool(b) = <> {
-            Box::new(ast::VExpr::Bool(b))
+            ast::VExpr::Bool(b, ast::VType::Bool)
         } else {
             panic!("Implementation error: bool should be Tok::Bool(..) enum type.")
         }
     },
     "int" => {
         if let Tok::Int(i) = <> {
-            Box::new(ast::VExpr::Int(i))
+            ast::VExpr::Int(i, ast::VType::Int)
         } else {
             panic!("Implementation error: bool should be Tok::Int(..) enum type.")
         }
     },
     "bv" => {
         if let Tok::Bv { value, width } = <> {
-            Box::new(ast::VExpr::Bv{value, width})
+            ast::VExpr::Bv{value, typ: ast::VType::Bv(width)}
         } else {
             panic!("Implementation error: bool should be Tok::Bv(..) enum type.")
         }
@@ -118,11 +164,47 @@ pub Term: Box<ast::VExpr> = {
     "(" <e:VExpr> ")" => e,
 }
 
-pub Ident: Box<ast::VExpr> = {
+pub Ident: ast::VExpr = {
     <d:"$"?> <id:"id"> => match d {
-        None => Box::new(ast::VExpr::Var(id.to_string())),
-        // FIXME: Special case for $ variables
-        Some(d) => Box::new(ast::VExpr::Var(id.to_string())),
+        Some(d) => {
+            let xlen = dwarf_ctx.xlen;
+            let var_id = id.to_string();
+            let vtype = match &var_id[..] {
+                system_model::PC_VAR => ast::VType::from_ast_type(&system_model::pc_type(xlen)),
+                system_model::RETURNED_FLAG => ast::VType::from_ast_type(&system_model::returned_type()),
+                system_model::PRIV_VAR => ast::VType::from_ast_type(&system_model::priv_type()),
+                system_model::MEM_VAR => ast::VType::from_ast_type(&system_model::mem_type(xlen)),
+                _ => panic!("Unimplemented type for variable ${}.", &var_id),
+            };
+            ast::VExpr::Ident(id.to_string(), vtype)
+        },
+        None => {
+            let var_id = id.to_string();
+            let mut dwarf_type: Option<DwarfTypeDefn> = None;
+            // Variable is a formal argument
+            let func_sig = dwarf_ctx
+                .func_sigs()
+                .get(curr_fn);
+            if let Some(fs) = func_sig {
+                let formal_arg = fs
+                    .args
+                    .iter()
+                    .find(|dv| dv.name == var_id);
+                if let Some(fa) = formal_arg {
+                    dwarf_type = Some((*fa.typ_defn).clone());
+                }
+            }
+            // Variable is a global variable
+            // Note: formals take precedence over global variables
+            if dwarf_type.is_none() {
+                let dt_res = dwarf_ctx.global_var_type(&var_id);
+                assert!(dt_res.is_ok(), "Unable to find global variable type for {} in DWARF info. {}", &var_id, curr_fn);
+                dwarf_type = Some((*dt_res.unwrap()).clone());
+            }
+            assert!(dwarf_type.is_some(), "Unable to find variable {} in DWARF info.", &var_id);
+            let vtype = ast::VType::from_dwarf_type(&dwarf_type.unwrap());
+            ast::VExpr::Ident(id.to_string(), vtype)
+        },
     }
 }
 

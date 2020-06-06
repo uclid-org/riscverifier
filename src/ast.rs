@@ -6,9 +6,9 @@ use std::rc::Rc;
 use crate::readers::dwarfreader::DwarfCtx;
 use crate::spec_lang::sl_ast;
 
-/// =======================================================
-/// ==================== Types ============================
-/// =======================================================
+// =======================================================
+/// AST Types
+
 #[derive(Debug, PartialEq, Eq, Hash, Clone)]
 pub enum Type {
     Unknown,
@@ -64,9 +64,9 @@ impl Type {
     }
 }
 
-/// =======================================================
-/// ==================== Expressions ======================
-/// =======================================================
+// =======================================================
+/// AST Expressions
+
 #[derive(Debug, PartialEq, Eq, Hash, Clone)]
 pub enum Expr {
     Literal(Literal, Type),
@@ -235,9 +235,9 @@ pub struct FuncApp {
     pub operands: Vec<Expr>,
 }
 
-/// =======================================================
-/// ==================== Statements =======================
-/// =======================================================
+// =======================================================
+/// AST Statements
+
 #[derive(Debug, Clone)]
 pub enum Stmt {
     Assume(Expr),
@@ -300,9 +300,9 @@ pub struct IfThenElse {
     pub else_stmt: Option<Box<Stmt>>,
 }
 
-/// =======================================================
-/// ==================== Procedure Model ==================
-/// =======================================================
+// =======================================================
+/// (Software) Procedure Model
+
 #[derive(Debug, Clone)]
 pub struct FuncModel {
     pub sig: FuncSig,
@@ -316,9 +316,9 @@ impl FuncModel {
         entry_addr: u64,
         arg_decls: Vec<Expr>,
         ret_decl: Option<Type>,
-        requires: Option<Vec<Box<sl_ast::Spec>>>,
-        ensures: Option<Vec<Box<sl_ast::Spec>>>,
-        tracked: Option<Vec<Box<sl_ast::Spec>>>,
+        requires: Option<Vec<sl_ast::Spec>>,
+        ensures: Option<Vec<sl_ast::Spec>>,
+        tracked: Option<Vec<sl_ast::Spec>>,
         mod_set: Option<HashSet<String>>,
         body: Stmt,
         inline: bool,
@@ -347,9 +347,9 @@ pub struct FuncSig {
     pub entry_addr: u64,
     pub arg_decls: Vec<Expr>,
     pub ret_decl: Option<Type>,
-    pub requires: Vec<Box<sl_ast::Spec>>,
-    pub ensures: Vec<Box<sl_ast::Spec>>,
-    pub tracked: Vec<Box<sl_ast::Spec>>,
+    pub requires: Vec<sl_ast::Spec>,
+    pub ensures: Vec<sl_ast::Spec>,
+    pub tracked: Vec<sl_ast::Spec>,
     pub mod_set: HashSet<String>,
 }
 impl FuncSig {
@@ -358,9 +358,9 @@ impl FuncSig {
         entry_addr: u64,
         arg_decls: Vec<Expr>,
         ret_decl: Option<Type>,
-        requires: Vec<Box<sl_ast::Spec>>,
-        ensures: Vec<Box<sl_ast::Spec>>,
-        tracked: Vec<Box<sl_ast::Spec>>,
+        requires: Vec<sl_ast::Spec>,
+        ensures: Vec<sl_ast::Spec>,
+        tracked: Vec<sl_ast::Spec>,
         mod_set: HashSet<String>,
     ) -> Self {
         assert!(
@@ -380,9 +380,9 @@ impl FuncSig {
     }
 }
 
-/// =======================================================
-/// ============== Verification Model =====================
-/// =======================================================
+// =======================================================
+/// Verification Model
+
 #[derive(Debug)]
 pub struct Model {
     pub name: String,

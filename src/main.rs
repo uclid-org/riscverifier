@@ -16,6 +16,8 @@ extern crate pest_derive;
 extern crate topological_sort;
 
 use std::collections::HashSet;
+use std::fs::File;
+use std::io::prelude::*;
 use std::rc::Rc;
 
 mod dwarf_interfaces;
@@ -173,6 +175,17 @@ fn main() {
     for func_name in func_names {
         translator.gen_func_model(&func_name);
     }
-    translator.print_model();
+    // Print model to file
+    let model_str = translator.print_model();
+    if let Some(output_file) = matches.value_of("output") {
+        let res = File::create(output_file)
+            .ok()
+            .unwrap()
+            .write_all(model_str.as_bytes());
+        match res {
+            Ok(_) => (),
+            Err(_) => panic!("Unable to write model to {}", output_file),
+        }
+    }
     translator.clear();
 }

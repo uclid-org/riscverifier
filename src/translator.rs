@@ -5,8 +5,8 @@ use std::marker::PhantomData;
 use std::rc::Rc;
 use topological_sort::TopologicalSort;
 
-use crate::datastructures::cfg;
 use crate::ast::*;
+use crate::datastructures::cfg;
 use crate::ir_interface::IRInterface;
 use crate::readers::disassembler;
 use crate::readers::disassembler::Inst;
@@ -34,7 +34,7 @@ where
     /// DWARF debugging information
     dwarf_ctx: &'t DwarfCtx,
     /// Map of specs from function name to a list of pre/post conditions
-    specs_map: &'t HashMap<String, Vec<Box<sl_ast::Spec>>>,
+    specs_map: &'t HashMap<String, Vec<sl_ast::Spec>>,
     /// Flag indicating if the translator will ignore specs
     /// When true, all function pre and post conditions are ignored
     /// and functions are all inlined
@@ -64,7 +64,7 @@ where
         ignored_funcs: &'t HashSet<&'t str>,
         verify_funcs: &'t Vec<&'t str>,
         dwarf_ctx: &'t DwarfCtx,
-        specs_map: &'t HashMap<String, Vec<Box<sl_ast::Spec>>>,
+        specs_map: &'t HashMap<String, Vec<sl_ast::Spec>>,
         ignore_specs: bool,
     ) -> Self {
         Translator {
@@ -111,17 +111,14 @@ where
     // ==================== Printing functions =====================================
     // =============================================================================
     /// Outputs the model into output stream
-    pub fn print_model(&self) {
-        println!(
-            "{}",
-            I::model_to_string(
-                &self.xlen,
-                &self.model,
-                &self.dwarf_ctx,
-                &self.ignored_funcs,
-                &self.verify_funcs,
-            )
-        );
+    pub fn print_model(&self) -> String {
+        I::model_to_string(
+            &self.xlen,
+            &self.model,
+            &self.dwarf_ctx,
+            &self.ignored_funcs,
+            &self.verify_funcs,
+        )
     }
     // =============================================================================
     // ==================== Main translation functions =============================
@@ -285,9 +282,17 @@ where
         //     None
         // };
         // let tracked = self.tracked_from_spec_map(func_name);
-        let requires = None;
-        let ensures = None;
-        let tracked = None;
+        let requires = if !self.ignore_specs {
+            self.requires_from_spec_map(func_name)
+        } else {
+            None
+        };
+        let ensures = if !self.ignore_specs {
+            self.ensures_from_spec_map(func_name)
+        } else {
+            None
+        };
+        let tracked = self.tracked_from_spec_map(func_name);
         // Create the procedure body
         let body = self.cfg_to_symbolic_blk(&func_entry, &func_cfg);
         // let ret = self.func_ret_type(func_name);
@@ -952,13 +957,13 @@ where
         &self,
         func_name: &str,
         sfilter: fn(&sl_ast::Spec) -> bool,
-    ) -> Option<Vec<Box<sl_ast::Spec>>> {
+    ) -> Option<Vec<sl_ast::Spec>> {
         let specs = match self.specs_map.get(func_name) {
             Some(spec_vec) => spec_vec
                 .iter()
-                .filter(|spec| sfilter(&***spec))
-                .map(|spec| Box::clone(spec))
-                .collect::<Vec<Box<sl_ast::Spec>>>(),
+                .filter(|spec| sfilter(*spec))
+                .cloned()
+                .collect::<Vec<sl_ast::Spec>>(),
             None => return None,
         };
         Some(specs)
@@ -976,7 +981,7 @@ where
             Some(specs) => {
                 let combined_modset = specs
                     .iter()
-                    .map(|spec| match &**spec {
+                    .map(|spec| match &*spec {
                         sl_ast::Spec::Modifies(hs) => hs,
                         _ => panic!("Should have filtered non modifies specifications."),
                     })
@@ -990,7 +995,7 @@ where
     }
 
     /// Returns a vector of require statements for function `func_name`
-    fn requires_from_spec_map(&self, func_name: &str) -> Option<Vec<Box<sl_ast::Spec>>> {
+    fn requires_from_spec_map(&self, func_name: &str) -> Option<Vec<sl_ast::Spec>> {
         let sfilter = |s: &sl_ast::Spec| match s {
             sl_ast::Spec::Requires(..) => true,
             _ => false,
@@ -999,7 +1004,7 @@ where
     }
 
     /// Returns a vector of ensure statements for function `func_name`
-    fn ensures_from_spec_map(&self, func_name: &str) -> Option<Vec<Box<sl_ast::Spec>>> {
+    fn ensures_from_spec_map(&self, func_name: &str) -> Option<Vec<sl_ast::Spec>> {
         let sfilter = |s: &sl_ast::Spec| match s {
             sl_ast::Spec::Ensures(..) => true,
             _ => false,
@@ -1008,7 +1013,7 @@ where
     }
 
     /// Returns a vector of track statements for function `func_name`
-    fn tracked_from_spec_map(&self, func_name: &str) -> Option<Vec<Box<sl_ast::Spec>>> {
+    fn tracked_from_spec_map(&self, func_name: &str) -> Option<Vec<sl_ast::Spec>> {
         let sfilter = |s: &sl_ast::Spec| match s {
             sl_ast::Spec::Track(..) => true,
             _ => false,

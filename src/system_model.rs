@@ -17,19 +17,25 @@ pub const SYSTEM_VARS: [&'static str; 6] = [PC_VAR, RETURNED_FLAG, MEM_VAR, PRIV
 pub fn pc_var(xlen: u64) -> Var {
     Var {
         name: PC_VAR.to_string(),
-        typ: bv_type(xlen),
+        typ: pc_type(xlen),
     }
 }
 pub fn pc_expr(xlen: u64) -> Expr {
-    Expr::var(PC_VAR, bv_type(xlen))
+    Expr::var(PC_VAR, priv_type())
+}
+pub fn pc_type(xlen: u64) -> Type {
+    bv_type(xlen)
 }
 /// Returned flag indicates if jalr has occured.
 /// We assume all jalr return to the caller.
 pub fn returned_var() -> Var {
     Var {
         name: RETURNED_FLAG.to_string(),
-        typ: bv_type(1),
+        typ: returned_type(),
     }
+}
+pub fn returned_type() -> Type {
+    bv_type(1)
 }
 /// Memory state variable
 pub fn mem_var(xlen: u64) -> Var {
@@ -45,8 +51,11 @@ pub fn mem_expr(xlen: u64) -> Expr {
 pub fn priv_var() -> Var {
     Var {
         name: PRIV_VAR.to_string(),
-        typ: bv_type(2),
+        typ: priv_type(),
     }
+}
+pub fn priv_type() -> Type {
+    bv_type(2)
 }
 /// A vector of the state variables
 pub fn sys_state_vars(xlen: u64) -> HashSet<Var> {

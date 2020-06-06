@@ -1,18 +1,18 @@
-use std::rc::Rc;
 use std::collections::HashSet;
 use std::fmt;
+use std::rc::Rc;
 
-use crate::readers::dwarfreader::DwarfCtx;
 use crate::ast;
+use crate::readers::dwarfreader::{DwarfCtx, DwarfTypeDefn};
 use crate::spec_lang::sl_ast;
 
 // =====================================================================================================
 /// IR Interface
-/// Defines functions from ast (ie. ast.rs) to verification language 
+/// Defines functions from ast (ie. ast.rs) to verification language
 pub trait IRInterface: fmt::Debug {
     /// FIXME: Rewrite all of this to translate expressions at the leaves
     ///        of the mutually recursive calls not at the root (notice
-    ///        how the operands are currently translated first as 
+    ///        how the operands are currently translated first as
     ///        e1_str and e2_str)
 
     /// Expressions to string functions
@@ -77,7 +77,7 @@ pub trait IRInterface: fmt::Debug {
 /// Specification language interface
 /// Defines functions from spec lang ast (ie. spec_lang/sl_ast.rs) to verification langauge
 
-pub trait SpecLangASTInterface {
+pub trait SpecLangASTInterface: fmt::Debug {
     /// BExpr translation functions
     fn bexpr_to_string(expr: &sl_ast::BExpr) -> String {
         match expr {
@@ -87,29 +87,28 @@ pub trait SpecLangASTInterface {
         }
     }
     fn bexpr_bool_to_string(b: &bool) -> String;
-    fn bexpr_bopapp_to_string(bop: &sl_ast::BoolOp, exprs: &Vec<Box<sl_ast::BExpr>>) -> String;
-    fn bexpr_copapp_to_string(cop: &sl_ast::CompOp, exprs: &Vec<Box<sl_ast::VExpr>>) -> String;
+    fn bexpr_bopapp_to_string(bop: &sl_ast::BoolOp, exprs: &Vec<sl_ast::BExpr>) -> String;
+    fn bexpr_copapp_to_string(cop: &sl_ast::CompOp, exprs: &Vec<sl_ast::VExpr>) -> String;
     fn bopp_to_string(bop: &sl_ast::BoolOp) -> String;
     fn cop_to_string(cop: &sl_ast::CompOp) -> String;
     // VExpr translation functions
     fn vexpr_to_string(expr: &sl_ast::VExpr) -> String {
         match expr {
-            sl_ast::VExpr::Bv { value, width } => Self::vexpr_bv_to_string(value, width),
-            sl_ast::VExpr::Int(i) => Self::vexpr_int_to_string(i),
-            sl_ast::VExpr::Bool(b) => Self::vexpr_bool_to_string(b),
-            sl_ast::VExpr::Var(v) => Self::vexpr_var_to_string(v),
-            sl_ast::VExpr::OpApp(vop, exprs) => Self::vexpr_opapp_to_string(vop, exprs),
-            sl_ast::VExpr::FuncApp(fname, args) => Self::vexpr_funcapp_to_string(fname, args),
+            sl_ast::VExpr::Bv { value, typ } => Self::vexpr_bv_to_string(value, typ),
+            sl_ast::VExpr::Int(i, _) => Self::vexpr_int_to_string(i),
+            sl_ast::VExpr::Bool(b, _) => Self::vexpr_bool_to_string(b),
+            sl_ast::VExpr::Ident(v, _) => Self::vexpr_ident_to_string(v),
+            sl_ast::VExpr::OpApp(vop, exprs, _) => Self::vexpr_opapp_to_string(vop, exprs),
+            sl_ast::VExpr::FuncApp(fname, args, _) => Self::vexpr_funcapp_to_string(fname, args),
         }
     }
-    fn vexpr_bv_to_string(value: &u64, width: &u16) -> String;
+    fn vexpr_bv_to_string(value: &u64, typ: &sl_ast::VType) -> String;
     fn vexpr_int_to_string(i: &i64) -> String;
     fn vexpr_bool_to_string(b: &bool) -> String;
-    fn vexpr_var_to_string(v: &String) -> String;
-    fn vexpr_opapp_to_string(op: &sl_ast::ValueOp, exprs: &Vec<Box<sl_ast::VExpr>>) -> String;
-    fn vexpr_funcapp_to_string(fname: &String, args: &Vec<Box<sl_ast::VExpr>>) -> String;
+    fn vexpr_ident_to_string(v: &String) -> String;
+    fn vexpr_opapp_to_string(op: &sl_ast::ValueOp, exprs: &Vec<sl_ast::VExpr>) -> String;
+    fn vexpr_funcapp_to_string(fname: &String, args: &Vec<sl_ast::VExpr>) -> String;
     fn valueop_to_string(op: &sl_ast::ValueOp) -> String;
     // Spec statement to string
     fn spec_to_string(spec: &sl_ast::Spec) -> String;
 }
-

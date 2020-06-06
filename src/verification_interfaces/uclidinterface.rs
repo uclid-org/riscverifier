@@ -3,8 +3,9 @@ use std::fs;
 use std::rc::Rc;
 
 use crate::ast::*;
-use crate::ir_interface::IRInterface;
+use crate::ir_interface::{IRInterface, SpecLangASTInterface};
 use crate::readers::dwarfreader::{DwarfCtx, DwarfTypeDefn, DwarfVar};
+use crate::spec_lang::sl_ast;
 // use crate::system_model;
 use crate::utils;
 
@@ -79,7 +80,11 @@ impl Uclid5Interface {
                         xlen,
                         xlen,
                         xlen,
-                        Self::multiply_expr(bytes, "index", xlen)
+                        if *bytes == 1 {
+                            format!("index")
+                        } else {
+                            Self::multiply_expr(bytes, "index", xlen)
+                        }
                     ))
                 }
             }
@@ -257,13 +262,37 @@ impl Uclid5Interface {
             format!("{}bv{}", func_entry_addr, xlen)
         )
     }
+
+    fn specs_to_string(fsig: &FuncSig, dwarf_ctx: &DwarfCtx, xlen: &u64) -> String {
+        let mut specs = "".to_string();
+        // requires
+        for require in &fsig.requires {
+            // FIXME: implement this inside SpecLangInterface
+            let bexpr = require.get_bexpr().unwrap();
+            let require_str = Self::bexpr_to_string(bexpr);
+            specs = format!("{}requires {};\n", specs, require_str);
+        }
+        // ensures
+        for ensure in &fsig.ensures {
+            let bexpr = ensure.get_bexpr().unwrap();
+            let ensure_str = Self::bexpr_to_string(bexpr);
+            specs = format!("{}ensures {};\n", specs, ensure_str);
+        }
+        specs
+    }
+
     /// Returns a string of all the procedures in the model.
     /// This contains all of the function models.
     fn gen_procs(model: &Model, dwarf_ctx: &DwarfCtx, xlen: &u64) -> String {
         let procs_string = model
             .func_models
             .iter()
-            .map(|fm| Self::func_model_to_string(fm, dwarf_ctx, xlen))
+            .map(|fm| {
+                // FIXME: pass into func_model
+                let specs = Self::specs_to_string(&fm.sig, dwarf_ctx, xlen);
+                println!("SPECS: {}", specs);
+                Self::func_model_to_string(fm, dwarf_ctx, xlen)
+            })
             .collect::<Vec<_>>()
             .join("\n\n");
         utils::indent_text(procs_string, 4)
@@ -527,42 +556,6 @@ impl IRInterface for Uclid5Interface {
         } else {
             format!("")
         };
-        // let requires = fm
-        //     .sig
-        //     .requires
-        //     .iter()
-        //     .map(|spec| {
-        //         format!(
-        //             "\n    requires ({});",
-        //             Self::spec_expr_to_string(
-        //                 &fm.sig.name[..],
-        //                 spec.expr(),
-        //                 dwarf_ctx,
-        //                 false,
-        //                 &mut HashSet::new(),
-        //             )
-        //         )
-        //     })
-        //     .collect::<Vec<_>>()
-        //     .join("");
-        // let ensures = fm
-        //     .sig
-        //     .ensures
-        //     .iter()
-        //     .map(|spec| {
-        //         format!(
-        //             "\n    ensures ({});",
-        //             Self::spec_expr_to_string(
-        //                 &fm.sig.name[..],
-        //                 spec.expr(),
-        //                 dwarf_ctx,
-        //                 false,
-        //                 &mut HashSet::new(),
-        //             )
-        //         )
-        //     })
-        //     .collect::<Vec<_>>()
-        //     .join("");
         let modifies = if fm.sig.mod_set.len() > 0 {
             format!(
                 "\n    modifies {};",
@@ -592,65 +585,7 @@ impl IRInterface for Uclid5Interface {
             inline, fm.sig.name, args, ret, modifies, requires, ensures, body, vt_proc
         )
     }
-    /// A "track procedure" for tracking specified expressions.
-    /// The procedure contains a list of assignments to variables to track.
-    ///
-    /// # EXAMPLE
-    /// Given a spec with:
-    ///     - begin_spec(fname)
-    ///     - track [vname] expression
-    ///     - ...
-    ///     - end_spec
-    /// This function will generate the following in the verificaiton model:
-    ///     - variables named vname with xlen width
-    ///     - a procedure named "fname_track" with assignments from variable names to expressions:
-    ///         - e.g. procedure fname_track() modifies vname { vname = expression; ... }
-    // fn track_proc(fm: &FuncModel, dwarf_ctx: &DwarfCtx) -> String {
-    //     if fm.sig.tracked.len() == 0 {
-    //         panic!("No variables are tracked for the function {}.", fm.sig.name);
-    //     }
-    //     let var_decls = fm
-    //         .sig
-    //         .tracked
-    //         .iter()
-    //         .map(|spec| match spec {
-    //             Spec::Track(vname, _) => format!("var {}: bv64;", vname),
-    //             _ => panic!("Excepted Spec::Track."),
-    //         })
-    //         .collect::<Vec<String>>()
-    //         .join("\n");
-    //     let mod_var_list = fm
-    //         .sig
-    //         .tracked
-    //         .iter()
-    //         .map(|spec| match spec {
-    //             Spec::Track(vname, _) => vname.to_string(),
-    //             _ => panic!("Excepted Spec::Track."),
-    //         })
-    //         .collect::<Vec<String>>()
-    //         .join(", ");
-    //     let body = fm
-    //         .sig
-    //         .tracked
-    //         .iter()
-    //         .map(|spec| match spec {
-    //             Spec::Track(vname, expr) => format!(
-    //                 "{} = {};",
-    //                 vname,
-    //                 Self::spec_expr_to_string(&fm.sig.name, &expr, dwarf_ctx, false, &mut HashSet::new())
-    //             ),
-    //             _ => panic!("Excepted Spec::Track."),
-    //         })
-    //         .collect::<Vec<String>>()
-    //         .join("\n");
-    //     format!(
-    //         "{}\nprocedure [inline] {}_track_vars()\n{}\n{{\n{}\n}}\n\n",
-    //         var_decls,
-    //         fm.sig.name,
-    //         format!("modifies {};", mod_var_list),
-    //         utils::indent_text(body, 4),
-    //     )
-    // }
+
     // Generate function model
     // NOTE: Replace string with write to file
     fn model_to_string(
@@ -687,11 +622,134 @@ impl IRInterface for Uclid5Interface {
     }
 }
 
+impl SpecLangASTInterface for Uclid5Interface {
+    /// BExpr translation functions
+    fn bexpr_bool_to_string(b: &bool) -> String {
+        match b {
+            true => "true".to_string(),
+            false => "false".to_string(),
+        }
+    }
+    fn bexpr_bopapp_to_string(bop: &sl_ast::BoolOp, exprs: &Vec<sl_ast::BExpr>) -> String {
+        let bop_str = Self::bopp_to_string(bop);
+        let mut exprs_iter = exprs.iter();
+        let mut ret = Self::bexpr_to_string(exprs_iter.next().unwrap());
+        // Unary prefix operator
+        match bop {
+            sl_ast::BoolOp::Neg => return format!("{}{}", bop_str, ret),
+            _ => (),
+        }
+        // Infix operator, comma separated by operands
+        while let Some(expr) = exprs_iter.next() {
+            let expr_str = Self::bexpr_to_string(expr);
+            ret = format!("{} {} {}", ret, bop_str, expr_str)
+        }
+        ret
+    }
+    fn bexpr_copapp_to_string(cop: &sl_ast::CompOp, exprs: &Vec<sl_ast::VExpr>) -> String {
+        assert!(
+            exprs.len() == 2,
+            "Invalid number of operands for comparison."
+        );
+        let cop_str = Self::cop_to_string(cop);
+        let expr_str1 = Self::vexpr_to_string(&exprs[0]);
+        let expr_str2 = Self::vexpr_to_string(&exprs[1]);
+        format!("{} {} {}", expr_str1, cop_str, expr_str2)
+    }
+    fn bopp_to_string(bop: &sl_ast::BoolOp) -> String {
+        match bop {
+            sl_ast::BoolOp::Conj => "&&".to_string(),
+            sl_ast::BoolOp::Disj => "||".to_string(),
+            sl_ast::BoolOp::Neg => "!".to_string(),
+            sl_ast::BoolOp::Implies => "==>".to_string(),
+        }
+    }
+    fn cop_to_string(cop: &sl_ast::CompOp) -> String {
+        match cop {
+            sl_ast::CompOp::Equal => "==".to_string(),
+            sl_ast::CompOp::Nequal => "!=".to_string(),
+            sl_ast::CompOp::Gt => ">".to_string(),
+            sl_ast::CompOp::Lt => "<".to_string(),
+            sl_ast::CompOp::Gtu => ">_u".to_string(),
+            sl_ast::CompOp::Ltu => "<_u".to_string(),
+            sl_ast::CompOp::Geq => ">=".to_string(),
+            sl_ast::CompOp::Leq => "<=".to_string(),
+            sl_ast::CompOp::Geu => ">=_u".to_string(),
+            sl_ast::CompOp::Leu => "<=_u".to_string(),
+        }
+    }
+    // VExpr translation functions
+    fn vexpr_bv_to_string(value: &u64, typ: &sl_ast::VType) -> String {
+        match typ {
+            sl_ast::VType::Bv(width) => format!("{}bv{}", value, width),
+            _ => panic!("Should be bv typed."),
+        }
+    }
+    fn vexpr_int_to_string(i: &i64) -> String {
+        format!("{}", i)
+    }
+    fn vexpr_bool_to_string(b: &bool) -> String {
+        match b {
+            true => "true".to_string(),
+            false => "false".to_string(),
+        }
+    }
+    fn vexpr_ident_to_string(v: &String) -> String {
+        v.clone()
+    }
+    fn vexpr_opapp_to_string(op: &sl_ast::ValueOp, exprs: &Vec<sl_ast::VExpr>) -> String {
+        let op_str = Self::valueop_to_string(op);
+        match op {
+            sl_ast::ValueOp::Add | sl_ast::ValueOp::Sub |
+            sl_ast::ValueOp::Div | sl_ast::ValueOp::Mul => {
+                exprs.iter()
+                    .fold(String::from(""), |acc, expr| {
+                    format!("{} {} {}", acc, op_str, Self::vexpr_to_string(expr))
+                })
+            },
+            sl_ast::ValueOp::ArrayIndex => {
+                let arr = Self::vexpr_to_string(&exprs[0]);
+                let index = Self::vexpr_to_string(&exprs[1]);
+                let bytes = match &exprs[0].typ() {
+                    sl_ast::VType::Array { in_type, out_type } => {
+                        match &**out_type {
+                            sl_ast::VType::Bv(w) => *w as u64 / utils::BYTE_SIZE,
+                            sl_ast::VType::Struct{id:_, fields:_, size} => *size / utils::BYTE_SIZE,
+                            _ => panic!("Expected BV type (op: {:#?}, exprs: {:#?}).", op, exprs),
+                        }
+                    },
+                    _ => panic!("Expected array type."),
+                };
+                format!("{}({}, {}))", Self::array_index_macro_name(&bytes), arr, index)
+            },
+            sl_ast::ValueOp::GetField => {
+                let struct_name = match &exprs[0].typ() {
+                    sl_ast::VType::Struct{id, fields:_, size:_} => id,
+                    _ => panic!("Expected struct type."),
+                };
+                let field_name = Self::vexpr_to_string(&exprs[1]);
+                let expr_str = Self::vexpr_to_string(&exprs[0]);
+                format!("struct_{}_{}({})", struct_name, field_name, expr_str)
+            }
+            _ => panic!("vexpr_to_string not implemented for {:#?}", op),
+        }
+    }
+    fn vexpr_funcapp_to_string(fname: &String, args: &Vec<sl_ast::VExpr>) -> String {
+        "v".to_string()
+    }
+    fn valueop_to_string(op: &sl_ast::ValueOp) -> String {
+        "m".to_string()
+    }
+    // Spec statement to string
+    fn spec_to_string(spec: &sl_ast::Spec) -> String {
+        "s".to_string()
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
     type U5I = Uclid5Interface<CDwarfInterface>;
-
     #[test]
     fn test_lit_to_string() {
         let bv_lit = Literal::Bv { val: 0, width: 1 };
