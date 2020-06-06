@@ -20,7 +20,7 @@ To build the project, run:
 
 To generate a model of a function in a binary, run the following command:
 
-`./target/debug/riscverifier /path/to/binary -f function_to_verify -i ignored,functions,list > outputfile.ucl`
+`./target/debug/riscverifier /path/to/binary -f function_to_verify -i ignored,functions,list -o outputfile.ucl`
 
 This will generate a Uclid5 model of the function in assembly by recursively finding all the functions called by function\_to\_verify, generate a procedure for each, including its basic blocks, but ignore the functions specified by the -i flag. The ignored functions are replaced by a stub Uclid5 procedure.
 
@@ -34,9 +34,9 @@ Example:
 
 `RUST_BACKTRACE=1 RUST_LOG="debug" ./target/debug/riscverifier ~/workspace/uclid5/riscvtest/test_bin/test-struct-2.out -f main -o /Users/kcheang/workspace/riscverifier/testingoutput2 2>&1 | less`
 
-UPDATE: Currently, the SMTLIB interface in Uclid5 is broken and the models will not run due to a stack overflow bug.
-
 ## TODO
+
+* VERY OUT OF DATES DO NOT REFER TO THE NOTES BELOW
 
 * [ ] Handle indirect jumps?
 * [ ] Separate the data and stack memory sections into mem\_stack and mem\_data
@@ -48,6 +48,9 @@ UPDATE: Currently, the SMTLIB interface in Uclid5 is broken and the models will 
 * [ ] Support for floating point registers
 
 ## Notes
+
+Jun 6 2020
+* VERY OUT OF DATE, DO NOT REFER TO THESE NOTES
 
 Feb 25 2020
 * [ ] Verify pmp\_set in the security monitor
