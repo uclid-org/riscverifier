@@ -94,6 +94,7 @@ pub TypeDecl: ast::VType = {
 }
 
 pub InfixBoolOp: ast::BoolOp = {
+    "|" "|" => ast::BoolOp::Disj,
     "&" "&" => ast::BoolOp::Conj,
     "=" "=" ">" => ast::BoolOp::Implies,
 }

@@ -69,7 +69,7 @@ For references, here is an informal grammar description:
                   'exists' '(' VarDecl ')' '::'
 <CompOp> := '>' | '<' | '>_u' | '<_u' |
             '>=' | '<=' | '>=_u' | '<=_u'
-<VExpr> := <VExpr2> <ValueOp1> <VExpr> |
+<VExpr> := <VExpr> <ValueOp1> <VExpr2> |
            <VExpr> '[' <VExpr> ']' |    // (array index)
            <VExpr> '.' <Ident> |        // (struct get field)
            <VExpr> '[' # ':' # ']'      // (slicing; e.g. [0:31])
