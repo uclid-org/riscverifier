@@ -1,7 +1,7 @@
 use std::collections::{HashMap, HashSet};
 
-use crate::readers::dwarfreader::DwarfTypeDefn;
 use crate::ast;
+use crate::readers::dwarfreader::DwarfTypeDefn;
 use crate::utils;
 
 // ==================================================================
@@ -111,7 +111,7 @@ impl VType {
                 let in_type = Box::new(Self::from_ast_type(&in_typs[0]));
                 let out_type = Box::new(Self::from_ast_type(&out_typ));
                 Self::Array { in_type, out_type }
-            },
+            }
             ast::Type::Struct { id, fields, w } => {
                 let id = id.clone();
                 let fields = fields
@@ -123,10 +123,8 @@ impl VType {
                     })
                     .collect();
                 let size = *w;
-                Self::Struct {
-                    id, fields, size
-                }
-            },
+                Self::Struct { id, fields, size }
+            }
         }
     }
 }
@@ -146,10 +144,12 @@ pub enum BExpr {
 
 #[derive(Debug, Clone)]
 pub enum BoolOp {
-    Conj,    // &&
-    Disj,    // ||
-    Neg,     // !
-    Implies, // ==>
+    Conj,                 // &&
+    Disj,                 // ||
+    Neg,                  // !
+    Implies,              // ==>
+    Forall(VExpr, VType), // forall
+    Exists(VExpr, VType), // exists
 }
 
 #[derive(Debug, Clone)]

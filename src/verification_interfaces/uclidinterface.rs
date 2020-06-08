@@ -288,9 +288,6 @@ impl Uclid5Interface {
             .func_models
             .iter()
             .map(|fm| {
-                // FIXME: pass into func_model
-                let specs = Self::specs_to_string(&fm.sig, dwarf_ctx, xlen);
-                println!("SPECS: {}", specs);
                 Self::func_model_to_string(fm, dwarf_ctx, xlen)
             })
             .collect::<Vec<_>>()
@@ -569,8 +566,10 @@ impl IRInterface for Uclid5Interface {
         } else {
             format!("")
         };
-        let requires = "";
-        let ensures = "";
+        let specs = Self::specs_to_string(&fm.sig, dwarf_ctx, xlen);
+        if specs != "" {
+            debug!("\n{}", specs);
+        }
         let body = Self::block_to_string(fm.body.get_expect_block(), xlen);
         let inline = if fm.inline { "[inline] " } else { "" };
         // Track variable procedure
@@ -581,8 +580,15 @@ impl IRInterface for Uclid5Interface {
         // };
         let vt_proc = "";
         format!(
-            "procedure {}{}({}){}{}{}{}\n{}\n\n{}",
-            inline, fm.sig.name, args, ret, modifies, requires, ensures, body, vt_proc
+            "procedure {}{}({}){}{}\n{}\n{}\n\n{}",
+            inline,
+            fm.sig.name,
+            args,
+            ret,
+            modifies,
+            utils::indent_text(specs, 4),
+            body,
+            vt_proc
         )
     }
 
@@ -634,9 +640,11 @@ impl SpecLangASTInterface for Uclid5Interface {
         let bop_str = Self::bopp_to_string(bop);
         let mut exprs_iter = exprs.iter();
         let mut ret = Self::bexpr_to_string(exprs_iter.next().unwrap());
-        // Unary prefix operator
+        // Unary prefix operators
         match bop {
-            sl_ast::BoolOp::Neg => return format!("{}{}", bop_str, ret),
+            sl_ast::BoolOp::Neg | sl_ast::BoolOp::Forall(_, _) | sl_ast::BoolOp::Exists(_, _) => {
+                return format!("{}{}", bop_str, ret)
+            }
             _ => (),
         }
         // Infix operator, comma separated by operands
@@ -662,6 +670,16 @@ impl SpecLangASTInterface for Uclid5Interface {
             sl_ast::BoolOp::Disj => "||".to_string(),
             sl_ast::BoolOp::Neg => "!".to_string(),
             sl_ast::BoolOp::Implies => "==>".to_string(),
+            sl_ast::BoolOp::Forall(var, typ) => {
+                let var_str = Self::vexpr_to_string(var);
+                let type_str = Self::vtype_to_string(typ);
+                format!("forall ({} : {}) ", var_str, type_str)
+            }
+            sl_ast::BoolOp::Exists(var, typ) => {
+                let var_str = Self::vexpr_to_string(var);
+                let type_str = Self::vtype_to_string(typ);
+                format!("exists ({} : {}) ", var_str, type_str)
+            }
         }
     }
     fn cop_to_string(cop: &sl_ast::CompOp) -> String {
@@ -678,7 +696,7 @@ impl SpecLangASTInterface for Uclid5Interface {
             sl_ast::CompOp::Leu => "<=_u".to_string(),
         }
     }
-    // VExpr translation functions
+    /// VExpr translation functions
     fn vexpr_bv_to_string(value: &u64, typ: &sl_ast::VType) -> String {
         match typ {
             sl_ast::VType::Bv(width) => format!("{}bv{}", value, width),
@@ -700,31 +718,44 @@ impl SpecLangASTInterface for Uclid5Interface {
     fn vexpr_opapp_to_string(op: &sl_ast::ValueOp, exprs: &Vec<sl_ast::VExpr>) -> String {
         let op_str = Self::valueop_to_string(op);
         match op {
-            sl_ast::ValueOp::Add | sl_ast::ValueOp::Sub |
-            sl_ast::ValueOp::Div | sl_ast::ValueOp::Mul => {
-                exprs.iter()
-                    .fold(String::from(""), |acc, expr| {
-                    format!("{} {} {}", acc, op_str, Self::vexpr_to_string(expr))
-                })
-            },
+            sl_ast::ValueOp::Add
+            | sl_ast::ValueOp::Sub
+            | sl_ast::ValueOp::Div
+            | sl_ast::ValueOp::Mul => exprs.iter().fold(String::from(""), |acc, expr| {
+                format!("{} {} {}", acc, op_str, Self::vexpr_to_string(expr))
+            }),
             sl_ast::ValueOp::ArrayIndex => {
                 let arr = Self::vexpr_to_string(&exprs[0]);
                 let index = Self::vexpr_to_string(&exprs[1]);
                 let bytes = match &exprs[0].typ() {
-                    sl_ast::VType::Array { in_type, out_type } => {
-                        match &**out_type {
-                            sl_ast::VType::Bv(w) => *w as u64 / utils::BYTE_SIZE,
-                            sl_ast::VType::Struct{id:_, fields:_, size} => *size / utils::BYTE_SIZE,
-                            _ => panic!("Expected BV type (op: {:#?}, exprs: {:#?}).", op, exprs),
-                        }
+                    sl_ast::VType::Array { in_type, out_type } => match &**out_type {
+                        sl_ast::VType::Bv(w) => *w as u64 / utils::BYTE_SIZE,
+                        sl_ast::VType::Struct {
+                            id: _,
+                            fields: _,
+                            size,
+                        } => *size / utils::BYTE_SIZE,
+                        _ => panic!("Expected BV type (op: {:#?}, exprs: {:#?}).", op, exprs),
                     },
                     _ => panic!("Expected array type."),
                 };
-                format!("{}({}, {}))", Self::array_index_macro_name(&bytes), arr, index)
-            },
+                match &arr[..] {
+                    "mem" => Self::array_index_to_string(arr, index),
+                    _ => format!(
+                        "{}({}, {}))",
+                        Self::array_index_macro_name(&bytes),
+                        arr,
+                        index
+                    ),
+                }
+            }
             sl_ast::ValueOp::GetField => {
                 let struct_name = match &exprs[0].typ() {
-                    sl_ast::VType::Struct{id, fields:_, size:_} => id,
+                    sl_ast::VType::Struct {
+                        id,
+                        fields: _,
+                        size: _,
+                    } => id,
                     _ => panic!("Expected struct type."),
                 };
                 let field_name = Self::vexpr_to_string(&exprs[1]);
@@ -735,12 +766,24 @@ impl SpecLangASTInterface for Uclid5Interface {
         }
     }
     fn vexpr_funcapp_to_string(fname: &String, args: &Vec<sl_ast::VExpr>) -> String {
-        "v".to_string()
+        let args_str = args
+            .iter()
+            .map(|arg| Self::vexpr_to_string(arg))
+            .collect::<Vec<String>>()
+            .join(", ");
+        format!("{}({})", fname, args_str)
     }
     fn valueop_to_string(op: &sl_ast::ValueOp) -> String {
         "m".to_string()
     }
-    // Spec statement to string
+    /// Value Type to string
+    fn vtype_to_string(typ: &sl_ast::VType) -> String {
+        match typ {
+            sl_ast::VType::Bv(width) => format!("bv{}", width),
+            _ => panic!("Unimplemented type to string translation for {:#?}.", typ),
+        }
+    }
+    /// Spec statement to string
     fn spec_to_string(spec: &sl_ast::Spec) -> String {
         "s".to_string()
     }

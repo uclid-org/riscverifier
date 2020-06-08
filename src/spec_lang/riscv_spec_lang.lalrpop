@@ -55,7 +55,8 @@ pub FuncSpecs: Vec<ast::FuncSpec> = {
 }
 
 pub BExpr: ast::BExpr = {
-    <e1:BExpr2> <op:BoolOp> <e2:BExpr> => ast::BExpr::BOpApp(op, vec![e1, e2]),
+    <e1:BExpr2> <op:InfixBoolOp> <e2:BExpr> => ast::BExpr::BOpApp(op, vec![e1, e2]),
+    <op:PrefixBoolOp> <e:BExpr> => ast::BExpr::BOpApp(op, vec![e]),
     <e1:VExpr> <op:CompOp> <e2:VExpr> => ast::BExpr::COpApp(op, vec![e1, e2]),
     BExpr2,
 }
@@ -66,10 +67,34 @@ pub BExpr2: ast::BExpr = {
     "(" <e: BExpr> ")" => e,
 }
 
-pub BoolOp: ast::BoolOp = {
+pub VarDecl: (ast::VExpr, ast::VType) = {
+    <v:Ident> ":" <typ:TypeDecl> => (v, typ),
+}
+
+pub TypeDecl: ast::VType = {
+    "bv_type" => {
+        match <> {
+            Tok::BvType(width) => ast::VType::Bv(width),
+            _ => panic!("Not a valid type declaration: {:#?}.", <>),                
+        }
+    },
+}
+
+pub InfixBoolOp: ast::BoolOp = {
     "&" "&" => ast::BoolOp::Conj,
-    "!" => ast::BoolOp::Neg,
     "=" "=" ">" => ast::BoolOp::Implies,
+}
+
+pub PrefixBoolOp: ast::BoolOp = {
+    "!" => ast::BoolOp::Neg,
+    "forall" "(" <vd: VarDecl> ")" "::" => {
+        let (var, typ) = vd;
+        ast::BoolOp::Forall(var, typ)
+    },
+    "exists" "(" <vd: VarDecl> ")" "::" => {
+        let (var, typ) = vd;
+        ast::BoolOp::Exists(var, typ)
+    },
 }
 
 pub CompOp: ast::CompOp = {
@@ -99,6 +124,7 @@ pub VExpr: ast::VExpr = {
     },
     <s:VExpr> "." <f:"id"> => {
         let op = ast::ValueOp::GetField;
+        assert!(f.to_string().chars().all(char::is_alphanumeric), "Invalid get field .{}.", f.to_string());
         let operands = vec![s, ast::VExpr::Ident(f.to_string(), ast::VType::Unknown)];
         let typ = ast::VType::infer_op_type(&op, &operands);
         ast::VExpr::OpApp(op, operands, typ)
@@ -160,8 +186,19 @@ pub Term: ast::VExpr = {
             panic!("Implementation error: bool should be Tok::Bv(..) enum type.")
         }
     },
+    <f:BuiltIn> "(" <es:VExpr+> ")" => {
+        let typ = match &f[..] {
+            "old" => es[0].typ().clone(),
+            _ => ast::VType::Unknown,
+        };
+        ast::VExpr::FuncApp(f, es, typ)
+    },
     Ident,
     "(" <e:VExpr> ")" => e,
+}
+
+pub BuiltIn: String = {
+    "old" => "old".to_string()
 }
 
 pub Ident: ast::VExpr = {
@@ -174,6 +211,7 @@ pub Ident: ast::VExpr = {
                 system_model::RETURNED_FLAG => ast::VType::from_ast_type(&system_model::returned_type()),
                 system_model::PRIV_VAR => ast::VType::from_ast_type(&system_model::priv_type()),
                 system_model::MEM_VAR => ast::VType::from_ast_type(&system_model::mem_type(xlen)),
+                system_model::A0 => ast::VType::from_ast_type(&system_model::bv_type(xlen)),
                 _ => panic!("Unimplemented type for variable ${}.", &var_id),
             };
             ast::VExpr::Ident(id.to_string(), vtype)
@@ -221,6 +259,9 @@ extern {
         "fun" => Tok::Fun,
         "true" => Tok::True,
         "false" => Tok::False,
+        "old" => Tok::Old,
+        "forall" => Tok::Forall,
+        "exists" => Tok::Exists,
         "_u" => Tok::Nil,
         // Identifier:
         "id" => Tok::Id(<&'input str>),
@@ -228,8 +269,11 @@ extern {
         "int" => Tok::Int(i64),
         "bv" => Tok::Bv { value: u64, width: u16 },
         "bool" => Tok::Bool(bool),
+        // Types:
+        "bv_type" => Tok::BvType(u16),
         // Symbols:
         ":" => Tok::Colon,          // :
+        "::" => Tok::ColonColon,    // ::
         ";" => Tok::Semi,           // ;
         "," => Tok::Comma,          // ,
         "." => Tok::Dot,            // .

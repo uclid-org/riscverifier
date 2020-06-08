@@ -1,7 +1,7 @@
 fun region_get_addr {
-    modifies a, b, c;
     requires (0bv64 <= i) && (i < 16bv64);
-    ensures $returned == regions[i].addr;
+    ensures $a0 == regions[i].addr;
+    ensures $mem == old($mem);
 }
 
 

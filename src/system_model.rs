@@ -8,6 +8,7 @@ pub const PC_VAR: &'static str = "pc";
 pub const RETURNED_FLAG: &'static str = "returned";
 pub const MEM_VAR: &'static str = "mem";
 pub const PRIV_VAR: &'static str = "current_priv";
+pub const A0: &'static str = "a0";
 pub const SP: &'static str = "sp";
 pub const RA: &'static str = "ra";
 pub const SYSTEM_VARS: [&'static str; 6] = [PC_VAR, RETURNED_FLAG, MEM_VAR, PRIV_VAR, SP, RA];

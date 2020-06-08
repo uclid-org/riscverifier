@@ -109,6 +109,8 @@ pub trait SpecLangASTInterface: fmt::Debug {
     fn vexpr_opapp_to_string(op: &sl_ast::ValueOp, exprs: &Vec<sl_ast::VExpr>) -> String;
     fn vexpr_funcapp_to_string(fname: &String, args: &Vec<sl_ast::VExpr>) -> String;
     fn valueop_to_string(op: &sl_ast::ValueOp) -> String;
+    // Types to string
+    fn vtype_to_string(typ: &sl_ast::VType) -> String;
     // Spec statement to string
     fn spec_to_string(spec: &sl_ast::Spec) -> String;
 }
