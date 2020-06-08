@@ -1,4 +1,4 @@
-# VERI-V
+# VERIV
 
 An instruction level translator for RISC-V binaries.
 
@@ -26,13 +26,60 @@ This will generate a Uclid5 model of the function in assembly by recursively fin
 
 ## Running the generated models and scalability
 
-Running with Boolector or CVC4 is best. Note that there are no quantifiers in any of these generated models; it uses the logic QF\_ABV (Feb.24.2020). The option for Uclid5 to run with the external solver CVC4 is:
+Running with Boolector or CVC4 is best. Note that the base models without specifications have no quantifiers. The models are in QF\_ABV (June.7.2020). The option for Uclid5 to run with the external solver CVC4 is:
 
 `uclid -s "cvc4 --incremental --lang smt2 --force-logic=ALL" model.ucl`
 
 Example:
 
-`RUST_BACKTRACE=1 RUST_LOG="debug" ./target/debug/riscverifier ~/workspace/uclid5/riscvtest/test_bin/test-struct-2.out -f main -o /Users/kcheang/workspace/riscverifier/testingoutput2 2>&1 | less`
+To recompile and run VERIV:
+
+`cargo run ~/workspace/verification/build/sm.build/bbl -f pmp_set -i printm,poweroff -s spec_file.rvspecs -o output.ucl`
+
+To run with the built binary:
+
+`./target/debug/riscverifier ~/workspace/verification/veriv/build/sm.build/bbl -f pmp_set -i poweroff,printm -s spec_file.rvspecs -o output.ucl`
+
+To turn on debugging, prefix the commands above with RUST\_LOG="debug" (or whichever level of debugging you prefer).
+
+## Specification Language
+
+The -s option allows the user to write a C-like specification that is then translated to the RV binary level.
+
+For references, here is an informal grammar description:
+
+```
+# := number
+<SpecFile> := <FuncSpec>*
+<Ident> := r"\w([0-9]\w)*" (alphanumeric identifier starting with an alphabet)
+<FuncSpec> := 'fun' <Ident> '{' <Spec>* '}'
+<Spec> := 'ensures' <BExpr> ';' |
+          'requires' <BExpr> ';' |
+          'modifies' <Ident>* ';'
+<BExpr> := <BExpr2> <InfixBoolOp> <BExpr> |
+           <PrefixBoolOp> <BExpr> |
+           <*>? <VExpr> <CompOp> <*>? <VExpr> |
+           <BExpr2>
+<BExpr2> := 'true' | 'false' | '(' <BExpr> ')'
+<VarDecl> := <Ident> ':' <TypeDecl>
+<TypeDecl> := 'bv#'                     // (e.g. bv64)
+<InfixBoolOp> := '||' | '&&' | '==>'
+<PrefixBoolOp> := '!' |
+                  'forall' '(' VarDecl ')' '::' |
+                  'exists' '(' VarDecl ')' '::'
+<CompOp> := '>' | '<' | '>_u' | '<_u' |
+            '>=' | '<=' | '>=_u' | '<=_u'
+<VExpr> := <VExpr2> <ValueOp1> <VExpr> |
+           <VExpr> '[' <VExpr> ']' |    // (array index)
+           <VExpr> '.' <Ident> |        // (struct get field)
+           <VExpr> '[' # ':' # ']'      // (slicing; e.g. [0:31])
+           <VExpr2>
+<ValueOp1> := '+' | '-' | '^' | '&' | '|'
+<VExpr2> := <VExpr2> <ValueOp2> <Term> |
+            <Term>
+<ValueOp2> := '/' | '*' | '>>' | '>>>' | '<<'
+<Term> := '$tt' | '$ff' | # | #bv# | 'old(' <VExpr> ')' | <Ident>
+```
 
 ## TODO
 
