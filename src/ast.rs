@@ -36,11 +36,7 @@ impl Type {
                 fields: _,
                 w,
             } => *w,
-            Type::Array {
-                in_typs: _,
-                out_typ,
-            } => out_typ.get_expect_bv_width(),
-            _ => panic!("Not a bitvector: {:#?}.", self),
+            _ => panic!("No bv width for: {:#?}.", self),
         }
     }
     pub fn get_array_out_type(&self) -> &Type {

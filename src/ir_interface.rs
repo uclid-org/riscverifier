@@ -25,31 +25,23 @@ pub trait IRInterface: fmt::Debug {
         }
     }
     fn opapp_to_string(opapp: &ast::OpApp, xlen: &u64) -> String {
-        let e1_str = opapp
-            .operands
-            .get(0)
-            .map_or(None, |e| Some(Self::expr_to_string(e, xlen)));
-        let e2_str = opapp
-            .operands
-            .get(1)
-            .map_or(None, |e| Some(Self::expr_to_string(e, xlen)));
         match &opapp.op {
-            ast::Op::Comp(cop) => Self::comp_app_to_string(cop, e1_str, e2_str),
-            ast::Op::Bv(bvop) => Self::bv_app_to_string(bvop, e1_str, e2_str),
-            ast::Op::Bool(bop) => Self::bool_app_to_string(bop, e1_str, e2_str),
-            ast::Op::ArrayIndex => Self::array_index_to_string(e1_str.unwrap(), e2_str.unwrap()),
-            ast::Op::GetField(field) => Self::get_field_to_string(e1_str.unwrap(), field.clone()),
+            ast::Op::Comp(cop) => Self::comp_app_to_string(cop, &opapp.operands, xlen),
+            ast::Op::Bv(bvop) => Self::bv_app_to_string(bvop, &opapp.operands, xlen),
+            ast::Op::Bool(bop) => Self::bool_app_to_string(bop, &opapp.operands, xlen),
+            ast::Op::ArrayIndex => Self::array_index_to_string(&opapp.operands[0], &opapp.operands[1], xlen),
+            ast::Op::GetField(field) => Self::get_field_to_string(&opapp.operands[0], &field.clone(), xlen),
         }
     }
     fn fapp_to_string(fapp: &ast::FuncApp, xlen: &u64) -> String;
     fn var_to_string(v: &ast::Var) -> String;
     fn lit_to_string(lit: &ast::Literal) -> String;
     fn typ_to_string(typ: &ast::Type) -> String;
-    fn comp_app_to_string(compop: &ast::CompOp, e1: Option<String>, e2: Option<String>) -> String;
-    fn bv_app_to_string(bvop: &ast::BVOp, e1: Option<String>, e2: Option<String>) -> String;
-    fn bool_app_to_string(bop: &ast::BoolOp, e1: Option<String>, e2: Option<String>) -> String;
-    fn array_index_to_string(e1: String, e2: String) -> String;
-    fn get_field_to_string(e1: String, field: String) -> String;
+    fn comp_app_to_string(compop: &ast::CompOp, exprs: &Vec<ast::Expr>, xlen: &u64) -> String;
+    fn bv_app_to_string(bvop: &ast::BVOp, exprs: &Vec<ast::Expr>, xlen: &u64) -> String;
+    fn bool_app_to_string(bop: &ast::BoolOp, exprs: &Vec<ast::Expr>, xlen: &u64) -> String;
+    fn array_index_to_string(arr: &ast::Expr, index: &ast::Expr, xlen: &u64) -> String;
+    fn get_field_to_string(struct_: &ast::Expr, field: &String, xlen: &u64) -> String;
     /// Statements to string
     fn stmt_to_string(stmt: &ast::Stmt, xlen: &u64) -> String;
     fn skip_to_string() -> String;
@@ -62,7 +54,6 @@ pub trait IRInterface: fmt::Debug {
     fn block_to_string(blk: &Vec<Box<ast::Stmt>>, xlen: &u64) -> String;
     fn comment_to_string(comment: &String) -> String;
     fn func_model_to_string(fm: &ast::FuncModel, dwarf_ctx: &DwarfCtx, xlen: &u64) -> String;
-    // fn track_proc(fm: &FuncModel, dwarf_ctx: &DwarfCtx) -> String;
     // IR to model string
     fn model_to_string(
         xlen: &u64,

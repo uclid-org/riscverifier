@@ -4,6 +4,7 @@ use crate::readers::dwarfreader::{DwarfCtx, DwarfTypeDefn};
 use crate::spec_lang::sl_ast as ast;
 use crate::spec_lang::sl_lexer::{Tok, LexError};
 use crate::system_model;
+use crate::utils;
 
 /// A grammar defined with
 /// (1) an input string of the specification `input`,
@@ -57,7 +58,19 @@ pub FuncSpecs: Vec<ast::FuncSpec> = {
 pub BExpr: ast::BExpr = {
     <e1:BExpr2> <op:InfixBoolOp> <e2:BExpr> => ast::BExpr::BOpApp(op, vec![e1, e2]),
     <op:PrefixBoolOp> <e:BExpr> => ast::BExpr::BOpApp(op, vec![e]),
-    <e1:VExpr> <op:CompOp> <e2:VExpr> => ast::BExpr::COpApp(op, vec![e1, e2]),
+    <dr1:"*"?> <e1:VExpr> <op:CompOp> <dr2:"*"?> <e2:VExpr> => {
+        let operands = vec![(dr1, e1), (dr2, e2)]
+            .iter()
+            .map(|(deref_symbol, expr)| {
+                if let Some(_) = deref_symbol {
+                    ast::VExpr::OpApp(ast::ValueOp::Deref, vec![expr.clone()], expr.typ().clone())
+                } else {
+                    expr.clone()
+                }
+            })
+            .collect();
+        ast::BExpr::COpApp(op, operands)
+    },
     BExpr2,
 }
 
@@ -117,14 +130,14 @@ pub VExpr: ast::VExpr = {
         ast::VExpr::OpApp(op, operands, typ)
     },
     <a:VExpr> "[" <ind:VExpr> "]" => {
-        let operands = vec![a, ind];
         let op = ast::ValueOp::ArrayIndex;
+        let operands = vec![a, ind];
         let typ = ast::VType::infer_op_type(&op, &operands);
         ast::VExpr::OpApp(op, operands, typ)
     },
     <s:VExpr> "." <f:"id"> => {
-        let op = ast::ValueOp::GetField;
         assert!(f.to_string().chars().all(char::is_alphanumeric), "Invalid get field .{}.", f.to_string());
+        let op = ast::ValueOp::GetField;
         let operands = vec![s, ast::VExpr::Ident(f.to_string(), ast::VType::Unknown)];
         let typ = ast::VType::infer_op_type(&op, &operands);
         ast::VExpr::OpApp(op, operands, typ)
@@ -234,14 +247,21 @@ pub Ident: ast::VExpr = {
             }
             // Variable is a global variable
             // Note: formals take precedence over global variables
+            let mut is_global = false;
             if dwarf_type.is_none() {
                 let dt_res = dwarf_ctx.global_var_type(&var_id);
                 assert!(dt_res.is_ok(), "Unable to find global variable type for {} in DWARF info. {}", &var_id, curr_fn);
                 dwarf_type = Some((*dt_res.unwrap()).clone());
+                is_global = true;
             }
             assert!(dwarf_type.is_some(), "Unable to find variable {} in DWARF info.", &var_id);
             let vtype = ast::VType::from_dwarf_type(&dwarf_type.unwrap());
-            ast::VExpr::Ident(id.to_string(), vtype)
+            if is_global {
+                let global_var_def = utils::global_var_ptr_name(&id);
+                ast::VExpr::Ident(format!("{}()", global_var_def), vtype)
+            } else {
+                ast::VExpr::Ident(id.to_string(), vtype)
+            }
         },
     }
 }

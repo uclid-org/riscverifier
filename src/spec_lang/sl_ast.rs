@@ -24,6 +24,13 @@ pub enum VType {
     },
 }
 impl VType {
+    /// Returns the width of the type
+    pub fn get_bv_width(&self) -> u16 {
+        match self {
+            Self::Bv(width) => *width,
+            _ => panic!("Not a bv type: {:#?}", self),
+        }
+    }
     /// Infer the operator type based on the `ValueOp` and operands `exprs`
     pub fn infer_op_type(op: &ValueOp, exprs: &Vec<VExpr>) -> VType {
         if exprs.len() == 0 {
@@ -204,6 +211,7 @@ pub enum ValueOp {
     ArrayIndex,                 // a[i]
     GetField,                   // s.f
     Slice { lo: u16, hi: u16 }, // a[lo:hi]
+    Deref,
 }
 
 #[derive(Debug, Clone)]

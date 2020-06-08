@@ -383,50 +383,67 @@ impl IRInterface for Uclid5Interface {
             } => panic!("Should not need to print struct types in this model."),
         }
     }
-    fn comp_app_to_string(compop: &CompOp, e1: Option<String>, e2: Option<String>) -> String {
+    fn comp_app_to_string(compop: &CompOp, exprs: &Vec<Expr>, xlen: &u64) -> String {
+        assert!(exprs.len() == 2, "Comparison operator should have two expressions.");
+        let expr_strs = exprs
+            .iter()
+            .map(|expr| Self::expr_to_string(&expr, xlen))
+            .collect::<Vec<String>>();
         match compop {
-            CompOp::Equality => format!("({} == {})", e1.unwrap(), e2.unwrap()),
-            CompOp::Inequality => format!("({} != {})", e1.unwrap(), e2.unwrap()),
-            CompOp::Lt => format!("({} < {})", e1.unwrap(), e2.unwrap()),
-            CompOp::Le => format!("({} <= {})", e1.unwrap(), e2.unwrap()),
-            CompOp::Gt => format!("({} > {})", e1.unwrap(), e2.unwrap()),
-            CompOp::Ge => format!("({} >= {})", e1.unwrap(), e2.unwrap()),
-            CompOp::Ltu => format!("({} <_u {})", e1.unwrap(), e2.unwrap()),
-            CompOp::Leu => format!("({} <=_u {})", e1.unwrap(), e2.unwrap()),
-            CompOp::Gtu => format!("({} >_u {})", e1.unwrap(), e2.unwrap()),
-            CompOp::Geu => format!("({} >=_u {})", e1.unwrap(), e2.unwrap()),
+            CompOp::Equality => format!("({} == {})", expr_strs[0], expr_strs[1]),
+            CompOp::Inequality => format!("({} != {})", expr_strs[0], expr_strs[1]),
+            CompOp::Lt => format!("({} < {})", expr_strs[0], expr_strs[1]),
+            CompOp::Le => format!("({} <= {})", expr_strs[0], expr_strs[1]),
+            CompOp::Gt => format!("({} > {})", expr_strs[0], expr_strs[1]),
+            CompOp::Ge => format!("({} >= {})", expr_strs[0], expr_strs[1]),
+            CompOp::Ltu => format!("({} <_u {})", expr_strs[0], expr_strs[1]),
+            CompOp::Leu => format!("({} <=_u {})", expr_strs[0], expr_strs[1]),
+            CompOp::Gtu => format!("({} >_u {})", expr_strs[0], expr_strs[1]),
+            CompOp::Geu => format!("({} >=_u {})", expr_strs[0], expr_strs[1]),
         }
     }
-    fn bv_app_to_string(bvop: &BVOp, e1: Option<String>, e2: Option<String>) -> String {
+    fn bv_app_to_string(bvop: &BVOp, exprs: &Vec<Expr>, xlen: &u64) -> String {
+        let e1 = Self::expr_to_string(&exprs[0], xlen);
+        let e2 = if exprs.len() > 1 {
+            Some(Self::expr_to_string(&exprs[1], xlen))
+        } else {
+            None
+        };
         match bvop {
-            BVOp::Add => format!("({} + {})", e1.unwrap(), e2.unwrap()),
-            BVOp::Sub => format!("({} - {})", e1.unwrap(), e2.unwrap()),
-            BVOp::Mul => format!("({} * {})", e1.unwrap(), e2.unwrap()),
-            BVOp::And => format!("({} & {})", e1.unwrap(), e2.unwrap()),
-            BVOp::Or => format!("({} | {})", e1.unwrap(), e2.unwrap()),
-            BVOp::Xor => format!("({} ^ {})", e1.unwrap(), e2.unwrap()),
+            BVOp::Add => format!("({} + {})", e1, e2.unwrap()),
+            BVOp::Sub => format!("({} - {})", e1, e2.unwrap()),
+            BVOp::Mul => format!("({} * {})", e1, e2.unwrap()),
+            BVOp::And => format!("({} & {})", e1, e2.unwrap()),
+            BVOp::Or => format!("({} | {})", e1, e2.unwrap()),
+            BVOp::Xor => format!("({} ^ {})", e1, e2.unwrap()),
             BVOp::SignExt => match e2.unwrap().split("bv").next().unwrap() {
-                width if width != "0" => format!("bv_sign_extend({}, {})", width, e1.unwrap()),
-                _ => format!("{}", e1.unwrap()),
+                width if width != "0" => format!("bv_sign_extend({}, {})", width, e1),
+                _ => format!("{}", e1),
             },
             BVOp::ZeroExt => match e2.unwrap().split("bv").next().unwrap() {
-                width if width != "0" => format!("bv_zero_extend({}, {})", width, e1.unwrap()),
-                _ => format!("{}", e1.unwrap()),
+                width if width != "0" => format!("bv_zero_extend({}, {})", width, e1),
+                _ => format!("{}", e1),
             },
-            BVOp::LeftShift => format!("bv_left_shift({}, {})", e2.unwrap(), e1.unwrap()),
-            BVOp::RightShift => format!("bv_l_right_shift({}, {})", e2.unwrap(), e1.unwrap()),
-            BVOp::ARightShift => format!("bv_a_right_shift({}, {})", e2.unwrap(), e1.unwrap()),
-            BVOp::Concat => format!("({} ++ {})", e1.unwrap(), e2.unwrap()),
-            BVOp::Slice { l, r } => format!("{}[{}:{}]", e1.unwrap(), l, r),
+            BVOp::LeftShift => format!("bv_left_shift({}, {})", e2.unwrap(), e1),
+            BVOp::RightShift => format!("bv_l_right_shift({}, {})", e2.unwrap(), e1),
+            BVOp::ARightShift => format!("bv_a_right_shift({}, {})", e2.unwrap(), e1),
+            BVOp::Concat => format!("({} ++ {})", e1, e2.unwrap()),
+            BVOp::Slice { l, r } => format!("{}[{}:{}]", e1, l, r),
         }
     }
-    fn bool_app_to_string(bop: &BoolOp, e1: Option<String>, e2: Option<String>) -> String {
+    fn bool_app_to_string(bop: &BoolOp, exprs: &Vec<Expr>, xlen: &u64) -> String {
+        let e1_str = Self::expr_to_string(&exprs[0], xlen);
+        let e2_str = if exprs.len() > 1 {
+            Some(Self::expr_to_string(&exprs[1], xlen))
+        } else {
+            None
+        };
         match bop {
-            BoolOp::Conj => format!("({} && {})", e1.unwrap(), e2.unwrap()),
-            BoolOp::Disj => format!("({} || {})", e1.unwrap(), e2.unwrap()),
-            BoolOp::Iff => format!("({} <==> {})", e1.unwrap(), e2.unwrap()),
-            BoolOp::Impl => format!("({} ==> {})", e1.unwrap(), e2.unwrap()),
-            BoolOp::Neg => format!("!{}", e1.unwrap()),
+            BoolOp::Conj => format!("({} && {})", e1_str, e2_str.unwrap()),
+            BoolOp::Disj => format!("({} || {})", e1_str, e2_str.unwrap()),
+            BoolOp::Iff => format!("({} <==> {})", e1_str, e2_str.unwrap()),
+            BoolOp::Impl => format!("({} ==> {})", e1_str, e2_str.unwrap()),
+            BoolOp::Neg => format!("!{}", e1_str),
         }
     }
     fn fapp_to_string(fapp: &FuncApp, xlen: &u64) -> String {
@@ -443,11 +460,14 @@ impl IRInterface for Uclid5Interface {
     fn var_to_string(var: &Var) -> String {
         format!("{}", var.name)
     }
-    fn array_index_to_string(e1: String, e2: String) -> String {
-        format!("{}[{}]", e1, e2)
+    fn array_index_to_string(arr: &Expr, index: &Expr, xlen: &u64) -> String {
+        let arr_str = Self::expr_to_string(arr, xlen);
+        let index_str = Self::expr_to_string(index, xlen);
+        format!("{}[{}]", arr_str, index_str)
     }
-    fn get_field_to_string(e1: String, field: String) -> String {
-        format!("{}.{}", e1, field)
+    fn get_field_to_string(struct_: &Expr, field: &String, xlen: &u64) -> String {
+        let struct_str = Self::expr_to_string(struct_, xlen);
+        format!("{}.{}", struct_str, field)
     }
 
     /// Statements to string
@@ -566,21 +586,35 @@ impl IRInterface for Uclid5Interface {
         } else {
             format!("")
         };
-        let specs = Self::specs_to_string(&fm.sig, dwarf_ctx, xlen);
+        // Specifications
+        let mut specs = Self::specs_to_string(&fm.sig, dwarf_ctx, xlen);
         if specs != "" {
             debug!("\n{}", specs);
         }
+        // Add formal argument constraints to specs
+        let arg_cons = fm
+            .sig
+            .arg_decls
+            .iter()
+            .enumerate()
+            .map(|(i, var)| {
+                let var_name = &var.get_expect_var().name;
+                format!("requires {} == a{};", var_name, i)
+            })
+            .collect::<Vec<String>>()
+            .join("\n");
+        specs = format!("{}\n{}", specs, arg_cons);
+        // Add pc constraint to specs
+        let pc_cons = format!("requires pc == {}bv{};", fm.sig.entry_addr, xlen);
+        specs = format!("{}\n{}", specs, pc_cons);
+        // Add initial return value constraint
+        specs = format!("{}\n{}", specs, "requires returned == 0bv1;");
+        // Function body
         let body = Self::block_to_string(fm.body.get_expect_block(), xlen);
+        // Inline flag
         let inline = if fm.inline { "[inline] " } else { "" };
-        // Track variable procedure
-        // let vt_proc = if fm.sig.tracked.len() > 0 {
-        //     Self::track_proc(fm, dwarf_ctx)
-        // } else {
-        //     String::from("")
-        // };
-        let vt_proc = "";
         format!(
-            "procedure {}{}({}){}{}\n{}\n{}\n\n{}",
+            "procedure {}{}({}){}{}\n{}\n{}\n\n",
             inline,
             fm.sig.name,
             args,
@@ -588,7 +622,6 @@ impl IRInterface for Uclid5Interface {
             modifies,
             utils::indent_text(specs, 4),
             body,
-            vt_proc
         )
     }
 
@@ -716,12 +749,12 @@ impl SpecLangASTInterface for Uclid5Interface {
         v.clone()
     }
     fn vexpr_opapp_to_string(op: &sl_ast::ValueOp, exprs: &Vec<sl_ast::VExpr>) -> String {
-        let op_str = Self::valueop_to_string(op);
         match op {
             sl_ast::ValueOp::Add
             | sl_ast::ValueOp::Sub
             | sl_ast::ValueOp::Div
             | sl_ast::ValueOp::Mul => exprs.iter().fold(String::from(""), |acc, expr| {
+                let op_str = Self::valueop_to_string(op);
                 format!("{} {} {}", acc, op_str, Self::vexpr_to_string(expr))
             }),
             sl_ast::ValueOp::ArrayIndex => {
@@ -740,9 +773,9 @@ impl SpecLangASTInterface for Uclid5Interface {
                     _ => panic!("Expected array type."),
                 };
                 match &arr[..] {
-                    "mem" => Self::array_index_to_string(arr, index),
+                    "mem" => format!("{}[{}]", arr, index),
                     _ => format!(
-                        "{}({}, {}))",
+                        "{}({}, {})",
                         Self::array_index_macro_name(&bytes),
                         arr,
                         index
@@ -760,9 +793,14 @@ impl SpecLangASTInterface for Uclid5Interface {
                 };
                 let field_name = Self::vexpr_to_string(&exprs[1]);
                 let expr_str = Self::vexpr_to_string(&exprs[0]);
-                format!("struct_{}_{}({})", struct_name, field_name, expr_str)
+                format!("{}_{}({})", struct_name, field_name, expr_str)
+            },
+            sl_ast::ValueOp::Deref => {
+                let expr_str = Self::vexpr_to_string(&exprs[0]);
+                let bytes = exprs[0].typ().get_bv_width() as u64 / utils::BYTE_SIZE;
+                format!("deref_{}(mem, {})", bytes, expr_str)
             }
-            _ => panic!("vexpr_to_string not implemented for {:#?}", op),
+            _ => panic!("vexpr_opapp_to_string not implemented for {:#?}", op),
         }
     }
     fn vexpr_funcapp_to_string(fname: &String, args: &Vec<sl_ast::VExpr>) -> String {
@@ -774,7 +812,12 @@ impl SpecLangASTInterface for Uclid5Interface {
         format!("{}({})", fname, args_str)
     }
     fn valueop_to_string(op: &sl_ast::ValueOp) -> String {
-        "m".to_string()
+        match op {
+            sl_ast::ValueOp::Add => String::from("+"),
+            sl_ast::ValueOp::Sub => String::from("-"),
+            sl_ast::ValueOp::Mul => String::from("*"),
+            _ => panic!("Unimplemented value op {:#?}.", op),
+        }
     }
     /// Value Type to string
     fn vtype_to_string(typ: &sl_ast::VType) -> String {
