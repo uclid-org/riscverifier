@@ -26,7 +26,7 @@ This will generate a Uclid5 model of the function in assembly by recursively fin
 
 ## Running the generated models and scalability
 
-Running with Boolector or CVC4 is best. Note that the base models without specifications have no quantifiers. The models are in QF\_ABV (June.7.2020). The option for Uclid5 to run with the external solver CVC4 is:
+Note that the base models without specifications have no quantifiers. The SMT models are in QF\_ABV (June.7.2020). The option for Uclid5 to run with the external solver is -s. For example:
 
 `uclid -s "cvc4 --incremental --lang smt2 --force-logic=ALL" model.ucl`
 
