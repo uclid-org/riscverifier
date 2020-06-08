@@ -62,7 +62,16 @@ impl VType {
                 },
                 _ => panic!("GetField should have a struct typed first argument."),
             },
-            ValueOp::Add | ValueOp::Sub | ValueOp::Div | ValueOp::Mul => {
+            ValueOp::Add
+            | ValueOp::Sub
+            | ValueOp::Div
+            | ValueOp::Mul
+            | ValueOp::BvXor
+            | ValueOp::BvOr
+            | ValueOp::BvAnd
+            | ValueOp::RightShift
+            | ValueOp::URightShift
+            | ValueOp::LeftShift => {
                 /// These operators require all the same types
                 let same_types = exprs
                     .iter()
@@ -208,6 +217,12 @@ pub enum ValueOp {
     Sub,                        // -
     Div,                        // /
     Mul,                        // *
+    BvXor,                      // ^
+    BvOr,                       // |
+    BvAnd,                      // &
+    RightShift,                 // >>
+    URightShift,                // >>>
+    LeftShift,                  // <<
     ArrayIndex,                 // a[i]
     GetField,                   // s.f
     Slice { lo: u16, hi: u16 }, // a[lo:hi]

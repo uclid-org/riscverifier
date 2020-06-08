@@ -160,6 +160,9 @@ pub VExpr: ast::VExpr = {
 pub ValueOp1: ast::ValueOp = {
     "+" => ast::ValueOp::Add,
     "-" => ast::ValueOp::Sub,
+    "^" => ast::ValueOp::BvXor,
+    "&" => ast::ValueOp::BvAnd,
+    "|" => ast::ValueOp::BvOr,
 }
 
 pub VExpr2: ast::VExpr = {
@@ -175,6 +178,9 @@ pub VExpr2: ast::VExpr = {
 pub ValueOp2: ast::ValueOp = {
     "/" => ast::ValueOp::Div,
     "*" => ast::ValueOp::Mul,
+    ">>" => ast::ValueOp::RightShift,
+    ">>>" => ast::ValueOp::URightShift,
+    "<<" => ast::ValueOp::LeftShift,
 }
 
 pub Term: ast::VExpr = {
@@ -299,13 +305,17 @@ extern {
         "." => Tok::Dot,            // .
         "=" => Tok::Equals,         // =
         ">" => Tok::GreaterThan,    // >
+        ">>" => Tok::RightShift,    // >>
+        ">>>" => Tok::URightShift,  // >>>
         "<" => Tok::LessThan,       // <
+        "<<" => Tok::LeftShift,     // <
         "+" => Tok::Plus,           // +
         "-" => Tok::Minus,          // -
         "?" => Tok::Question,       // ?
         "*" => Tok::Asterisk,       // *
         "/" => Tok::Slash,          // /
         "&" => Tok::Ampersand,      // &
+        "|" => Tok::Pipe,           // |
         "~" => Tok::Tilde,          // ~
         "!" => Tok::Bang,           // !
         "^" => Tok::Caret,          // ^

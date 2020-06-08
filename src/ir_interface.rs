@@ -29,8 +29,12 @@ pub trait IRInterface: fmt::Debug {
             ast::Op::Comp(cop) => Self::comp_app_to_string(cop, &opapp.operands, xlen),
             ast::Op::Bv(bvop) => Self::bv_app_to_string(bvop, &opapp.operands, xlen),
             ast::Op::Bool(bop) => Self::bool_app_to_string(bop, &opapp.operands, xlen),
-            ast::Op::ArrayIndex => Self::array_index_to_string(&opapp.operands[0], &opapp.operands[1], xlen),
-            ast::Op::GetField(field) => Self::get_field_to_string(&opapp.operands[0], &field.clone(), xlen),
+            ast::Op::ArrayIndex => {
+                Self::array_index_to_string(&opapp.operands[0], &opapp.operands[1], xlen)
+            }
+            ast::Op::GetField(field) => {
+                Self::get_field_to_string(&opapp.operands[0], &field.clone(), xlen)
+            }
         }
     }
     fn fapp_to_string(fapp: &ast::FuncApp, xlen: &u64) -> String;

@@ -287,9 +287,7 @@ impl Uclid5Interface {
         let procs_string = model
             .func_models
             .iter()
-            .map(|fm| {
-                Self::func_model_to_string(fm, dwarf_ctx, xlen)
-            })
+            .map(|fm| Self::func_model_to_string(fm, dwarf_ctx, xlen))
             .collect::<Vec<_>>()
             .join("\n\n");
         utils::indent_text(procs_string, 4)
@@ -384,7 +382,10 @@ impl IRInterface for Uclid5Interface {
         }
     }
     fn comp_app_to_string(compop: &CompOp, exprs: &Vec<Expr>, xlen: &u64) -> String {
-        assert!(exprs.len() == 2, "Comparison operator should have two expressions.");
+        assert!(
+            exprs.len() == 2,
+            "Comparison operator should have two expressions."
+        );
         let expr_strs = exprs
             .iter()
             .map(|expr| Self::expr_to_string(&expr, xlen))
@@ -753,10 +754,24 @@ impl SpecLangASTInterface for Uclid5Interface {
             sl_ast::ValueOp::Add
             | sl_ast::ValueOp::Sub
             | sl_ast::ValueOp::Div
-            | sl_ast::ValueOp::Mul => exprs.iter().fold(String::from(""), |acc, expr| {
+            | sl_ast::ValueOp::Mul
+            | sl_ast::ValueOp::BvXor
+            | sl_ast::ValueOp::BvOr
+            | sl_ast::ValueOp::BvAnd => {
+                let first_expr = Self::vexpr_to_string(&exprs[0]);
+                exprs.iter().skip(1).fold(first_expr, |acc, expr| {
+                    let op_str = Self::valueop_to_string(op);
+                    format!("{} {} {}", acc, op_str, Self::vexpr_to_string(expr))
+                })
+            }
+            sl_ast::ValueOp::RightShift
+            | sl_ast::ValueOp::URightShift
+            | sl_ast::ValueOp::LeftShift => {
+                let expr = Self::vexpr_to_string(&exprs[0]);
+                let shift_by = Self::vexpr_to_string(&exprs[1]);
                 let op_str = Self::valueop_to_string(op);
-                format!("{} {} {}", acc, op_str, Self::vexpr_to_string(expr))
-            }),
+                format!("{}({}, {})", op_str, shift_by, expr)
+            }
             sl_ast::ValueOp::ArrayIndex => {
                 let arr = Self::vexpr_to_string(&exprs[0]);
                 let index = Self::vexpr_to_string(&exprs[1]);
@@ -794,7 +809,7 @@ impl SpecLangASTInterface for Uclid5Interface {
                 let field_name = Self::vexpr_to_string(&exprs[1]);
                 let expr_str = Self::vexpr_to_string(&exprs[0]);
                 format!("{}_{}({})", struct_name, field_name, expr_str)
-            },
+            }
             sl_ast::ValueOp::Deref => {
                 let expr_str = Self::vexpr_to_string(&exprs[0]);
                 let bytes = exprs[0].typ().get_bv_width() as u64 / utils::BYTE_SIZE;
@@ -816,6 +831,12 @@ impl SpecLangASTInterface for Uclid5Interface {
             sl_ast::ValueOp::Add => String::from("+"),
             sl_ast::ValueOp::Sub => String::from("-"),
             sl_ast::ValueOp::Mul => String::from("*"),
+            sl_ast::ValueOp::BvXor => String::from("^"),
+            sl_ast::ValueOp::BvOr => String::from("|"),
+            sl_ast::ValueOp::BvAnd => String::from("&"),
+            sl_ast::ValueOp::RightShift => String::from("bv_a_right_shift"),
+            sl_ast::ValueOp::URightShift => String::from("bv_l_right_shift"),
+            sl_ast::ValueOp::LeftShift => String::from("bv_left_shift"),
             _ => panic!("Unimplemented value op {:#?}.", op),
         }
     }

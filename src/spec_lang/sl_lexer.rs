@@ -50,13 +50,17 @@ pub enum Tok<'input> {
     Dot,          // .
     Equals,       // =
     GreaterThan,  // >
+    RightShift,   // >>
+    URightShift,  // >>>
     LessThan,     // <
+    LeftShift,    // <<
     Plus,         // +
     Minus,        // -
     Question,     // ?
     Asterisk,     // *
     Slash,        // /
     Ampersand,    // &
+    Pipe,         // |
     Tilde,        // ~
     Bang,         // !
     Caret,        // ^
@@ -168,35 +172,74 @@ impl<'input> Iterator for Lexer<'input> {
                 Some((i, ',')) => return Some(Ok((i, Tok::Comma, i + 1))), // ,
                 Some((i, '.')) => return Some(Ok((i, Tok::Dot, i + 1))),  // .
                 Some((i, '=')) => return Some(Ok((i, Tok::Equals, i + 1))), // =
-                Some((i, '>')) => return Some(Ok((i, Tok::GreaterThan, i + 1))), // >
-                Some((i, '<')) => return Some(Ok((i, Tok::LessThan, i + 1))), // <
+                Some((i, '>')) => {
+                    if let Some((_, '>')) = self.chars.peek() {
+                        self.chars.next();
+                        if let Some((_, '>')) = self.chars.peek() {
+                            // >>>
+                            self.chars.next();
+                            return Some(Ok((i, Tok::URightShift, i + 1)));
+                        } else {
+                            // >>
+                            return Some(Ok((i, Tok::RightShift, i + 1)));
+                        }
+                    } else {
+                        // <
+                        return Some(Ok((i, Tok::GreaterThan, i + 1)));
+                    }
+                }
+                Some((i, '<')) => {
+                    if let Some((_, '<')) = self.chars.peek() {
+                        // <<
+                        self.chars.next();
+                        return Some(Ok((i, Tok::LeftShift, i + 1)));
+                    } else {
+                        // <
+                        return Some(Ok((i, Tok::LessThan, i + 1)));
+                    }
+                }
                 Some((i, '+')) => return Some(Ok((i, Tok::Plus, i + 1))), // +
                 Some((i, '-')) => return Some(Ok((i, Tok::Minus, i + 1))), // -
                 Some((i, '?')) => return Some(Ok((i, Tok::Question, i + 1))), // ?
                 Some((i, '*')) => return Some(Ok((i, Tok::Asterisk, i + 1))), // *
-                Some((i, '/')) => return Some(Ok((i, Tok::Slash, i + 1))), // *
+                Some((i, '/')) => {
+                    if let Some((_, '/')) = self.chars.peek() {
+                        // //
+                        while let Some((j, c)) = self.chars.peek() {
+                            if *c == '\n' {
+                                break;
+                            } else {
+                                self.chars.next();
+                            }
+                        }
+                        continue;
+                    } else {
+                        // /
+                        return Some(Ok((i, Tok::Slash, i + 1)));
+                    }
+                }
                 Some((i, '&')) => return Some(Ok((i, Tok::Ampersand, i + 1))), // &
-                Some((i, '~')) => return Some(Ok((i, Tok::Tilde, i + 1))), // ~
-                Some((i, '!')) => return Some(Ok((i, Tok::Bang, i + 1))), // !
-                Some((i, '^')) => return Some(Ok((i, Tok::Caret, i + 1))), // ^
-                Some((i, '$')) => return Some(Ok((i, Tok::Dollar, i + 1))), // $
+                Some((i, '|')) => return Some(Ok((i, Tok::Pipe, i + 1))),      // &
+                Some((i, '~')) => return Some(Ok((i, Tok::Tilde, i + 1))),     // ~
+                Some((i, '!')) => return Some(Ok((i, Tok::Bang, i + 1))),      // !
+                Some((i, '^')) => return Some(Ok((i, Tok::Caret, i + 1))),     // ^
+                Some((i, '$')) => return Some(Ok((i, Tok::Dollar, i + 1))),    // $
                 Some((i, '{')) => return Some(Ok((i, Tok::LeftBrace, i + 1))), // {
                 Some((i, '[')) => return Some(Ok((i, Tok::LeftBracket, i + 1))), // [
                 Some((i, '(')) => return Some(Ok((i, Tok::LeftParen, i + 1))), // (
                 Some((i, '}')) => return Some(Ok((i, Tok::RightBrace, i + 1))), // }
                 Some((i, ']')) => return Some(Ok((i, Tok::RightBracket, i + 1))), // ]
                 Some((i, ')')) => return Some(Ok((i, Tok::RightParen, i + 1))), // )
-                None => return None,                                      // End of file
+                None => return None,                                           // End of file
                 Some((i, _)) => loop {
                     match self.chars.peek() {
                         Some((j, ' ')) | Some((j, ':')) | Some((j, ';')) | Some((j, ','))
                         | Some((j, '.')) | Some((j, '=')) | Some((j, '>')) | Some((j, '<'))
                         | Some((j, '+')) | Some((j, '-')) | Some((j, '?')) | Some((j, '*'))
-                        | Some((j, '/')) | Some((j, '&')) | Some((j, '~')) | Some((j, '!'))
-                        | Some((j, '^')) | Some((j, '$')) | Some((j, '{')) | Some((j, '['))
-                        | Some((j, '(')) | Some((j, '}')) | Some((j, ']')) | Some((j, ')')) => {
-                            return identify(&self.input, i, *j)
-                        }
+                        | Some((j, '/')) | Some((j, '&')) | Some((j, '|')) | Some((j, '~'))
+                        | Some((j, '!')) | Some((j, '^')) | Some((j, '$')) | Some((j, '{'))
+                        | Some((j, '[')) | Some((j, '(')) | Some((j, '}')) | Some((j, ']'))
+                        | Some((j, ')')) => return identify(&self.input, i, *j),
                         None => return identify(&self.input, i, self.input.len()),
                         _ => {}
                     }
