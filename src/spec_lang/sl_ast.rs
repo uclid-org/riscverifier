@@ -75,14 +75,33 @@ impl VType {
                 /// These operators require all the same types
                 let same_types = exprs
                     .iter()
-                    .fold(false, |acc, expr| acc && exprs[0].typ() == expr.typ());
+                    .fold(true, |acc, expr| acc && exprs[0].typ() == expr.typ());
                 if same_types {
                     exprs[0].typ().clone()
                 } else {
                     Self::Unknown
                 }
             }
+            ValueOp::Concat => {
+                let width0 = exprs[0].typ().get_bv_width();
+                let width1 = exprs[1].typ().get_bv_width();
+                Self::Bv(width0 + width1)
+            }
             _ => panic!("Unimplemented type inference."),
+        }
+    }
+    pub fn infer_func_app_type(fapp: &str, exprs: &Vec<VExpr>) -> VType {
+        if exprs.len() == 0 {
+            panic!("Function application with no arguments provided.");
+        }
+        match fapp {
+            "old" => exprs[0].typ().clone(),
+            "sext" | "uext" => {
+                let expr_width = exprs[1].typ().get_bv_width();
+                let ext_width = exprs[0].get_int_value() as u16;
+                Self::Bv(expr_width + ext_width)
+            },
+            _ => panic!("Unimplemented type inference for {}.", fapp),
         }
     }
     /// Translates a DwarfTypeDefn to a specification variable type
@@ -209,6 +228,13 @@ impl VExpr {
             | Self::FuncApp(_, _, typ) => typ,
         }
     }
+    /// Helper function that returns the value of a bitvector VExpr
+    pub fn get_int_value(&self) -> i64 {
+        match self {
+            Self::Int(value, _) => *value,
+            _ => panic!("Should be `Self::Bv` expression. Found {:?} instead", self),
+        }
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -226,6 +252,7 @@ pub enum ValueOp {
     ArrayIndex,                 // a[i]
     GetField,                   // s.f
     Slice { lo: u16, hi: u16 }, // a[lo:hi]
+    Concat,
     Deref,
 }
 

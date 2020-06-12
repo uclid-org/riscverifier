@@ -696,7 +696,7 @@ impl SpecLangASTInterface for Uclid5Interface {
         let cop_str = Self::cop_to_string(cop);
         let expr_str1 = Self::vexpr_to_string(&exprs[0]);
         let expr_str2 = Self::vexpr_to_string(&exprs[1]);
-        format!("{} {} {}", expr_str1, cop_str, expr_str2)
+        format!("({} {} {})", expr_str1, cop_str, expr_str2)
     }
     fn bopp_to_string(bop: &sl_ast::BoolOp) -> String {
         match bop {
@@ -761,7 +761,7 @@ impl SpecLangASTInterface for Uclid5Interface {
                 let first_expr = Self::vexpr_to_string(&exprs[0]);
                 exprs.iter().skip(1).fold(first_expr, |acc, expr| {
                     let op_str = Self::valueop_to_string(op);
-                    format!("{} {} {}", acc, op_str, Self::vexpr_to_string(expr))
+                    format!("({} {} {})", acc, op_str, Self::vexpr_to_string(expr))
                 })
             }
             sl_ast::ValueOp::RightShift
@@ -815,6 +815,11 @@ impl SpecLangASTInterface for Uclid5Interface {
                 let bytes = exprs[0].typ().get_bv_width() as u64 / utils::BYTE_SIZE;
                 format!("deref_{}(mem, {})", bytes, expr_str)
             }
+            sl_ast::ValueOp::Concat => {
+                let expr_str0 = Self::vexpr_to_string(&exprs[0]);
+                let expr_str1 = Self::vexpr_to_string(&exprs[1]);
+                format!("({} ++ {})", expr_str0, expr_str1)
+            }
             _ => panic!("vexpr_opapp_to_string not implemented for {:#?}", op),
         }
     }
@@ -824,6 +829,11 @@ impl SpecLangASTInterface for Uclid5Interface {
             .map(|arg| Self::vexpr_to_string(arg))
             .collect::<Vec<String>>()
             .join(", ");
+        let fname = match &fname[..] {
+            "sext" => "bv_sign_extend",
+            "uext" => "bv_zero_extend",
+            _ => fname,
+        };
         format!("{}({})", fname, args_str)
     }
     fn valueop_to_string(op: &sl_ast::ValueOp) -> String {

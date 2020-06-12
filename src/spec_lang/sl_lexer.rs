@@ -34,6 +34,13 @@ pub enum Tok<'input> {
     Old,
     Forall,
     Exists,
+    // Builtin functions
+    RightShift,   // >>
+    URightShift,  // >>>
+    LeftShift,    // <<
+    SignedExt,    // sext
+    UnsignedExt,  // uext
+    Concat,       // ++
     // Identifier:
     Id(&'input str),
     // Primitives:
@@ -50,10 +57,7 @@ pub enum Tok<'input> {
     Dot,          // .
     Equals,       // =
     GreaterThan,  // >
-    RightShift,   // >>
-    URightShift,  // >>>
     LessThan,     // <
-    LeftShift,    // <<
     Plus,         // +
     Minus,        // -
     Question,     // ?
@@ -86,6 +90,8 @@ const KEYWORDS: &'static [(&'static str, Tok<'static>)] = &[
     ("old", Tok::Old),
     ("forall", Tok::Forall),
     ("exists", Tok::Exists),
+    ("sext", Tok::SignedExt),
+    ("uext", Tok::UnsignedExt),
 ];
 
 const BOOL_KEYWORDS: &'static [(&'static str, Tok<'static>)] =
@@ -198,7 +204,16 @@ impl<'input> Iterator for Lexer<'input> {
                         return Some(Ok((i, Tok::LessThan, i + 1)));
                     }
                 }
-                Some((i, '+')) => return Some(Ok((i, Tok::Plus, i + 1))), // +
+                Some((i, '+')) => {
+                    if let Some((_, '+')) = self.chars.peek() {
+                        // ++
+                        self.chars.next();
+                        return Some(Ok((i, Tok::Concat, i + 1)));
+                    } else {
+                        // +
+                        return Some(Ok((i, Tok::Plus, i + 1)));
+                    }
+                },
                 Some((i, '-')) => return Some(Ok((i, Tok::Minus, i + 1))), // -
                 Some((i, '?')) => return Some(Ok((i, Tok::Question, i + 1))), // ?
                 Some((i, '*')) => return Some(Ok((i, Tok::Asterisk, i + 1))), // *

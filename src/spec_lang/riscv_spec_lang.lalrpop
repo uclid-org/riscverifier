@@ -1,4 +1,5 @@
 use std::collections::HashSet;
+use std::num::Wrapping;
 
 use crate::readers::dwarfreader::{DwarfCtx, DwarfTypeDefn};
 use crate::spec_lang::sl_ast as ast;
@@ -182,6 +183,7 @@ pub ValueOp2: ast::ValueOp = {
     ">>" => ast::ValueOp::RightShift,
     ">>>" => ast::ValueOp::URightShift,
     "<<" => ast::ValueOp::LeftShift,
+    "++" => ast::ValueOp::Concat,
 }
 
 pub Term: ast::VExpr = {
@@ -192,9 +194,14 @@ pub Term: ast::VExpr = {
             panic!("Implementation error: bool should be Tok::Bool(..) enum type.")
         }
     },
-    "int" => {
-        if let Tok::Int(i) = <> {
-            ast::VExpr::Int(i, ast::VType::Int)
+    <m:"-"?> <i:"int"> => {
+        if let Tok::Int(i) = i {
+            let si = if m.is_some() {
+                -i
+            } else {
+                i
+            };
+            ast::VExpr::Int(si, ast::VType::Int)
         } else {
             panic!("Implementation error: bool should be Tok::Int(..) enum type.")
         }
@@ -206,19 +213,28 @@ pub Term: ast::VExpr = {
             panic!("Implementation error: bool should be Tok::Bv(..) enum type.")
         }
     },
-    <f:BuiltIn> "(" <es:VExpr+> ")" => {
-        let typ = match &f[..] {
-            "old" => es[0].typ().clone(),
-            _ => ast::VType::Unknown,
-        };
+    <f:BuiltIn> "(" <es:CommaSepVExprs> ")" => {
+        let typ = ast::VType::infer_func_app_type(&f[..], &es);
         ast::VExpr::FuncApp(f, es, typ)
     },
     Ident,
     "(" <e:VExpr> ")" => e,
 }
 
+pub CommaSepVExprs: Vec<ast::VExpr> = {
+    <mut vexprs: CommaSepVExprs> "," <e: VExpr> => {
+        vexprs.push(e);
+        vexprs
+    },
+    VExpr => {
+        vec![<>]
+    },
+}
+
 pub BuiltIn: String = {
-    "old" => "old".to_string()
+    "old" => "old".to_string(),
+    "sext" => "sext".to_string(),
+    "uext" => "uext".to_string(),
 }
 
 pub Ident: ast::VExpr = {
@@ -290,15 +306,22 @@ extern {
         "forall" => Tok::Forall,
         "exists" => Tok::Exists,
         "_u" => Tok::Nil,
-        // Identifier:
+        // Builtin functions
+        ">>" => Tok::RightShift,    // >>
+        ">>>" => Tok::URightShift,  // >>>
+        "<<" => Tok::LeftShift,     // <
+        "sext" => Tok::SignedExt,   // sext
+        "uext" => Tok::UnsignedExt, // uext
+        "++" => Tok::Concat,        // ++
+        // Identifier
         "id" => Tok::Id(<&'input str>),
         // Primitives
         "int" => Tok::Int(i64),
         "bv" => Tok::Bv { value: u64, width: u16 },
         "bool" => Tok::Bool(bool),
-        // Types:
+        // Types
         "bv_type" => Tok::BvType(u16),
-        // Symbols:
+        // Symbols
         ":" => Tok::Colon,          // :
         "::" => Tok::ColonColon,    // ::
         ";" => Tok::Semi,           // ;
@@ -306,10 +329,7 @@ extern {
         "." => Tok::Dot,            // .
         "=" => Tok::Equals,         // =
         ">" => Tok::GreaterThan,    // >
-        ">>" => Tok::RightShift,    // >>
-        ">>>" => Tok::URightShift,  // >>>
         "<" => Tok::LessThan,       // <
-        "<<" => Tok::LeftShift,     // <
         "+" => Tok::Plus,           // +
         "-" => Tok::Minus,          // -
         "?" => Tok::Question,       // ?

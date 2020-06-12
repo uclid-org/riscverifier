@@ -13,4 +13,7 @@ fun region_get_addr {
     // ensures (0bv32 << 0bv32 == 0bv32);
     // ensures (0bv32 >>> 0bv32 == 0bv32);
     // ensures (0bv32 >> 0bv32 == 0bv32);
+    // ensures 0bv32 ++ 0bv32 == 0bv64;
+    //ensures sext(3, 0bv32 - 1bv32) == 0bv35-1bv35;
+    //ensures uext(3, 0bv32 - 1bv32) == 0bv3 ++ (0bv32-1bv32);
 }
