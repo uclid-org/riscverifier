@@ -41,6 +41,9 @@ use datastructures::cfg::BasicBlock;
 
 mod system_model;
 
+mod spec_template_printer;
+use spec_template_printer::SpecTemplatePrinter;
+
 mod ast;
 
 mod ir_interface;
@@ -81,6 +84,13 @@ fn main() {
                 .help("Specify the output path.")
                 .short("o")
                 .long("output")
+                .takes_value(true),
+        )
+        .arg(
+            Arg::with_name("spec_template")
+                .help("Specify the specification template output file.")
+                .short("t")
+                .long("spec_template")
                 .takes_value(true),
         )
         .arg(
@@ -174,6 +184,15 @@ fn main() {
     );
     for func_name in func_names {
         translator.gen_func_model(&func_name);
+    }
+    // Print specification template
+    if let Some(output_file) = matches.value_of("spec_template") {
+        let spec_template_str =
+            SpecTemplatePrinter::fun_templates(dwarf_reader.ctx());
+        let res = File::create(output_file)
+            .ok()
+            .unwrap()
+            .write_all(spec_template_str.as_bytes());
     }
     // Print model to file
     let model_str = translator.print_model();
