@@ -20,7 +20,9 @@ pub struct Translator<'t, I>
 where
     I: IRInterface,
 {
-    /// ====== Translator Inputs ========
+    /// =============================================================
+    /// INPUTS
+    ///
     /// Width of integer register in bits (FIXME: also currently used for address length)
     xlen: u64,
     /// Verification model
@@ -39,13 +41,19 @@ where
     /// When true, all function pre and post conditions are ignored
     /// and functions are all inlined
     ignore_specs: bool,
-    /// ========== Context ================
+
+    /// ============================================================
+    /// CONTEXT
+    /// Helper variables to keep track of the translation progress 
+    ///
     /// Map of function names / labels to entry addresses
     labels_to_addr: HashMap<String, u64>,
     /// Memoize map for generated functions at the given address
     cfg_memo: HashMap<u64, Rc<cfg::Cfg<disassembler::AssemblyLine>>>,
-    /// Generated functions / labels
+    /// Generated functions / labels by addresses
     generated: HashSet<u64>,
+    /// Generated functions by names
+    generated_func_names: HashSet<String>,
     /// Map of procedure name to thier modifies set
     mod_set_map: HashMap<String, HashSet<String>>,
     /// ========= Phantom Data ==========
@@ -79,6 +87,7 @@ where
             labels_to_addr: Translator::<I>::create_label_to_addr_map(bbs),
             cfg_memo: HashMap::new(),
             generated: HashSet::new(),
+            generated_func_names: HashSet::new(),
             mod_set_map: HashMap::new(),
             _phantom_i: PhantomData,
         }
@@ -92,6 +101,7 @@ where
         self.model = Model::new(&self.model.name);
         self.generated = HashSet::new();
     }
+
     /// Returns a map of labels / function names to entry addresses
     fn create_label_to_addr_map(
         bbs: &HashMap<u64, Rc<cfg::BasicBlock<disassembler::AssemblyLine>>>,
@@ -108,9 +118,10 @@ where
     }
 
     // =============================================================================
-    // ==================== Printing functions =====================================
+    // ==================== Helper functions =======================================
     // =============================================================================
-    /// Outputs the model into output stream
+    
+    /// Returns the string representation of the model
     pub fn print_model(&self) -> String {
         I::model_to_string(
             &self.xlen,
@@ -120,12 +131,19 @@ where
             &self.verify_funcs,
         )
     }
+
+    /// Returns a list of functions currently generated
+    pub fn generated_funcs(&self) -> &HashSet<String> {
+        &self.generated_func_names
+    }
+
     // =============================================================================
-    // ==================== Main translation functions =============================
+    // ==================== Translation functions ==================================
     // =============================================================================
 
     /// Generates a stub function model
     pub fn gen_func_model_stub(&mut self, func_name: &str) {
+        self.generated_func_names.insert(func_name.to_string());
         let arg_exprs = self
             .func_args(func_name)
             .iter()
@@ -164,6 +182,7 @@ where
         );
         self.model.add_func_model(stub_fm);
     }
+
     /// Generates a model for the function at address "addr"
     pub fn gen_func_model(&mut self, func_name: &str) {
         // Don't generate already generated functions
@@ -173,7 +192,9 @@ where
         if self.generated.get(&func_entry).is_some() {
             return;
         }
+        // Add function to generated function sets
         self.generated.insert(func_entry);
+        self.generated_func_names.insert(func_name.to_string());
         // Generate stub function models for ignored functions
         if self.ignored_funcs.get(func_name).is_some() {
             self.gen_func_model_stub(func_name);
@@ -182,7 +203,7 @@ where
         // Get the function cfg
         let func_cfg = self.get_func_cfg(func_entry);
 
-        // ======= State variables ======= //
+        // ======= State variables ====================================
         // FIXME: Remove these later; these variables should be predefined for RISC-V architectures.
         // Add global variables for the function block
         self.model.add_vars(&self.infer_vars(&func_cfg));
@@ -190,7 +211,7 @@ where
         self.model
             .add_vars(&system_model::sys_state_vars(self.xlen));
 
-        // ====== Basic Block Function Models ==== //
+        // ====== Basic Block Function Models ==========================
         // Generate procedure model for each basic block
         let bb_fms = func_cfg
             .nodes()
@@ -213,7 +234,7 @@ where
                 )
             })
             .collect::<Vec<_>>();
-        // ====== Modifies sets ======= //
+        // ====== Modifies sets ============================================
         // Add all basic block mod sets to the model
         let bb_mod_sets = bb_fms
             .iter()
@@ -230,7 +251,8 @@ where
             .collect::<HashSet<String>>();
         // Add basic block function models to the model
         self.model.add_func_models(bb_fms);
-        // ======== Recursively Generate Callees ======== //
+
+        // ======== Recursively Generate Callees ===========================
         let callees = self.get_callee_addrs(func_name, &func_cfg);
         for (target, _) in &callees {
             if let Ok(name) = self.get_func_at(target) {
@@ -258,6 +280,8 @@ where
                 }
             }
         }
+
+        // ================= Create function model ============================
         // Memo current mod set
         self.mod_set_map
             .insert(func_name.to_string(), mod_set.clone());
@@ -365,6 +389,7 @@ where
         }
         mod_set
     }
+
     /// Returns a block statement for the CFG
     fn cfg_to_symbolic_blk(
         &self,
@@ -452,6 +477,7 @@ where
         )));
         Stmt::Block(stmts_vec)
     }
+
     /// Returns a guarded block statement
     /// Guards are pc == target and returned == false
     fn guarded_call(&self, entry: &u64, blk: Stmt) -> Stmt {
@@ -477,6 +503,7 @@ where
         // Return the guarded call
         Stmt::if_then_else(if_guard, then_blk_stmt, None)
     }
+
     /// Returns a topological sort of the cfg as an array of entry addresses
     fn topo_sort(&self, cfg_rc: &Rc<cfg::Cfg<disassembler::AssemblyLine>>) -> Vec<u64> {
         let mut ts = TopologicalSort::<u64>::new();
@@ -531,6 +558,7 @@ where
         }
         sorted
     }
+
     /// Recursively computes the dependency graph given the entry address
     /// However, it ignores all subgraphs rooted at cfg nodes with an entry address
     /// in which the closure "ignore" returns true for.
@@ -572,6 +600,7 @@ where
             panic!("Unable to find basic block at {}", curr);
         }
     }
+
     /// Returns the function defined at the address "addr"
     fn get_func_at(&self, addr: &u64) -> Result<String, utils::Error> {
         let entry_blk = self
@@ -588,6 +617,7 @@ where
             )))
         }
     }
+
     /// Returns a list of callee addresses and the lines they were called at
     ///
     /// # EXAMPLE
@@ -611,10 +641,12 @@ where
         }
         callee_addrs
     }
+
     /// Returns the function name for basic blocks
     fn bb_proc_name(&self, addr: u64) -> String {
         format!("bb_{:#x?}", addr)
     }
+
     /// Returns a block statement given representing the basic block
     fn cfg_node_to_block(&self, bb: &Rc<cfg::CfgNode<disassembler::AssemblyLine>>) -> Stmt {
         let mut stmt_vec = vec![];
@@ -624,6 +656,7 @@ where
         }
         Stmt::Block(stmt_vec)
     }
+
     /// Returns the statment containing the instruction specs
     fn al_to_ir_stmt(&self, al: &Rc<disassembler::AssemblyLine>) -> Stmt {
         // Destination registers
@@ -870,6 +903,7 @@ where
             _ => system_model::unimplemented_inst(al.op(), self.xlen),
         }
     }
+
     /// Constructs and returns a pointer to a Cfg with entry address addr
     fn get_func_cfg(&mut self, addr: u64) -> Rc<cfg::Cfg<disassembler::AssemblyLine>> {
         if let Some(cfg_rc) = self.cfg_memo.get(&addr) {
@@ -887,6 +921,7 @@ where
         self.cfg_memo.insert(addr, Rc::clone(&cfg));
         cfg
     }
+
     /// Infer register variables from cfg.
     /// FIXME: Remove this function, eventually the system model should be entirely predefined.
     fn infer_vars(&self, cfg_rc: &Rc<cfg::Cfg<disassembler::AssemblyLine>>) -> HashSet<Var> {
@@ -911,6 +946,7 @@ where
             })
             .collect::<HashSet<Var>>()
     }
+
     /// Returns the arguments of a function from the DWARF context
     fn func_args(&self, func_name: &str) -> Vec<Expr> {
         self.dwarf_ctx

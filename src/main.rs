@@ -41,8 +41,8 @@ use datastructures::cfg::BasicBlock;
 
 mod system_model;
 
-mod spec_template_printer;
-use spec_template_printer::SpecTemplatePrinter;
+mod spec_template_generator;
+use spec_template_generator::SpecTemplateGenerator;
 
 mod ast;
 
@@ -50,9 +50,12 @@ mod ir_interface;
 
 mod utils;
 
-fn main() {
+fn initialize_logging() {
     env_logger::init();
-    let matches = App::new("RISCVerifier")
+}
+
+fn cl_options<'t, 's>() -> App<'t, 's> {
+    App::new("RISCVerifier")
         .version("1.0")
         .author("Kevin Cheang <kcheang@berkeley.edu>")
         .about("Translates RISC-V assembly (support for 64g only) programs into an IR")
@@ -127,7 +130,11 @@ fn main() {
                 .long("ignore-specs")
                 .takes_value(false),
         )
-        .get_matches();
+}
+
+fn main() -> Result<(), utils::Error> {
+    initialize_logging();
+    let matches = cl_options().get_matches();
     let xlen = utils::dec_str_to_u64(matches.value_of("xlen").unwrap_or("64"))
         .expect("[main] Unable to parse numberic xlen.");
     if xlen != 64 {
@@ -185,14 +192,6 @@ fn main() {
     for func_name in func_names {
         translator.gen_func_model(&func_name);
     }
-    // Print specification template
-    if let Some(output_file) = matches.value_of("spec_template") {
-        let spec_template_str = SpecTemplatePrinter::fun_templates(dwarf_reader.ctx());
-        let res = File::create(output_file)
-            .ok()
-            .unwrap()
-            .write_all(spec_template_str.as_bytes());
-    }
     // Print model to file
     let model_str = translator.print_model();
     if let Some(output_file) = matches.value_of("output") {
@@ -205,5 +204,17 @@ fn main() {
             Err(_) => panic!("Unable to write model to {}", output_file),
         }
     }
+    // Print specification template
+    if let Some(output_file) = matches.value_of("spec_template") {
+        let spec_template_str =
+            SpecTemplateGenerator::fun_templates(
+                translator.generated_funcs(),
+                dwarf_reader.ctx())?;
+        let res = File::create(output_file)
+            .ok()
+            .unwrap()
+            .write_all(spec_template_str.as_bytes());
+    }
     translator.clear();
+    Ok(())
 }
