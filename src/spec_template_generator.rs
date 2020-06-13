@@ -18,7 +18,7 @@ impl SpecTemplateGenerator {
             let func_sig = dwarf_ctx.func_sig(fname)?;
             // Create the arguments, return type, and signature strings comments
             let args = &func_sig.args.iter().fold(format!(""), |acc, arg| {
-                let arg_str = SpecTemplateGenerator::arg_to_string(arg);
+                let arg_str = SpecTemplateGenerator::var_to_string(arg);
                 format!("{}, {}", acc, arg_str)
             })[2..];
             let ret_type_str = if let Some(ret_type) = &func_sig.ret_type {
@@ -33,9 +33,10 @@ impl SpecTemplateGenerator {
         Ok(template)
     }
 
-    fn arg_to_string(arg: &DwarfVar) -> String {
-        let type_str = SpecTemplateGenerator::type_to_string(&*arg.typ_defn);
-        format!("{}: {}", arg.name, type_str)
+    /// Returns the string version of the variable
+    fn var_to_string(var: &DwarfVar) -> String {
+        let type_str = SpecTemplateGenerator::type_to_string(&*var.typ_defn);
+        format!("{}: {}", var.name, type_str)
     }
 
     fn type_to_string(typ: &DwarfTypeDefn) -> String {
