@@ -207,9 +207,7 @@ fn main() -> Result<(), utils::Error> {
     // Print specification template
     if let Some(output_file) = matches.value_of("spec_template") {
         let spec_template_str =
-            SpecTemplateGenerator::fun_templates(
-                translator.generated_funcs(),
-                dwarf_reader.ctx())?;
+            SpecTemplateGenerator::fun_templates(translator.generated_funcs(), dwarf_reader.ctx())?;
         let res = File::create(output_file)
             .ok()
             .unwrap()

@@ -44,7 +44,7 @@ where
 
     /// ============================================================
     /// CONTEXT
-    /// Helper variables to keep track of the translation progress 
+    /// Helper variables to keep track of the translation progress
     ///
     /// Map of function names / labels to entry addresses
     labels_to_addr: HashMap<String, u64>,
@@ -120,7 +120,7 @@ where
     // =============================================================================
     // ==================== Helper functions =======================================
     // =============================================================================
-    
+
     /// Returns the string representation of the model
     pub fn print_model(&self) -> String {
         I::model_to_string(
