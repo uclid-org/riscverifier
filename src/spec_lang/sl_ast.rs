@@ -100,7 +100,7 @@ impl VType {
                 let expr_width = exprs[1].typ().get_bv_width();
                 let ext_width = exprs[0].get_int_value() as u16;
                 Self::Bv(expr_width + ext_width)
-            },
+            }
             _ => panic!("Unimplemented type inference for {}.", fapp),
         }
     }

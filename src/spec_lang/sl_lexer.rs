@@ -35,12 +35,12 @@ pub enum Tok<'input> {
     Forall,
     Exists,
     // Builtin functions
-    RightShift,   // >>
-    URightShift,  // >>>
-    LeftShift,    // <<
-    SignedExt,    // sext
-    UnsignedExt,  // uext
-    Concat,       // ++
+    RightShift,  // >>
+    URightShift, // >>>
+    LeftShift,   // <<
+    SignedExt,   // sext
+    UnsignedExt, // uext
+    Concat,      // ++
     // Identifier:
     Id(&'input str),
     // Primitives:
@@ -213,7 +213,7 @@ impl<'input> Iterator for Lexer<'input> {
                         // +
                         return Some(Ok((i, Tok::Plus, i + 1)));
                     }
-                },
+                }
                 Some((i, '-')) => return Some(Ok((i, Tok::Minus, i + 1))), // -
                 Some((i, '?')) => return Some(Ok((i, Tok::Question, i + 1))), // ?
                 Some((i, '*')) => return Some(Ok((i, Tok::Asterisk, i + 1))), // *

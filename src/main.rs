@@ -187,8 +187,7 @@ fn main() {
     }
     // Print specification template
     if let Some(output_file) = matches.value_of("spec_template") {
-        let spec_template_str =
-            SpecTemplatePrinter::fun_templates(dwarf_reader.ctx());
+        let spec_template_str = SpecTemplatePrinter::fun_templates(dwarf_reader.ctx());
         let res = File::create(output_file)
             .ok()
             .unwrap()
