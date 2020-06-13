@@ -34,12 +34,12 @@ impl SpecTemplateGenerator {
     }
 
     /// Returns the string version of the variable
-    fn var_to_string(var: &DwarfVar) -> String {
+    pub fn var_to_string(var: &DwarfVar) -> String {
         let type_str = SpecTemplateGenerator::type_to_string(&*var.typ_defn);
         format!("{}: {}", var.name, type_str)
     }
 
-    fn type_to_string(typ: &DwarfTypeDefn) -> String {
+    pub fn type_to_string(typ: &DwarfTypeDefn) -> String {
         match typ {
             DwarfTypeDefn::Primitive { bytes } => format!("bv{}", bytes * utils::BYTE_SIZE),
             DwarfTypeDefn::Array {

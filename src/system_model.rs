@@ -112,7 +112,7 @@ pub fn unimplemented_inst(op: &str, xlen: u64) -> Stmt {
 /// add
 pub fn add_inst(rd: Expr, rs1: Expr, rs2: Expr, xlen: u64) -> Stmt {
     let mut stmts = vec![];
-    stmts.push(Stmt::Comment(format!("add {:?}, {:?}, {:?}", rd, rs1, rs2)));
+    stmts.push(Stmt::Comment(format!("add {}, {}, {}", rd, rs1, rs2)));
     // rd := rs1 + rs2
     stmts.push(Stmt::assign(
         vec![rd],
@@ -125,7 +125,7 @@ pub fn add_inst(rd: Expr, rs1: Expr, rs2: Expr, xlen: u64) -> Stmt {
 /// sub
 pub fn sub_inst(rd: Expr, rs1: Expr, rs2: Expr, xlen: u64) -> Stmt {
     let mut stmts = vec![];
-    stmts.push(Stmt::Comment(format!("sub {:?}, {:?}, {:?}", rd, rs1, rs2)));
+    stmts.push(Stmt::Comment(format!("sub {}, {}, {}", rd, rs1, rs2)));
     // rd := rs1 - rs2
     stmts.push(Stmt::assign(
         vec![rd],
@@ -137,7 +137,7 @@ pub fn sub_inst(rd: Expr, rs1: Expr, rs2: Expr, xlen: u64) -> Stmt {
 /// mul
 pub fn mul_inst(rd: Expr, rs1: Expr, rs2: Expr, xlen: u64) -> Stmt {
     let mut stmts = vec![];
-    stmts.push(Stmt::Comment(format!("mul {:?}, {:?}, {:?}", rd, rs1, rs2)));
+    stmts.push(Stmt::Comment(format!("mul {}, {}, {}", rd, rs1, rs2)));
     // rd := rs1 * rs2
     stmts.push(Stmt::assign(
         vec![rd],
@@ -150,7 +150,7 @@ pub fn mul_inst(rd: Expr, rs1: Expr, rs2: Expr, xlen: u64) -> Stmt {
 /// sll
 pub fn sll_inst(rd: Expr, rs1: Expr, rs2: Expr, xlen: u64) -> Stmt {
     let mut stmts = vec![];
-    stmts.push(Stmt::Comment(format!("sll {:?}, {:?}, {:?}", rd, rs1, rs2)));
+    stmts.push(Stmt::Comment(format!("sll {}, {}, {}", rd, rs1, rs2)));
     stmts.push(Stmt::assign(
         vec![rd],
         vec![Expr::op_app(
@@ -168,7 +168,7 @@ pub fn sll_inst(rd: Expr, rs1: Expr, rs2: Expr, xlen: u64) -> Stmt {
 /// slt
 pub fn slt_inst(rd: Expr, rs1: Expr, rs2: Expr, xlen: u64) -> Stmt {
     let mut stmts = vec![];
-    stmts.push(Stmt::Comment(format!("slt {:?}, {:?}, {:?}", rd, rs1, rs2)));
+    stmts.push(Stmt::Comment(format!("slt {}, {}, {}", rd, rs1, rs2)));
     let cond = Expr::op_app(Op::Comp(CompOp::Lt), vec![rs1, rs2]);
     let t_stmt = Stmt::assign(vec![rd.clone()], vec![Expr::bv_lit(1, xlen)]);
     let e_stmt = Stmt::assign(vec![rd.clone()], vec![Expr::bv_lit(0, xlen)]);
@@ -184,7 +184,7 @@ pub fn slt_inst(rd: Expr, rs1: Expr, rs2: Expr, xlen: u64) -> Stmt {
 pub fn sltu_inst(rd: Expr, rs1: Expr, rs2: Expr, xlen: u64) -> Stmt {
     let mut stmts = vec![];
     stmts.push(Stmt::Comment(format!(
-        "sltu {:?}, {:?}, {:?}",
+        "sltu {}, {}, {}",
         rd, rs1, rs2
     )));
     let cond = Expr::op_app(Op::Comp(CompOp::Ltu), vec![rs1, rs2]);
@@ -201,7 +201,7 @@ pub fn sltu_inst(rd: Expr, rs1: Expr, rs2: Expr, xlen: u64) -> Stmt {
 /// xor
 pub fn xor_inst(rd: Expr, rs1: Expr, rs2: Expr, xlen: u64) -> Stmt {
     let mut stmts = vec![];
-    stmts.push(Stmt::Comment(format!("xor {:?}, {:?}, {:?}", rd, rs1, rs2)));
+    stmts.push(Stmt::Comment(format!("xor {}, {}, {}", rd, rs1, rs2)));
     stmts.push(Stmt::assign(
         vec![rd],
         vec![Expr::op_app(Op::Bv(BVOp::Xor), vec![rs1, rs2])],
@@ -212,7 +212,7 @@ pub fn xor_inst(rd: Expr, rs1: Expr, rs2: Expr, xlen: u64) -> Stmt {
 /// srl
 pub fn srl_inst(rd: Expr, rs1: Expr, rs2: Expr, xlen: u64) -> Stmt {
     let mut stmts = vec![];
-    stmts.push(Stmt::Comment(format!("srl {:?}, {:?}, {:?}", rd, rs1, rs2)));
+    stmts.push(Stmt::Comment(format!("srl {}, {}, {}", rd, rs1, rs2)));
     stmts.push(Stmt::assign(
         vec![rd],
         vec![Expr::op_app(
@@ -229,7 +229,7 @@ pub fn srl_inst(rd: Expr, rs1: Expr, rs2: Expr, xlen: u64) -> Stmt {
 /// sra
 pub fn sra_inst(rd: Expr, rs1: Expr, rs2: Expr, xlen: u64) -> Stmt {
     let mut stmts = vec![];
-    stmts.push(Stmt::Comment(format!("sra {:?}, {:?}, {:?}", rd, rs1, rs2)));
+    stmts.push(Stmt::Comment(format!("sra {}, {}, {}", rd, rs1, rs2)));
     stmts.push(Stmt::assign(
         vec![rd],
         vec![Expr::op_app(
@@ -246,7 +246,7 @@ pub fn sra_inst(rd: Expr, rs1: Expr, rs2: Expr, xlen: u64) -> Stmt {
 /// or
 pub fn or_inst(rd: Expr, rs1: Expr, rs2: Expr, xlen: u64) -> Stmt {
     let mut stmts = vec![];
-    stmts.push(Stmt::Comment(format!("or {:?}, {:?}, {:?}", rd, rs1, rs2)));
+    stmts.push(Stmt::Comment(format!("or {}, {}, {}", rd, rs1, rs2)));
     stmts.push(Stmt::assign(
         vec![rd],
         vec![Expr::op_app(Op::Bv(BVOp::Or), vec![rs1, rs2])],
@@ -257,7 +257,7 @@ pub fn or_inst(rd: Expr, rs1: Expr, rs2: Expr, xlen: u64) -> Stmt {
 /// and
 pub fn and_inst(rd: Expr, rs1: Expr, rs2: Expr, xlen: u64) -> Stmt {
     let mut stmts = vec![];
-    stmts.push(Stmt::Comment(format!("and {:?}, {:?}, {:?}", rd, rs1, rs2)));
+    stmts.push(Stmt::Comment(format!("and {}, {}, {}", rd, rs1, rs2)));
     stmts.push(Stmt::assign(
         vec![rd],
         vec![Expr::op_app(Op::Bv(BVOp::And), vec![rs1, rs2])],
@@ -269,7 +269,7 @@ pub fn and_inst(rd: Expr, rs1: Expr, rs2: Expr, xlen: u64) -> Stmt {
 pub fn addw_inst(rd: Expr, rs1: Expr, rs2: Expr, xlen: u64) -> Stmt {
     let mut stmts = vec![];
     stmts.push(Stmt::Comment(format!(
-        "addw {:?}, {:?}, {:?}",
+        "addw {}, {}, {}",
         rd, rs1, rs2
     )));
     let ret = Expr::op_app(
@@ -290,7 +290,7 @@ pub fn addw_inst(rd: Expr, rs1: Expr, rs2: Expr, xlen: u64) -> Stmt {
 pub fn subw_inst(rd: Expr, rs1: Expr, rs2: Expr, xlen: u64) -> Stmt {
     let mut stmts = vec![];
     stmts.push(Stmt::Comment(format!(
-        "subw {:?}, {:?}, {:?}",
+        "subw {}, {}, {}",
         rd, rs1, rs2
     )));
     let ret = Expr::op_app(
@@ -311,7 +311,7 @@ pub fn subw_inst(rd: Expr, rs1: Expr, rs2: Expr, xlen: u64) -> Stmt {
 pub fn sllw_inst(rd: Expr, rs1: Expr, rs2: Expr, xlen: u64) -> Stmt {
     let mut stmts = vec![];
     stmts.push(Stmt::Comment(format!(
-        "sllw {:?}, {:?}, {:?}",
+        "sllw {}, {}, {}",
         rd, rs1, rs2
     )));
     let ret = Expr::op_app(
@@ -341,7 +341,7 @@ pub fn sllw_inst(rd: Expr, rs1: Expr, rs2: Expr, xlen: u64) -> Stmt {
 pub fn srlw_inst(rd: Expr, rs1: Expr, rs2: Expr, xlen: u64) -> Stmt {
     let mut stmts = vec![];
     stmts.push(Stmt::Comment(format!(
-        "srlw {:?}, {:?}, {:?}",
+        "srlw {}, {}, {}",
         rd, rs1, rs2
     )));
     let ret = Expr::op_app(
@@ -365,7 +365,7 @@ pub fn srlw_inst(rd: Expr, rs1: Expr, rs2: Expr, xlen: u64) -> Stmt {
 pub fn sraw_inst(rd: Expr, rs1: Expr, rs2: Expr, xlen: u64) -> Stmt {
     let mut stmts = vec![];
     stmts.push(Stmt::Comment(format!(
-        "sraw {:?}, {:?}, {:?}",
+        "sraw {}, {}, {}",
         rd, rs1, rs2
     )));
     let ret = Expr::op_app(
@@ -389,7 +389,7 @@ pub fn sraw_inst(rd: Expr, rs1: Expr, rs2: Expr, xlen: u64) -> Stmt {
 pub fn jalr_inst(rd: Expr, rs1: Expr, imm: Expr, xlen: u64) -> Stmt {
     let mut stmts = vec![];
     stmts.push(Stmt::Comment(format!(
-        "jalr {:?}, {:?}, {:?}",
+        "jalr {}, {}, {}",
         rd, rs1, imm
     )));
     // rd := pc + 4bv64
@@ -422,7 +422,7 @@ pub fn jalr_inst(rd: Expr, rs1: Expr, imm: Expr, xlen: u64) -> Stmt {
 /// lb
 pub fn lb_inst(rd: Expr, rs1: Expr, imm: Expr, xlen: u64) -> Stmt {
     let mut stmts = vec![];
-    stmts.push(Stmt::Comment(format!("lb {:?}, {:?}, {:?}", rd, rs1, imm)));
+    stmts.push(Stmt::Comment(format!("lb {}, {}, {}", rd, rs1, imm)));
     let ret = Expr::op_app(
         Op::Bv(BVOp::SignExt),
         vec![
@@ -444,7 +444,7 @@ pub fn lb_inst(rd: Expr, rs1: Expr, imm: Expr, xlen: u64) -> Stmt {
 /// lh
 pub fn lh_inst(rd: Expr, rs1: Expr, imm: Expr, xlen: u64) -> Stmt {
     let mut stmts = vec![];
-    stmts.push(Stmt::Comment(format!("lh {:?}, {:?}, {:?}", rd, rs1, imm)));
+    stmts.push(Stmt::Comment(format!("lh {}, {}, {}", rd, rs1, imm)));
     let ret = Expr::op_app(
         Op::Bv(BVOp::SignExt),
         vec![
@@ -466,7 +466,7 @@ pub fn lh_inst(rd: Expr, rs1: Expr, imm: Expr, xlen: u64) -> Stmt {
 /// lw
 pub fn lw_inst(rd: Expr, rs1: Expr, imm: Expr, xlen: u64) -> Stmt {
     let mut stmts = vec![];
-    stmts.push(Stmt::Comment(format!("lw {:?}, {:?}, {:?}", rd, rs1, imm)));
+    stmts.push(Stmt::Comment(format!("lw {}, {}, {}", rd, rs1, imm)));
     let ret = Expr::op_app(
         Op::Bv(BVOp::SignExt),
         vec![
@@ -489,7 +489,7 @@ pub fn lw_inst(rd: Expr, rs1: Expr, imm: Expr, xlen: u64) -> Stmt {
 /// FIXME
 pub fn lbu_inst(rd: Expr, rs1: Expr, imm: Expr, xlen: u64) -> Stmt {
     let mut stmts = vec![];
-    stmts.push(Stmt::Comment(format!("lbu {:?}, {:?}, {:?}", rd, rs1, imm)));
+    stmts.push(Stmt::Comment(format!("lbu {}, {}, {}", rd, rs1, imm)));
     let ret = Expr::op_app(
         Op::Bv(BVOp::ZeroExt),
         vec![
@@ -512,7 +512,7 @@ pub fn lbu_inst(rd: Expr, rs1: Expr, imm: Expr, xlen: u64) -> Stmt {
 /// FIXME
 pub fn lhu_inst(rd: Expr, rs1: Expr, imm: Expr, xlen: u64) -> Stmt {
     let mut stmts = vec![];
-    stmts.push(Stmt::Comment(format!("lhu {:?}, {:?}, {:?}", rd, rs1, imm)));
+    stmts.push(Stmt::Comment(format!("lhu {}, {}, {}", rd, rs1, imm)));
     let ret = Expr::op_app(
         Op::Bv(BVOp::ZeroExt),
         vec![
@@ -536,7 +536,7 @@ pub fn lhu_inst(rd: Expr, rs1: Expr, imm: Expr, xlen: u64) -> Stmt {
 pub fn addi_inst(rd: Expr, rs1: Expr, imm: Expr, xlen: u64) -> Stmt {
     let mut stmts = vec![];
     stmts.push(Stmt::Comment(format!(
-        "addi {:?}, {:?}, {:?}",
+        "addi {}, {}, {}",
         rd, rs1, imm
     )));
     stmts.push(Stmt::assign(
@@ -550,7 +550,7 @@ pub fn addi_inst(rd: Expr, rs1: Expr, imm: Expr, xlen: u64) -> Stmt {
 pub fn slti_inst(rd: Expr, rs1: Expr, imm: Expr, xlen: u64) -> Stmt {
     let mut stmts = vec![];
     stmts.push(Stmt::Comment(format!(
-        "slti {:?}, {:?}, {:?}",
+        "slti {}, {}, {}",
         rd, rs1, imm
     )));
     let cond = Expr::op_app(Op::Comp(CompOp::Lt), vec![rs1, imm]);
@@ -568,7 +568,7 @@ pub fn slti_inst(rd: Expr, rs1: Expr, imm: Expr, xlen: u64) -> Stmt {
 pub fn sltiu_inst(rd: Expr, rs1: Expr, imm: Expr, xlen: u64) -> Stmt {
     let mut stmts = vec![];
     stmts.push(Stmt::Comment(format!(
-        "sltiu {:?}, {:?}, {:?}",
+        "sltiu {}, {}, {}",
         rd, rs1, imm
     )));
     let cond = Expr::op_app(Op::Comp(CompOp::Ltu), vec![rs1, imm]);
@@ -587,7 +587,7 @@ pub fn sltiu_inst(rd: Expr, rs1: Expr, imm: Expr, xlen: u64) -> Stmt {
 pub fn xori_inst(rd: Expr, rs1: Expr, rs2: Expr, xlen: u64) -> Stmt {
     let mut stmts = vec![];
     stmts.push(Stmt::Comment(format!(
-        "xori {:?}, {:?}, {:?}",
+        "xori {}, {}, {}",
         rd, rs1, rs2
     )));
     stmts.push(Stmt::assign(
@@ -601,7 +601,7 @@ pub fn xori_inst(rd: Expr, rs1: Expr, rs2: Expr, xlen: u64) -> Stmt {
 /// FIXME
 pub fn ori_inst(rd: Expr, rs1: Expr, rs2: Expr, xlen: u64) -> Stmt {
     let mut stmts = vec![];
-    stmts.push(Stmt::Comment(format!("ori {:?}, {:?}, {:?}", rd, rs1, rs2)));
+    stmts.push(Stmt::Comment(format!("ori {}, {}, {}", rd, rs1, rs2)));
     stmts.push(Stmt::assign(
         vec![rd],
         vec![Expr::op_app(Op::Bv(BVOp::Or), vec![rs1, rs2])],
@@ -614,7 +614,7 @@ pub fn ori_inst(rd: Expr, rs1: Expr, rs2: Expr, xlen: u64) -> Stmt {
 pub fn andi_inst(rd: Expr, rs1: Expr, rs2: Expr, xlen: u64) -> Stmt {
     let mut stmts = vec![];
     stmts.push(Stmt::Comment(format!(
-        "andi {:?}, {:?}, {:?}",
+        "andi {}, {}, {}",
         rd, rs1, rs2
     )));
     stmts.push(Stmt::assign(
@@ -628,7 +628,7 @@ pub fn andi_inst(rd: Expr, rs1: Expr, rs2: Expr, xlen: u64) -> Stmt {
 pub fn slli_inst(rd: Expr, rs1: Expr, imm: Expr, xlen: u64) -> Stmt {
     let mut stmts = vec![];
     stmts.push(Stmt::Comment(format!(
-        "slli {:?}, {:?}, {:?}",
+        "slli {}, {}, {}",
         rd, rs1, imm
     )));
     stmts.push(Stmt::Assume(Expr::op_app(
@@ -646,7 +646,7 @@ pub fn slli_inst(rd: Expr, rs1: Expr, imm: Expr, xlen: u64) -> Stmt {
 pub fn srli_inst(rd: Expr, rs1: Expr, imm: Expr, xlen: u64) -> Stmt {
     let mut stmts = vec![];
     stmts.push(Stmt::Comment(format!(
-        "srli {:?}, {:?}, {:?}",
+        "srli {}, {}, {}",
         rd, rs1, imm
     )));
     stmts.push(Stmt::Assume(Expr::op_app(
@@ -664,7 +664,7 @@ pub fn srli_inst(rd: Expr, rs1: Expr, imm: Expr, xlen: u64) -> Stmt {
 pub fn srai_inst(rd: Expr, rs1: Expr, imm: Expr, xlen: u64) -> Stmt {
     let mut stmts = vec![];
     stmts.push(Stmt::Comment(format!(
-        "srai {:?}, {:?}, {:?}",
+        "srai {}, {}, {}",
         rd, rs1, imm
     )));
     stmts.push(Stmt::Assume(Expr::op_app(
@@ -681,7 +681,7 @@ pub fn srai_inst(rd: Expr, rs1: Expr, imm: Expr, xlen: u64) -> Stmt {
 /// lwu
 pub fn lwu_inst(rd: Expr, rs1: Expr, imm: Expr, xlen: u64) -> Stmt {
     let mut stmts = vec![];
-    stmts.push(Stmt::Comment(format!("lwu {:?}, {:?}, {:?}", rd, rs1, imm)));
+    stmts.push(Stmt::Comment(format!("lwu {}, {}, {}", rd, rs1, imm)));
     let ret = Expr::op_app(
         Op::Bv(BVOp::ZeroExt),
         vec![
@@ -703,7 +703,7 @@ pub fn lwu_inst(rd: Expr, rs1: Expr, imm: Expr, xlen: u64) -> Stmt {
 /// ld
 pub fn ld_inst(rd: Expr, rs1: Expr, imm: Expr, xlen: u64) -> Stmt {
     let mut stmts = vec![];
-    stmts.push(Stmt::Comment(format!("ld {:?}, {:?}, {:?}", rd, rs1, imm)));
+    stmts.push(Stmt::Comment(format!("ld {}, {}, {}", rd, rs1, imm)));
     let ret = Expr::func_app(
         "loadDouble_macro".to_string(),
         vec![
@@ -720,7 +720,7 @@ pub fn ld_inst(rd: Expr, rs1: Expr, imm: Expr, xlen: u64) -> Stmt {
 pub fn addiw_inst(rd: Expr, rs1: Expr, imm: Expr, xlen: u64) -> Stmt {
     let mut stmts = vec![];
     stmts.push(Stmt::Comment(format!(
-        "addiw {:?}, {:?}, {:?}",
+        "addiw {}, {}, {}",
         rd, rs1, imm
     )));
     let rs1_sliced = Expr::op_app(Op::Bv(BVOp::Slice { l: 31, r: 0 }), vec![rs1]);
@@ -746,7 +746,7 @@ pub fn addiw_inst(rd: Expr, rs1: Expr, imm: Expr, xlen: u64) -> Stmt {
 pub fn slliw_inst(rd: Expr, rs1: Expr, imm: Expr, xlen: u64) -> Stmt {
     let mut stmts = vec![];
     stmts.push(Stmt::Comment(format!(
-        "slliw {:?}, {:?}, {:?}",
+        "slliw {}, {}, {}",
         rd, rs1, imm
     )));
     let rs1_sliced = Expr::op_app(Op::Bv(BVOp::Slice { l: 31, r: 0 }), vec![rs1]);
@@ -766,7 +766,7 @@ pub fn slliw_inst(rd: Expr, rs1: Expr, imm: Expr, xlen: u64) -> Stmt {
 pub fn srliw_inst(rd: Expr, rs1: Expr, imm: Expr, xlen: u64) -> Stmt {
     let mut stmts = vec![];
     stmts.push(Stmt::Comment(format!(
-        "srliw {:?}, {:?}, {:?}",
+        "srliw {}, {}, {}",
         rd, rs1, imm
     )));
     let rs1_sliced = Expr::op_app(Op::Bv(BVOp::Slice { l: 31, r: 0 }), vec![rs1]);
@@ -786,7 +786,7 @@ pub fn srliw_inst(rd: Expr, rs1: Expr, imm: Expr, xlen: u64) -> Stmt {
 pub fn sraiw_inst(rd: Expr, rs1: Expr, imm: Expr, xlen: u64) -> Stmt {
     let mut stmts = vec![];
     stmts.push(Stmt::Comment(format!(
-        "sraiw {:?}, {:?}, {:?}",
+        "sraiw {}, {}, {}",
         rd, rs1, imm
     )));
     let rs1_sliced = Expr::op_app(Op::Bv(BVOp::Slice { l: 31, r: 0 }), vec![rs1]);
@@ -805,7 +805,7 @@ pub fn sraiw_inst(rd: Expr, rs1: Expr, imm: Expr, xlen: u64) -> Stmt {
 /// sb
 pub fn sb_inst(rs1: Expr, imm: Expr, rs2: Expr, xlen: u64) -> Stmt {
     let mut stmts = vec![];
-    stmts.push(Stmt::Comment(format!("sb {:?}, {:?}, {:?}", rs1, imm, rs2)));
+    stmts.push(Stmt::Comment(format!("sb {}, {}, {}", rs1, imm, rs2)));
     let mem_addr = Expr::op_app(
         Op::ArrayIndex,
         vec![
@@ -823,7 +823,7 @@ pub fn sb_inst(rs1: Expr, imm: Expr, rs2: Expr, xlen: u64) -> Stmt {
 /// sh
 pub fn sh_inst(rs1: Expr, imm: Expr, rs2: Expr, xlen: u64) -> Stmt {
     let mut stmts = vec![];
-    stmts.push(Stmt::Comment(format!("sh {:?}, {:?}, {:?}", rs1, imm, rs2)));
+    stmts.push(Stmt::Comment(format!("sh {}, {}, {}", rs1, imm, rs2)));
     let mem_addr = Expr::op_app(
         Op::ArrayIndex,
         vec![
@@ -861,7 +861,7 @@ pub fn sh_inst(rs1: Expr, imm: Expr, rs2: Expr, xlen: u64) -> Stmt {
 /// sw
 pub fn sw_inst(rs1: Expr, imm: Expr, rs2: Expr, xlen: u64) -> Stmt {
     let mut stmts = vec![];
-    stmts.push(Stmt::Comment(format!("sw {:?}, {:?}, {:?}", rs1, imm, rs2)));
+    stmts.push(Stmt::Comment(format!("sw {}, {}, {}", rs1, imm, rs2)));
     let mem_addr = Expr::op_app(
         Op::ArrayIndex,
         vec![
@@ -942,7 +942,7 @@ pub fn sw_inst(rs1: Expr, imm: Expr, rs2: Expr, xlen: u64) -> Stmt {
 /// sd
 pub fn sd_inst(rs1: Expr, imm: Expr, rs2: Expr, xlen: u64) -> Stmt {
     let mut stmts = vec![];
-    stmts.push(Stmt::Comment(format!("sd {:?}, {:?}, {:?}", rs1, imm, rs2)));
+    stmts.push(Stmt::Comment(format!("sd {}, {}, {}", rs1, imm, rs2)));
     let mem_addr = Expr::op_app(
         Op::ArrayIndex,
         vec![
@@ -1104,7 +1104,7 @@ pub fn sd_inst(rs1: Expr, imm: Expr, rs2: Expr, xlen: u64) -> Stmt {
 pub fn beq_inst(rs1: Expr, rs2: Expr, imm: Expr, xlen: u64) -> Stmt {
     let mut stmts = vec![];
     stmts.push(Stmt::Comment(format!(
-        "beq {:?}, {:?}, {:?}",
+        "beq {}, {}, {}",
         rs1, rs2, imm
     )));
     let cond = Expr::op_app(Op::Comp(CompOp::Equality), vec![rs1, rs2]);
@@ -1121,7 +1121,7 @@ pub fn beq_inst(rs1: Expr, rs2: Expr, imm: Expr, xlen: u64) -> Stmt {
 pub fn bne_inst(rs1: Expr, rs2: Expr, imm: Expr, xlen: u64) -> Stmt {
     let mut stmts = vec![];
     stmts.push(Stmt::Comment(format!(
-        "bne {:?}, {:?}, {:?}",
+        "bne {}, {}, {}",
         rs1, rs2, imm
     )));
     let cond = Expr::op_app(Op::Comp(CompOp::Inequality), vec![rs1, rs2]);
@@ -1138,7 +1138,7 @@ pub fn bne_inst(rs1: Expr, rs2: Expr, imm: Expr, xlen: u64) -> Stmt {
 pub fn blt_inst(rs1: Expr, rs2: Expr, imm: Expr, xlen: u64) -> Stmt {
     let mut stmts = vec![];
     stmts.push(Stmt::Comment(format!(
-        "blt {:?}, {:?}, {:?}",
+        "blt {}, {}, {}",
         rs1, rs2, imm
     )));
     let cond = Expr::op_app(Op::Comp(CompOp::Lt), vec![rs1, rs2]);
@@ -1155,7 +1155,7 @@ pub fn blt_inst(rs1: Expr, rs2: Expr, imm: Expr, xlen: u64) -> Stmt {
 pub fn bge_inst(rs1: Expr, rs2: Expr, imm: Expr, xlen: u64) -> Stmt {
     let mut stmts = vec![];
     stmts.push(Stmt::Comment(format!(
-        "bge {:?}, {:?}, {:?}",
+        "bge {}, {}, {}",
         rs1, rs2, imm
     )));
     let cond = Expr::op_app(Op::Comp(CompOp::Ge), vec![rs1, rs2]);
@@ -1172,7 +1172,7 @@ pub fn bge_inst(rs1: Expr, rs2: Expr, imm: Expr, xlen: u64) -> Stmt {
 pub fn bltu_inst(rs1: Expr, rs2: Expr, imm: Expr, xlen: u64) -> Stmt {
     let mut stmts = vec![];
     stmts.push(Stmt::Comment(format!(
-        "bltu {:?}, {:?}, {:?}",
+        "bltu {}, {}, {}",
         rs1, rs2, imm
     )));
     let cond = Expr::op_app(Op::Comp(CompOp::Ltu), vec![rs1, rs2]);
@@ -1189,7 +1189,7 @@ pub fn bltu_inst(rs1: Expr, rs2: Expr, imm: Expr, xlen: u64) -> Stmt {
 pub fn bgeu_inst(rs1: Expr, rs2: Expr, imm: Expr, xlen: u64) -> Stmt {
     let mut stmts = vec![];
     stmts.push(Stmt::Comment(format!(
-        "bgeu {:?}, {:?}, {:?}",
+        "bgeu {}, {}, {}",
         rs1, rs2, imm
     )));
     let cond = Expr::op_app(Op::Comp(CompOp::Geu), vec![rs1, rs2]);
@@ -1205,7 +1205,7 @@ pub fn bgeu_inst(rs1: Expr, rs2: Expr, imm: Expr, xlen: u64) -> Stmt {
 /// lui
 pub fn lui_inst(rd: Expr, imm: Expr, xlen: u64) -> Stmt {
     let mut stmts = vec![];
-    stmts.push(Stmt::Comment(format!("lui {:?}, {:?}", rd, imm)));
+    stmts.push(Stmt::Comment(format!("lui {}, {}", rd, imm)));
     let ret = Expr::op_app(
         Op::Bv(BVOp::SignExt),
         vec![
@@ -1232,7 +1232,7 @@ pub fn lui_inst(rd: Expr, imm: Expr, xlen: u64) -> Stmt {
 /// auipc
 pub fn auipc_inst(rd: Expr, imm: Expr, xlen: u64) -> Stmt {
     let mut stmts = vec![];
-    stmts.push(Stmt::Comment(format!("auipc {:?}, {:?}", rd, imm)));
+    stmts.push(Stmt::Comment(format!("auipc {}, {}", rd, imm)));
     let ret = Expr::op_app(
         Op::Bv(BVOp::Add),
         vec![
@@ -1247,7 +1247,7 @@ pub fn auipc_inst(rd: Expr, imm: Expr, xlen: u64) -> Stmt {
 /// jal
 pub fn jal_inst(rd: Expr, imm: Expr, xlen: u64) -> Stmt {
     let mut stmts = vec![];
-    stmts.push(Stmt::Comment(format!("jal {:?}, {:?}", rd, imm)));
+    stmts.push(Stmt::Comment(format!("jal {}, {}", rd, imm)));
     let ret = Expr::op_app(
         Op::Bv(BVOp::Add),
         vec![pc_expr(xlen), Expr::bv_lit(4, xlen)],

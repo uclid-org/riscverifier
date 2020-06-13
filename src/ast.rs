@@ -9,7 +9,7 @@ use crate::spec_lang::sl_ast;
 // =======================================================
 /// AST Types
 
-#[derive(Debug, PartialEq, Eq, Hash, Clone)]
+#[derive(PartialEq, Eq, Hash, Clone)]
 pub enum Type {
     Unknown,
     Bool,
@@ -36,7 +36,7 @@ impl Type {
                 fields: _,
                 w,
             } => *w,
-            _ => panic!("No bv width for: {:#?}.", self),
+            _ => panic!("No bv width for: {}.", self),
         }
     }
     pub fn get_array_out_type(&self) -> &Type {
@@ -45,7 +45,7 @@ impl Type {
                 in_typs: _,
                 out_typ,
             } => out_typ,
-            _ => panic!("Not an array type: {:#?}.", self),
+            _ => panic!("Not an array type: {}.", self),
         }
     }
     pub fn get_struct_id(&self) -> String {
@@ -55,7 +55,28 @@ impl Type {
                 fields: _,
                 w: _,
             } => id.clone(),
-            _ => panic!("Not a struct type {:#?}.", self),
+            _ => panic!("Not a struct type {}.", self),
+        }
+    }
+}
+impl fmt::Display for Type {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Type::Unknown => write!(f, "Unknown"),
+            Type::Bool => write!(f, "bool"),
+            Type::Int => write!(f, "int"),
+            Type::Bv { w } => write!(f, "bv{}", w),
+            Type::Array { in_typs, out_typ } => {
+                let in_typs = &in_typs
+                    .iter()
+                    .fold("".to_string(), |acc, typ| {
+                        format!("{}, {}", acc, typ)
+                    })[2..];
+                write!(f, "[{}]{}", in_typs, out_typ)
+            },
+            Type::Struct { id, fields, w } => {
+                write!(f, "struct {}", id)
+            }
         }
     }
 }
@@ -63,7 +84,7 @@ impl Type {
 // =======================================================
 /// AST Expressions
 
-#[derive(Debug, PartialEq, Eq, Hash, Clone)]
+#[derive(PartialEq, Eq, Hash, Clone)]
 pub enum Expr {
     Literal(Literal, Type),
     Var(Var, Type),
@@ -79,7 +100,7 @@ impl Expr {
     pub fn get_expect_var(&self) -> &Var {
         match self {
             Expr::Var(v, _) => v,
-            _ => panic!("Not a variable/constant: {:#?}.", self),
+            _ => panic!("Not a variable/constant: {}.", self),
         }
     }
     pub fn is_var(&self) -> bool {
@@ -116,7 +137,7 @@ impl Expr {
                     in_typs: _,
                     out_typ,
                 } => *out_typ.clone(),
-                _ => panic!("Cannot index into non-array type {:#?}.", operands[0]),
+                _ => panic!("Cannot index into non-array type {}.", operands[0]),
             },
             Op::GetField(f) => match operands[0].typ() {
                 Type::Struct {
@@ -139,16 +160,36 @@ impl Expr {
         )
     }
 }
+impl fmt::Display for Expr {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Expr::Literal(l, _) => write!(f, "{}", l),
+            Expr::Var(v, _) => write!(f, "{}", v),
+            Expr::OpApp(op, _) => write!(f, "{}", op),
+            Expr::FuncApp(fapp, _) => write!(f, "{}", fapp),
+        }
+    }
+}
+
 /// Literals
-#[derive(Debug, PartialEq, Eq, Hash, Clone)]
+#[derive(PartialEq, Eq, Hash, Clone)]
 pub enum Literal {
     Bv { val: u64, width: u64 },
     Bool { val: bool },
     Int { val: u64 },
 }
+impl fmt::Display for Literal {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Literal::Bv {val, width} => write!(f, "{}bv{}", val, width),
+            Literal::Bool {val } => write!(f, "{}", val),
+            Literal::Int {val } => write!(f, "{}", val),
+        }
+    }
+}
 
 /// Variable
-#[derive(Debug, Eq, Hash, Clone)]
+#[derive(Eq, Hash, Clone)]
 pub struct Var {
     pub name: String,
     pub typ: Type,
@@ -168,13 +209,29 @@ impl PartialEq for Var {
         self.name == other.name
     }
 }
+impl fmt::Display for Var {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{}: {}", self.name, self.typ)
+    }
+}
 
 // Operator application
-#[derive(Debug, PartialEq, Eq, Hash, Clone)]
+#[derive(PartialEq, Eq, Hash, Clone)]
 pub struct OpApp {
     pub op: Op,
     pub operands: Vec<Expr>,
 }
+impl fmt::Display for OpApp {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let operands = &self.operands
+            .iter()
+            .fold("".to_string(), |acc, operand| {
+                format!("{}, {}", acc, operand)
+            })[2..];
+        write!(f, "({:?} {})", self.op, operands)
+    }
+}
+
 /// Operators
 #[derive(Debug, PartialEq, Eq, Hash, Clone)]
 pub enum Op {
@@ -225,16 +282,26 @@ pub enum BoolOp {
     Neg,  // negation: !
 }
 /// Function application
-#[derive(Debug, PartialEq, Eq, Hash, Clone)]
+#[derive(PartialEq, Eq, Hash, Clone)]
 pub struct FuncApp {
     pub func_name: String,
     pub operands: Vec<Expr>,
+}
+impl fmt::Display for FuncApp {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let operands = &self.operands
+            .iter()
+            .fold("".to_string(), |acc, operand| {
+                format!("{}, {}", acc, operand)
+            })[2..];
+        write!(f, "{}({})", self.func_name, operands)
+    }
 }
 
 // =======================================================
 /// AST Statements
 
-#[derive(Debug, Clone)]
+#[derive(Clone)]
 pub enum Stmt {
     Assume(Expr),
     FuncCall(FuncCall),
@@ -276,20 +343,20 @@ impl Stmt {
     }
 }
 /// Function call statement
-#[derive(Debug, Clone)]
+#[derive(Clone)]
 pub struct FuncCall {
     pub func_name: String,
     pub lhs: Vec<Expr>,
     pub operands: Vec<Expr>,
 }
 /// Assign statement
-#[derive(Debug, Clone)]
+#[derive(Clone)]
 pub struct Assign {
     pub lhs: Vec<Expr>,
     pub rhs: Vec<Expr>,
 }
 /// If then else statement
-#[derive(Debug, Clone)]
+#[derive(Clone)]
 pub struct IfThenElse {
     pub cond: Expr,
     pub then_stmt: Box<Stmt>,
@@ -299,7 +366,7 @@ pub struct IfThenElse {
 // =======================================================
 /// (Software) Procedure Model
 
-#[derive(Debug, Clone)]
+#[derive(Clone)]
 pub struct FuncModel {
     pub sig: FuncSig,
     pub body: Stmt,
@@ -337,7 +404,7 @@ impl FuncModel {
     }
 }
 /// Function signature
-#[derive(Debug, Clone)]
+#[derive(Clone)]
 pub struct FuncSig {
     pub name: String,
     pub entry_addr: u64,
@@ -379,7 +446,7 @@ impl FuncSig {
 // =======================================================
 /// Verification Model
 
-#[derive(Debug)]
+#[derive(Clone)]
 pub struct Model {
     pub name: String,
     pub vars: HashSet<Var>,
