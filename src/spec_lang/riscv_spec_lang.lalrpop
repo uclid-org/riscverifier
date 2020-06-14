@@ -130,14 +130,25 @@ pub VExpr: ast::VExpr = {
     <s:VExpr> "." <f:"id"> => {
         assert!(f.to_string().chars().all(char::is_alphanumeric), "Invalid get field .{}.", f.to_string());
         let op = ast::ValueOp::GetField;
-        let operands = vec![s, ast::VExpr::Ident(f.to_string(), ast::VType::Unknown)];
+        let field_typ = match s.typ() {
+            ast::VType::Struct { id:_, fields, size:_ } => {
+                *fields.get(&f[..])
+                    .expect(&format!("Unable to find struct field {}.", f))
+                    .clone()
+            },
+            _ => panic!("Expected struct type: {:?}.", s)
+        };
+        let operands = vec![s, ast::VExpr::Ident(f.to_string(), field_typ)];
         let typ = ast::VType::infer_op_type(&op, &operands);
         ast::VExpr::OpApp(op, operands, typ)
     },
     <bv:VExpr> "[" <lo:"int"> ":" <hi:"int"> "]" => {
         if let Tok::Int(lo_u64) = lo {
             if let Tok::Int(hi_u64) = hi {
-                ast::VExpr::OpApp(ast::ValueOp::Slice{lo: lo_u64 as u16, hi: hi_u64 as u16}, vec![bv], ast::VType::Unknown)
+                let op = ast::ValueOp::Slice{lo: lo_u64 as u16, hi: hi_u64 as u16};
+                let operands = vec![bv];
+                let typ = ast::VType::infer_op_type(&op, &operands);
+                ast::VExpr::OpApp(op, operands, typ)
             } else {
                 panic!("Invalid right (high) slice value.");
             }
@@ -205,7 +216,10 @@ pub Term: ast::VExpr = {
     },
     <f:BuiltIn> "(" <es:CommaSepVExprs> ")" => {
         let typ = ast::VType::infer_func_app_type(&f[..], &es);
-        ast::VExpr::FuncApp(f, es, typ)
+        match &f[..] {
+            "value" => ast::VExpr::OpApp(ast::ValueOp::Deref, es, typ),
+            _ => ast::VExpr::FuncApp(f, es, typ),
+        }
     },
     Ident,
     "(" <e:VExpr> ")" => e,
@@ -225,6 +239,7 @@ pub BuiltIn: String = {
     "old" => "old".to_string(),
     "sext" => "sext".to_string(),
     "uext" => "uext".to_string(),
+    "value" => "value".to_string(),
 }
 
 pub Ident: ast::VExpr = {
@@ -270,10 +285,10 @@ pub Ident: ast::VExpr = {
             assert!(dwarf_type.is_some(), "Unable to find variable {} in DWARF info.", &var_id);
             let vtype = ast::VType::from_dwarf_type(&dwarf_type.unwrap());
             if is_global {
-                // let global_var_def = utils::global_var_ptr_name(&id);
                 ast::VExpr::Ident(format!("{}", id), vtype)
             } else {
-                ast::VExpr::Ident(id.to_string(), vtype)
+                // FIXME: formals are all xlen for now
+                ast::VExpr::Ident(id.to_string(), ast::VType::Bv(dwarf_ctx.xlen as u16))
             }
         },
     }
@@ -295,13 +310,14 @@ extern {
         "old" => Tok::Old,
         "forall" => Tok::Forall,
         "exists" => Tok::Exists,
-        "_u" => Tok::Nil,
+        "_u" => Tok::UnsignedCompExt,
         // Builtin functions
         ">>" => Tok::RightShift,    // >>
         ">>>" => Tok::URightShift,  // >>>
         "<<" => Tok::LeftShift,     // <
         "sext" => Tok::SignedExt,   // sext
         "uext" => Tok::UnsignedExt, // uext
+        "value" => Tok::Value,      // value
         "++" => Tok::Concat,        // ++
         // Identifier
         "id" => Tok::Id(<&'input str>),

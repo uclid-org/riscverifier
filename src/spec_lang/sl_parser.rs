@@ -64,10 +64,6 @@ impl<'a> SpecParser<'a> {
 
     fn sl_bexpr_rewrite_passes(&self, bexpr: &mut sl_ast::BExpr) {
         // Rewrite all quantified variable names
-        QuantifiedVarRenamer::rewrite_bexpr(bexpr, &HashSet::new());
-        // Inject dereferences into VExprs
-        DereferenceInference::rewrite_bexpr(bexpr, &self.dwarf_ctx);
-        // Rename global variables to function applications
         RenameGlobals::rewrite_bexpr(bexpr, &self.dwarf_ctx);
     }
 }
@@ -85,34 +81,9 @@ impl sl_ast::ASTRewriter<DwarfCtx> for RenameGlobals {
                         vec![],
                         typ.clone());
                 }
-                _ => ()
+                _ => panic!("Expected identifier.")
             }
         }
     }
 }
-
-/// AST pass that automatically injects dereferences to global variables
-struct DereferenceInference {}
-impl sl_ast::ASTRewriter<DwarfCtx> for DereferenceInference {
-    fn rewrite_bexpr(bexpr: &mut sl_ast::BExpr, context: &DwarfCtx) {
-        match bexpr {
-            sl_ast::BExpr::COpApp(cop, exprs) => {
-                let mut new_vexprs = vec![];
-                for expr in exprs.iter() {
-                    if sl_ast::VExpr::is_global(&expr, context) {
-                        new_vexprs.push(sl_ast::VExpr::OpApp(sl_ast::ValueOp::Deref, vec![expr.clone()], expr.typ().clone()));
-                    } else {
-                        new_vexprs.push(expr.clone())
-                    }
-                }
-                *bexpr = sl_ast::BExpr::COpApp(cop.clone(), new_vexprs)
-            },
-            _ => (),
-        }
-    }
-}
-
-// TODO: Write a pass that rewrites all quantified variable names
-struct QuantifiedVarRenamer {}
-impl sl_ast::ASTRewriter<HashSet<String>> for QuantifiedVarRenamer {}
 

@@ -211,7 +211,7 @@ impl PartialEq for Var {
 }
 impl fmt::Display for Var {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{}: {}", self.name, self.typ)
+        write!(f, "{}", self.name)
     }
 }
 

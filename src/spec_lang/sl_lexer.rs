@@ -21,8 +21,7 @@ fn error<T>(c: ErrorCode, l: usize) -> Result<T, LexError> {
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum Tok<'input> {
-    // Dummy value
-    Nil,
+    UnsignedCompExt,
     // Keywords;
     Ensures,
     Requires,
@@ -41,6 +40,7 @@ pub enum Tok<'input> {
     SignedExt,   // sext
     UnsignedExt, // uext
     Concat,      // ++
+    Value,       // value
     // Identifier:
     Id(&'input str),
     // Primitives:
@@ -92,6 +92,7 @@ const KEYWORDS: &'static [(&'static str, Tok<'static>)] = &[
     ("exists", Tok::Exists),
     ("sext", Tok::SignedExt),
     ("uext", Tok::UnsignedExt),
+    ("value", Tok::Value),
 ];
 
 const BOOL_KEYWORDS: &'static [(&'static str, Tok<'static>)] =
@@ -245,6 +246,15 @@ impl<'input> Iterator for Lexer<'input> {
                 Some((i, '}')) => return Some(Ok((i, Tok::RightBrace, i + 1))), // }
                 Some((i, ']')) => return Some(Ok((i, Tok::RightBracket, i + 1))), // ]
                 Some((i, ')')) => return Some(Ok((i, Tok::RightParen, i + 1))), // )
+                Some((i, '_')) => {
+                    if let Some((_, 'u')) = self.chars.peek() {
+                        self.chars.next();
+                        return Some(Ok((i, Tok::UnsignedCompExt, i + 2)));
+                    } else {
+                        // Expected _u
+                        return None;
+                    }
+                }
                 None => return None,                                           // End of file
                 Some((i, _)) => loop {
                     match self.chars.peek() {

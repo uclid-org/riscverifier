@@ -68,10 +68,7 @@ impl VType {
             | ValueOp::Mul
             | ValueOp::BvXor
             | ValueOp::BvOr
-            | ValueOp::BvAnd
-            | ValueOp::RightShift
-            | ValueOp::URightShift
-            | ValueOp::LeftShift => {
+            | ValueOp::BvAnd => {
                 /// These operators require all the same types
                 let same_types = exprs
                     .iter()
@@ -79,7 +76,7 @@ impl VType {
                 if same_types {
                     exprs[0].typ().clone()
                 } else {
-                    Self::Unknown
+                    panic!("Expected the same types. {:?}", exprs)
                 }
             }
             ValueOp::Concat => {
@@ -87,6 +84,9 @@ impl VType {
                 let width1 = exprs[1].typ().get_bv_width();
                 Self::Bv(width0 + width1)
             }
+            ValueOp::RightShift
+            | ValueOp::URightShift
+            | ValueOp::LeftShift => exprs[1].typ().clone(),
             _ => panic!("Unimplemented type inference."),
         }
     }
@@ -95,7 +95,7 @@ impl VType {
             panic!("Function application with no arguments provided.");
         }
         match fapp {
-            "old" => exprs[0].typ().clone(),
+            "old" | "value" => exprs[0].typ().clone(),
             "sext" | "uext" => {
                 let expr_width = exprs[1].typ().get_bv_width();
                 let ext_width = exprs[0].get_int_value() as u16;
