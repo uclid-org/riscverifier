@@ -2,7 +2,7 @@ fun region_get_addr {
     // The input should be within regions's index range
     requires (0bv64 <= i) && (i < 16bv64);
     // Return value
-    ensures $a0 == *regions[i].addr;
+    ensures $a0 == regions[i].addr;
     // Memory doesn't change
     // Note: By default, memory is specified as a modified variable
     // so we write this line to constraint it for modular verification
