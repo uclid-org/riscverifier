@@ -125,7 +125,11 @@ pub VExpr: ast::VExpr = {
         let op = ast::ValueOp::ArrayIndex;
         let operands = vec![a, ind];
         let typ = ast::VType::infer_op_type(&op, &operands);
-        ast::VExpr::OpApp(op, operands, typ)
+        let index_addr = ast::VExpr::OpApp(op, operands, typ.clone());
+        match &typ {
+            ast::VType::Bv(w) => ast::VExpr::OpApp(ast::ValueOp::Deref, vec![index_addr], typ.clone()),
+            _ => index_addr,
+        }
     },
     <s:VExpr> "." <f:"id"> => {
         assert!(f.to_string().chars().all(char::is_alphanumeric), "Invalid get field .{}.", f.to_string());
@@ -140,7 +144,11 @@ pub VExpr: ast::VExpr = {
         };
         let operands = vec![s, ast::VExpr::Ident(f.to_string(), field_typ)];
         let typ = ast::VType::infer_op_type(&op, &operands);
-        ast::VExpr::OpApp(op, operands, typ)
+        let get_field_addr = ast::VExpr::OpApp(op, operands, typ.clone());
+        match &typ {
+            ast::VType::Bv(w) => ast::VExpr::OpApp(ast::ValueOp::Deref, vec![get_field_addr], typ.clone()),
+            _ => get_field_addr,
+        }
     },
     <bv:VExpr> "[" <lo:"int"> ":" <hi:"int"> "]" => {
         if let Tok::Int(lo_u64) = lo {
@@ -216,10 +224,7 @@ pub Term: ast::VExpr = {
     },
     <f:BuiltIn> "(" <es:CommaSepVExprs> ")" => {
         let typ = ast::VType::infer_func_app_type(&f[..], &es);
-        match &f[..] {
-            "value" => ast::VExpr::OpApp(ast::ValueOp::Deref, es, typ),
-            _ => ast::VExpr::FuncApp(f, es, typ),
-        }
+        ast::VExpr::FuncApp(f, es, typ)
     },
     Ident,
     "(" <e:VExpr> ")" => e,
@@ -239,7 +244,6 @@ pub BuiltIn: String = {
     "old" => "old".to_string(),
     "sext" => "sext".to_string(),
     "uext" => "uext".to_string(),
-    "value" => "value".to_string(),
 }
 
 pub Ident: ast::VExpr = {
@@ -283,9 +287,13 @@ pub Ident: ast::VExpr = {
                 is_global = true;
             }
             assert!(dwarf_type.is_some(), "Unable to find variable {} in DWARF info.", &var_id);
-            let vtype = ast::VType::from_dwarf_type(&dwarf_type.unwrap());
+            let typ = ast::VType::from_dwarf_type(&dwarf_type.unwrap());
+            let global_addr = ast::VExpr::Ident(format!("{}", id), typ.clone());
             if is_global {
-                ast::VExpr::Ident(format!("{}", id), vtype)
+                match &typ {
+                    ast::VType::Bv(w) => ast::VExpr::OpApp(ast::ValueOp::Deref, vec![global_addr], typ.clone()),
+                    _ => global_addr,
+                }
             } else {
                 // FIXME: formals are all xlen for now
                 ast::VExpr::Ident(id.to_string(), ast::VType::Bv(dwarf_ctx.xlen as u16))
@@ -317,7 +325,6 @@ extern {
         "<<" => Tok::LeftShift,     // <
         "sext" => Tok::SignedExt,   // sext
         "uext" => Tok::UnsignedExt, // uext
-        "value" => Tok::Value,      // value
         "++" => Tok::Concat,        // ++
         // Identifier
         "id" => Tok::Id(<&'input str>),

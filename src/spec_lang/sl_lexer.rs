@@ -40,7 +40,6 @@ pub enum Tok<'input> {
     SignedExt,   // sext
     UnsignedExt, // uext
     Concat,      // ++
-    Value,       // value
     // Identifier:
     Id(&'input str),
     // Primitives:
@@ -92,7 +91,6 @@ const KEYWORDS: &'static [(&'static str, Tok<'static>)] = &[
     ("exists", Tok::Exists),
     ("sext", Tok::SignedExt),
     ("uext", Tok::UnsignedExt),
-    ("value", Tok::Value),
 ];
 
 const BOOL_KEYWORDS: &'static [(&'static str, Tok<'static>)] =
