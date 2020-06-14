@@ -226,7 +226,13 @@ pub Term: ast::VExpr = {
         let typ = ast::VType::infer_func_app_type(&f[..], &es);
         ast::VExpr::FuncApp(f, es, typ)
     },
-    Ident,
+    <d:"*"?> <id:Ident> => {
+        if d.is_some() {
+            ast::VExpr::OpApp(ast::ValueOp::Deref, vec![id.clone()], id.typ().clone())
+        } else {
+            id
+        }
+    },
     "(" <e:VExpr> ")" => e,
 }
 
