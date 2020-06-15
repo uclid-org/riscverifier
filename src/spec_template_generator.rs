@@ -28,7 +28,7 @@ impl SpecTemplateGenerator {
             };
             let signature = format!("{}{}({})", ret_type_str, fname, args);
             // Add the specification template to the file
-            template = format!("{}spec {} {{\n	// {}\n}}\n", template, fname, signature);
+            template = format!("{}fun {} {{\n	// {}\n}}\n", template, fname, signature);
         }
         Ok(template)
     }
