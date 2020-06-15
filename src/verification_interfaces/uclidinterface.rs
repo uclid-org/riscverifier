@@ -677,14 +677,14 @@ impl SpecLangASTInterface for Uclid5Interface {
         // Unary prefix operators
         match bop {
             sl_ast::BoolOp::Neg | sl_ast::BoolOp::Forall(_, _) | sl_ast::BoolOp::Exists(_, _) => {
-                return format!("{}{}", bop_str, ret)
+                return format!("{}({})", bop_str, ret)
             }
             _ => (),
         }
         // Infix operator, comma separated by operands
         while let Some(expr) = exprs_iter.next() {
             let expr_str = Self::bexpr_to_string(expr);
-            ret = format!("{} {} {}", ret, bop_str, expr_str)
+            ret = format!("({} {} {})", ret, bop_str, expr_str)
         }
         ret
     }
@@ -819,6 +819,10 @@ impl SpecLangASTInterface for Uclid5Interface {
                 let expr_str0 = Self::vexpr_to_string(&exprs[0]);
                 let expr_str1 = Self::vexpr_to_string(&exprs[1]);
                 format!("({} ++ {})", expr_str0, expr_str1)
+            }
+            sl_ast::ValueOp::Slice {hi, lo} => {
+                let expr_str = Self::vexpr_to_string(&exprs[0]);
+                format!("({}[{}:{}])", expr_str, hi, lo)
             }
             _ => panic!("vexpr_opapp_to_string not implemented for {:#?}", op),
         }

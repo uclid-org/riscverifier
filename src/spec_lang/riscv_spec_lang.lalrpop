@@ -57,7 +57,6 @@ pub FuncSpecs: Vec<ast::FuncSpec> = {
 
 pub BExpr: ast::BExpr = {
     <e1:BExpr2> <op:InfixBoolOp> <e2:BExpr> => ast::BExpr::BOpApp(op, vec![e1, e2]),
-    <op:PrefixBoolOp> <e:BExpr> => ast::BExpr::BOpApp(op, vec![e]),
     BExpr2,
 }
 
@@ -66,6 +65,7 @@ pub BExpr2: ast::BExpr = {
         let operands = vec![e1, e2];
         ast::BExpr::COpApp(op, operands)
     },
+    <op:PrefixBoolOp> <e:BExpr2> => ast::BExpr::BOpApp(op, vec![e]),
     "true" => ast::BExpr::Bool(true),
     "false" => ast::BExpr::Bool(false),
     "(" <e: BExpr> ")" => e,
@@ -121,49 +121,6 @@ pub VExpr: ast::VExpr = {
         let typ = ast::VType::infer_op_type(&op, &operands);
         ast::VExpr::OpApp(op, operands, typ)
     },
-    <a:VExpr> "[" <ind:VExpr> "]" => {
-        let op = ast::ValueOp::ArrayIndex;
-        let operands = vec![a, ind];
-        let typ = ast::VType::infer_op_type(&op, &operands);
-        let index_addr = ast::VExpr::OpApp(op, operands, typ.clone());
-        match &typ {
-            ast::VType::Bv(w) => ast::VExpr::OpApp(ast::ValueOp::Deref, vec![index_addr], typ.clone()),
-            _ => index_addr,
-        }
-    },
-    <s:VExpr> "." <f:"id"> => {
-        assert!(f.to_string().chars().all(char::is_alphanumeric), "Invalid get field .{}.", f.to_string());
-        let op = ast::ValueOp::GetField;
-        let field_typ = match s.typ() {
-            ast::VType::Struct { id:_, fields, size:_ } => {
-                *fields.get(&f[..])
-                    .expect(&format!("Unable to find struct field {}.", f))
-                    .clone()
-            },
-            _ => panic!("Expected struct type: {:?}.", s)
-        };
-        let operands = vec![s, ast::VExpr::Ident(f.to_string(), field_typ)];
-        let typ = ast::VType::infer_op_type(&op, &operands);
-        let get_field_addr = ast::VExpr::OpApp(op, operands, typ.clone());
-        match &typ {
-            ast::VType::Bv(w) => ast::VExpr::OpApp(ast::ValueOp::Deref, vec![get_field_addr], typ.clone()),
-            _ => get_field_addr,
-        }
-    },
-    <bv:VExpr> "[" <lo:"int"> ":" <hi:"int"> "]" => {
-        if let Tok::Int(lo_u64) = lo {
-            if let Tok::Int(hi_u64) = hi {
-                let op = ast::ValueOp::Slice{lo: lo_u64 as u16, hi: hi_u64 as u16};
-                let operands = vec![bv];
-                let typ = ast::VType::infer_op_type(&op, &operands);
-                ast::VExpr::OpApp(op, operands, typ)
-            } else {
-                panic!("Invalid right (high) slice value.");
-            }
-        } else {
-            panic!("Invalid left (low) slice value.");
-        }
-    },
     VExpr2,
 }
 
@@ -182,7 +139,55 @@ pub VExpr2: ast::VExpr = {
         let typ = ast::VType::infer_op_type(&op, &operands);
         ast::VExpr::OpApp(op, operands, typ)
     },
+    <a:VExpr2> "[" <ind:VExpr> "]" => {
+        let op = ast::ValueOp::ArrayIndex;
+        let operands = vec![a, ind];
+        let typ = ast::VType::infer_op_type(&op, &operands);
+        let index_addr = ast::VExpr::OpApp(op, operands, typ.clone());
+        match &typ {
+            ast::VType::Bv(w) => ast::VExpr::OpApp(ast::ValueOp::Deref, vec![index_addr], typ.clone()),
+            _ => index_addr,
+        }
+    },
+    <e:VExpr2> <op:PostfixValueOp> => {
+        let operands = vec![e];
+        let typ = ast::VType::infer_op_type(&op, &operands);
+        ast::VExpr::OpApp(op, operands, typ)
+    },
+    <s:VExpr2> "." <f:"id"> => {
+        assert!(f.to_string().chars().all(char::is_alphanumeric), "Invalid get field .{}.", f.to_string());
+        let op = ast::ValueOp::GetField;
+        let field_typ = match s.typ() {
+            ast::VType::Struct { id:_, fields, size:_ } => {
+                *fields.get(&f[..])
+                    .expect(&format!("Unable to find struct field {}.", f))
+                    .clone()
+            },
+            _ => panic!("Expected struct type: {:?}.", s)
+        };
+        let operands = vec![s, ast::VExpr::Ident(f.to_string(), field_typ)];
+        let typ = ast::VType::infer_op_type(&op, &operands);
+        let get_field_addr = ast::VExpr::OpApp(op, operands, typ.clone());
+        match &typ {
+            ast::VType::Bv(w) => ast::VExpr::OpApp(ast::ValueOp::Deref, vec![get_field_addr], typ.clone()),
+            _ => get_field_addr,
+        }
+    },
     Term,
+}
+
+pub PostfixValueOp: ast::ValueOp = {
+    "[" <hi:"int"> ":" <lo:"int"> "]" => {
+        if let Tok::Int(lo_u64) = lo {
+            if let Tok::Int(hi_u64) = hi {
+                ast::ValueOp::Slice{lo: lo_u64 as u16, hi: hi_u64 as u16}
+            } else {
+                panic!("Invalid right (high) slice value.");
+            }
+        } else {
+            panic!("Invalid left (low) slice value.");
+        }
+    },
 }
 
 // Second last precedence value operators
@@ -267,8 +272,9 @@ pub Ident: ast::VExpr = {
                 system_model::RETURNED_FLAG => ast::VType::from_ast_type(&system_model::returned_type()),
                 system_model::PRIV_VAR => ast::VType::from_ast_type(&system_model::priv_type()),
                 system_model::MEM_VAR => ast::VType::from_ast_type(&system_model::mem_type(xlen)),
-                system_model::A0 => ast::VType::from_ast_type(&system_model::bv_type(xlen)),
-                system_model::SP => ast::VType::from_ast_type(&system_model::bv_type(xlen)),
+                system_model::A0
+                | system_model::SP
+                | system_model::RA => ast::VType::from_ast_type(&system_model::bv_type(xlen)),
                 _ => panic!("Unimplemented type for variable ${}.", &var_id),
             };
             ast::VExpr::Ident(id.to_string(), vtype)
