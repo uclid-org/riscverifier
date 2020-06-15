@@ -58,14 +58,14 @@ pub FuncSpecs: Vec<ast::FuncSpec> = {
 pub BExpr: ast::BExpr = {
     <e1:BExpr2> <op:InfixBoolOp> <e2:BExpr> => ast::BExpr::BOpApp(op, vec![e1, e2]),
     <op:PrefixBoolOp> <e:BExpr> => ast::BExpr::BOpApp(op, vec![e]),
-    <e1:VExpr> <op:CompOp> <e2:VExpr> => {
-        let operands = vec![e1, e2];
-        ast::BExpr::COpApp(op, operands)
-    },
     BExpr2,
 }
 
 pub BExpr2: ast::BExpr = {
+    <e1:VExpr> <op:CompOp> <e2:VExpr2> => {
+        let operands = vec![e1, e2];
+        ast::BExpr::COpApp(op, operands)
+    },
     "true" => ast::BExpr::Bool(true),
     "false" => ast::BExpr::Bool(false),
     "(" <e: BExpr> ")" => e,
@@ -215,8 +215,13 @@ pub Term: ast::VExpr = {
             panic!("Implementation error: bool should be Tok::Int(..) enum type.")
         }
     },
-    "bv" => {
-        if let Tok::Bv { value, width } = <> {
+    <m:"-"?> <bv:"bv"> => {
+        if let Tok::Bv { value, width } = bv {
+            let value = if m.is_some() {
+                (-(value as i64)) as u64
+            } else {
+                value
+            };
             ast::VExpr::Bv{value, typ: ast::VType::Bv(width)}
         } else {
             panic!("Implementation error: bool should be Tok::Bv(..) enum type.")

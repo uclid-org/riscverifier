@@ -145,11 +145,11 @@ impl<'input> Iterator for Lexer<'input> {
             }
             // Convert bitvectors
             if Regex::new(r"^[0-9]+bv[0-9]+").unwrap().is_match(word) {
-                let split: Vec<u64> = word
+                let split: Vec<i64> = word
                     .split("bv")
-                    .map(|num_str| num_str.parse::<u64>().unwrap())
+                    .map(|num_str| num_str.parse::<i64>().unwrap())
                     .collect();
-                let value = split[0];
+                let value = split[0] as u64;
                 let width = split[1] as u16;
                 return Some(Ok((start, Tok::Bv { value, width }, end)));
             }
