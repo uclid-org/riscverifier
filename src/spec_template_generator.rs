@@ -17,7 +17,13 @@ impl SpecTemplateGenerator {
         for fname in func_names.iter() {
             let func_sig = dwarf_ctx.func_sig(fname)?;
             // Create the arguments, return type, and signature strings comments
-            let args = &func_sig.args.iter().fold(format!(""), |acc, arg| {
+            let func_sig_args_iter = &mut func_sig.args.iter();
+            let args_init_str = if let Some(first_arg) = &func_sig_args_iter.next() {
+                SpecTemplateGenerator::var_to_string(first_arg)
+            } else {
+                format!("")
+            };
+            let args = &func_sig_args_iter.fold(args_init_str, |acc, arg| {
                 let arg_str = SpecTemplateGenerator::var_to_string(arg);
                 format!("{}, {}", acc, arg_str)
             });
@@ -33,12 +39,15 @@ impl SpecTemplateGenerator {
         Ok(template)
     }
 
-    /// Returns the string version of the variable
+    /// Returns the string representation of the variable
+    /// Used for comments in specification templates
     pub fn var_to_string(var: &DwarfVar) -> String {
         let type_str = SpecTemplateGenerator::type_to_string(&*var.typ_defn);
         format!("{}: {}", var.name, type_str)
     }
 
+    /// Returns the string represention of the type
+    /// Used for comments in specification templates
     pub fn type_to_string(typ: &DwarfTypeDefn) -> String {
         match typ {
             DwarfTypeDefn::Primitive { bytes } => format!("bv{}", bytes * utils::BYTE_SIZE),
