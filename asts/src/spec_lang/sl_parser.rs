@@ -1,21 +1,23 @@
-use std::collections::{HashMap, HashSet};
+use std::collections::HashMap;
 use std::fs;
 
 use crate::spec_lang::sl_ast;
 use crate::spec_lang::sl_ast::ASTRewriter;
 use crate::spec_lang::sl_lexer;
 
-use crate::readers::dwarfreader::{DwarfCtx, DwarfVar};
-use crate::utils;
+use dwarf_ctx::dwarfreader::DwarfCtx;
+
+use crate::riscv_spec_lang::FuncSpecsParser;
+
+use crate::utils; 
 
 pub struct SpecParser<'a> {
-    xlen: u64,
     dwarf_ctx: &'a DwarfCtx,
 }
 
 impl<'a> SpecParser<'a> {
-    pub fn new(xlen: u64, dwarf_ctx: &'a DwarfCtx) -> Self {
-        SpecParser { xlen, dwarf_ctx }
+    pub fn new(dwarf_ctx: &'a DwarfCtx) -> Self {
+        SpecParser { dwarf_ctx }
     }
 
     pub fn process_spec_files(
@@ -42,7 +44,7 @@ impl<'a> SpecParser<'a> {
 
     fn parse(&self, input: &str) -> HashMap<String, Vec<sl_ast::Spec>> {
         let lexer = sl_lexer::Lexer::new(input);
-        let mut fun_specs_vec = crate::riscv_spec_lang::FuncSpecsParser::new()
+        let fun_specs_vec = FuncSpecsParser::new()
             .parse(input, &self.dwarf_ctx, &mut "".to_string(), lexer)
             .unwrap();
         let mut ret = HashMap::new();

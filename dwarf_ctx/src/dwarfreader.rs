@@ -4,7 +4,6 @@ use std::collections::HashMap;
 use std::marker::PhantomData;
 use std::{borrow, fs, rc::Rc};
 
-use crate::ast;
 use crate::utils;
 
 // =========================================================================================
@@ -400,36 +399,6 @@ pub enum DwarfTypeDefn {
     },
 }
 impl DwarfTypeDefn {
-    /// Converts a dwarf type to IR type
-    pub fn to_ir_type(&self) -> ast::Type {
-        match self {
-            DwarfTypeDefn::Primitive { bytes } => ast::Type::Bv {
-                w: bytes * utils::BYTE_SIZE,
-            },
-            DwarfTypeDefn::Array {
-                in_typ,
-                out_typ,
-                bytes: _,
-            } => ast::Type::Array {
-                in_typs: vec![Box::new(in_typ.to_ir_type())],
-                out_typ: Box::new(out_typ.to_ir_type()),
-            },
-            DwarfTypeDefn::Struct { id, fields, bytes } => ast::Type::Struct {
-                id: id.clone(),
-                fields: fields
-                    .iter()
-                    .map(|(id, struct_field)| (id.clone(), Box::new(struct_field.typ.to_ir_type())))
-                    .collect::<BTreeMap<String, Box<ast::Type>>>(),
-                w: bytes * utils::BYTE_SIZE,
-            },
-            DwarfTypeDefn::Pointer {
-                value_typ: _,
-                bytes,
-            } => ast::Type::Bv {
-                w: bytes * utils::BYTE_SIZE,
-            },
-        }
-    }
     /// Returns true iff the type is a pointer type
     pub fn is_ptr_type(&self) -> bool {
         match self {

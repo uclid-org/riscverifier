@@ -1,17 +1,17 @@
 use std::boxed::Box;
-use std::collections::HashMap;
+use std::collections::{HashMap, BTreeMap};
 use std::collections::HashSet;
 use std::marker::PhantomData;
 use std::rc::Rc;
 use topological_sort::TopologicalSort;
 
-use crate::ast::*;
+use asts::ast::*;
+use asts::spec_lang::sl_ast;
+use dwarf_ctx::dwarfreader::{DwarfCtx, DwarfTypeDefn};
 use crate::datastructures::cfg;
 use crate::ir_interface::IRInterface;
 use crate::readers::disassembler;
 use crate::readers::disassembler::Inst;
-use crate::readers::dwarfreader::DwarfCtx;
-use crate::spec_lang::sl_ast;
 use crate::system_model;
 use crate::utils;
 
@@ -52,8 +52,6 @@ where
     cfg_memo: HashMap<u64, Rc<cfg::Cfg<disassembler::AssemblyLine>>>,
     /// Generated functions / labels by addresses
     generated: HashSet<u64>,
-    /// Generated functions by names
-    generated_func_names: HashSet<String>,
     /// Map of procedure name to thier modifies set
     mod_set_map: HashMap<String, HashSet<String>>,
     /// ========= Phantom Data ==========
@@ -87,7 +85,6 @@ where
             labels_to_addr: Translator::<I>::create_label_to_addr_map(bbs),
             cfg_memo: HashMap::new(),
             generated: HashSet::new(),
-            generated_func_names: HashSet::new(),
             mod_set_map: HashMap::new(),
             _phantom_i: PhantomData,
         }
@@ -132,9 +129,35 @@ where
         )
     }
 
-    /// Returns a list of functions currently generated
-    pub fn generated_funcs(&self) -> &HashSet<String> {
-        &self.generated_func_names
+    /// Converts a dwarf type to IR type
+    pub fn to_ir_type(dtd: &DwarfTypeDefn) -> Type {
+        match dtd {
+            DwarfTypeDefn::Primitive { bytes } => Type::Bv {
+                w: bytes * utils::BYTE_SIZE,
+            },
+            DwarfTypeDefn::Array {
+                in_typ,
+                out_typ,
+                bytes: _,
+            } => Type::Array {
+                in_typs: vec![Box::new(Self::to_ir_type(in_typ))],
+                out_typ: Box::new(Self::to_ir_type(out_typ)),
+            },
+            DwarfTypeDefn::Struct { id, fields, bytes } => Type::Struct {
+                id: id.clone(),
+                fields: fields
+                    .iter()
+                    .map(|(id, struct_field)| (id.clone(), Box::new(Self::to_ir_type(&struct_field.typ))))
+                    .collect::<BTreeMap<String, Box<Type>>>(),
+                w: bytes * utils::BYTE_SIZE,
+            },
+            DwarfTypeDefn::Pointer {
+                value_typ: _,
+                bytes,
+            } => Type::Bv {
+                w: bytes * utils::BYTE_SIZE,
+            },
+        }
     }
 
     // =============================================================================
@@ -143,7 +166,6 @@ where
 
     /// Generates a stub function model
     pub fn gen_func_model_stub(&mut self, func_name: &str) {
-        self.generated_func_names.insert(func_name.to_string());
         let arg_exprs = self
             .func_args(func_name)
             .iter()
@@ -194,7 +216,6 @@ where
         }
         // Add function to generated function sets
         self.generated.insert(func_entry);
-        self.generated_func_names.insert(func_name.to_string());
         // Generate stub function models for ignored functions
         if self.ignored_funcs.get(func_name).is_some() {
             self.gen_func_model_stub(func_name);
@@ -957,7 +978,7 @@ where
                     fs.args
                         .iter()
                         // .map(|x| Expr::var(&x.name[..], self.dwarf_typ_to_ir(&x.typ_defn)))
-                        .map(|x| Expr::var(&x.name[..], x.typ_defn.to_ir_type()))
+                        .map(|x| Expr::var(&x.name[..], Self::to_ir_type(&x.typ_defn)))
                         .collect::<Vec<Expr>>(),
                 )
             })

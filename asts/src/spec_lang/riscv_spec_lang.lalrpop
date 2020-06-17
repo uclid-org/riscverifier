@@ -1,10 +1,9 @@
 use std::collections::HashSet;
 
-use crate::readers::dwarfreader::{DwarfCtx, DwarfTypeDefn};
+use dwarf_ctx::dwarfreader::{DwarfCtx, DwarfTypeDefn};
 use crate::spec_lang::sl_ast as ast;
 use crate::spec_lang::sl_lexer::{Tok, LexError};
 use crate::system_model;
-use crate::utils;
 
 /// A grammar defined with
 /// (1) an input string of the specification `input`,

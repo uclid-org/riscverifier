@@ -1,6 +1,6 @@
 use std::collections::HashSet;
 
-use crate::ast::*;
+use asts::ast::*;
 use crate::utils;
 
 /// ========== Constants ==========================================
@@ -8,10 +8,6 @@ pub const PC_VAR: &'static str = "pc";
 pub const RETURNED_FLAG: &'static str = "returned";
 pub const MEM_VAR: &'static str = "mem";
 pub const PRIV_VAR: &'static str = "current_priv";
-pub const A0: &'static str = "a0";
-pub const SP: &'static str = "sp";
-pub const RA: &'static str = "ra";
-pub const SYSTEM_VARS: [&'static str; 6] = [PC_VAR, RETURNED_FLAG, MEM_VAR, PRIV_VAR, SP, RA];
 
 /// ====================== SYSTEM STATE VARIABLES AND TYPES =================
 /// The set of system state variables
@@ -22,7 +18,7 @@ pub fn pc_var(xlen: u64) -> Var {
     }
 }
 pub fn pc_expr(xlen: u64) -> Expr {
-    Expr::var(PC_VAR, priv_type())
+    Expr::var(PC_VAR, bv_type(xlen))
 }
 pub fn pc_type(xlen: u64) -> Type {
     bv_type(xlen)
@@ -77,16 +73,6 @@ pub fn mem_type(xlen: u64) -> Type {
 /// Returns a bitvector type of specified width
 pub fn bv_type(width: u64) -> Type {
     Type::Bv { w: width }
-}
-pub fn system_var_type(name: &str, xlen: u64) -> Type {
-    match name {
-        PC_VAR => pc_var(xlen).typ,
-        RETURNED_FLAG => returned_var().typ,
-        MEM_VAR => mem_type(xlen),
-        PRIV_VAR => priv_var().typ,
-        SP => Type::Bv { w: xlen },
-        _ => panic!("Unable to determine type for {}.", name),
-    }
 }
 
 /// =========== INSTRUCTION SEMANTICS =================

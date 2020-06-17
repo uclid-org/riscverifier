@@ -1,9 +1,7 @@
 use std::cmp::Ordering;
 use std::collections::{BTreeMap, HashSet};
 use std::fmt;
-use std::rc::Rc;
 
-use crate::readers::dwarfreader::DwarfCtx;
 use crate::spec_lang::sl_ast;
 
 // =======================================================
@@ -74,7 +72,7 @@ impl fmt::Display for Type {
                     })[2..];
                 write!(f, "[{}]{}", in_typs, out_typ)
             },
-            Type::Struct { id, fields, w } => {
+            Type::Struct { id, fields:_, w:_ } => {
                 write!(f, "struct {}", id)
             }
         }

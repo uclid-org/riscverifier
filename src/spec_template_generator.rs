@@ -1,6 +1,6 @@
 use std::collections::HashSet;
 
-use crate::readers::dwarfreader::{DwarfCtx, DwarfTypeDefn, DwarfVar};
+use dwarf_ctx::dwarfreader::{DwarfCtx, DwarfTypeDefn, DwarfVar};
 use crate::utils;
 
 /// Simple specification template generator
@@ -15,7 +15,9 @@ impl SpecTemplateGenerator {
         let mut template = format!("");
         // Iterate over the function signatures and add them to the template
         for fname in func_names.iter() {
-            let func_sig = dwarf_ctx.func_sig(fname)?;
+            let func_sig = dwarf_ctx
+                .func_sig(fname)
+                .expect(&format!("Unable to find dwarf information for {}.", fname));
             // Create the arguments, return type, and signature strings comments
             let func_sig_args_iter = &mut func_sig.args.iter();
             let args_init_str = if let Some(first_arg) = &func_sig_args_iter.next() {
@@ -52,14 +54,14 @@ impl SpecTemplateGenerator {
         match typ {
             DwarfTypeDefn::Primitive { bytes } => format!("bv{}", bytes * utils::BYTE_SIZE),
             DwarfTypeDefn::Array {
-                in_typ,
-                out_typ,
+                in_typ:_,
+                out_typ:_,
                 bytes,
             } => format!("bv{}", bytes * utils::BYTE_SIZE),
-            DwarfTypeDefn::Struct { id, fields, bytes } => {
+            DwarfTypeDefn::Struct { id:_, fields:_, bytes } => {
                 format!("bv{}", bytes * utils::BYTE_SIZE)
             }
-            DwarfTypeDefn::Pointer { value_typ, bytes } => {
+            DwarfTypeDefn::Pointer { value_typ:_, bytes } => {
                 format!("bv{}", bytes * utils::BYTE_SIZE)
             }
         }

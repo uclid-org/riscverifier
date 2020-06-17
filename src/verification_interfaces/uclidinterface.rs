@@ -2,11 +2,11 @@ use std::collections::HashSet;
 use std::fs;
 use std::rc::Rc;
 
-use crate::ast::*;
+use asts::ast::*;
+use asts::spec_lang::sl_ast;
+use dwarf_ctx::dwarfreader::{DwarfCtx, DwarfTypeDefn, DwarfVar};
+
 use crate::ir_interface::{IRInterface, SpecLangASTInterface};
-use crate::readers::dwarfreader::{DwarfCtx, DwarfTypeDefn, DwarfVar};
-use crate::spec_lang::sl_ast;
-// use crate::system_model;
 use crate::utils;
 
 #[derive(Debug)]
@@ -263,7 +263,7 @@ impl Uclid5Interface {
         )
     }
 
-    fn specs_to_string(fsig: &FuncSig, dwarf_ctx: &DwarfCtx, xlen: &u64) -> String {
+    fn specs_to_string(fsig: &FuncSig, _dwarf_ctx: &DwarfCtx, _xlen: &u64) -> String {
         let mut specs = "".to_string();
         // requires
         for require in &fsig.requires {
@@ -776,7 +776,7 @@ impl SpecLangASTInterface for Uclid5Interface {
                 let arr = Self::vexpr_to_string(&exprs[0]);
                 let index = Self::vexpr_to_string(&exprs[1]);
                 let bytes = match &exprs[0].typ() {
-                    sl_ast::VType::Array { in_type, out_type } => match &**out_type {
+                    sl_ast::VType::Array { in_type:_, out_type } => match &**out_type {
                         sl_ast::VType::Bv(w) => *w as u64 / utils::BYTE_SIZE,
                         sl_ast::VType::Struct {
                             id: _,
@@ -824,7 +824,6 @@ impl SpecLangASTInterface for Uclid5Interface {
                 let expr_str = Self::vexpr_to_string(&exprs[0]);
                 format!("({}[{}:{}])", expr_str, hi, lo)
             }
-            _ => panic!("vexpr_opapp_to_string not implemented for {:#?}", op),
         }
     }
     fn vexpr_funcapp_to_string(fname: &String, args: &Vec<sl_ast::VExpr>) -> String {
@@ -862,8 +861,8 @@ impl SpecLangASTInterface for Uclid5Interface {
         }
     }
     /// Spec statement to string
-    fn spec_to_string(spec: &sl_ast::Spec) -> String {
-        "s".to_string()
+    fn spec_to_string(_spec: &sl_ast::Spec) -> String {
+        panic!("Unimplemented.")
     }
 }
 

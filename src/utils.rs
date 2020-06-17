@@ -14,16 +14,8 @@ macro_rules! set {
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Error {
-    // Dwarf reader errors
-    NoSuchDwarfFieldError,
-    CouldNotFindDwarfChild,
-    CouldNotFindType,
-    MissingVar(String),
-    MissingFuncSig(String),
     // Translator errors
     TranslatorErr(String),
-    // Specification parser errors
-    SpecParseError(String),
 }
 
 // Utility functions

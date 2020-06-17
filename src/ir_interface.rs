@@ -2,9 +2,9 @@ use std::collections::HashSet;
 use std::fmt;
 use std::rc::Rc;
 
-use crate::ast;
-use crate::readers::dwarfreader::{DwarfCtx, DwarfTypeDefn};
-use crate::spec_lang::sl_ast;
+use asts::ast;
+use asts::spec_lang::sl_ast;
+use dwarf_ctx::dwarfreader::{DwarfCtx};
 
 // =====================================================================================================
 /// IR Interface

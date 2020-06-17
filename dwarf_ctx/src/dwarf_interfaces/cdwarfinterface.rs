@@ -1,7 +1,7 @@
 use std::collections::HashMap;
 use std::{cell::RefCell, rc::Rc};
 
-use crate::readers::dwarfreader::*;
+use crate::dwarfreader::*;
 use crate::utils;
 
 #[derive(Debug)]

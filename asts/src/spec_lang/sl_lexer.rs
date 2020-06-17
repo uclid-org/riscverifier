@@ -219,7 +219,7 @@ impl<'input> Iterator for Lexer<'input> {
                 Some((i, '/')) => {
                     if let Some((_, '/')) = self.chars.peek() {
                         // //
-                        while let Some((j, c)) = self.chars.peek() {
+                        while let Some((_, c)) = self.chars.peek() {
                             if *c == '\n' {
                                 break;
                             } else {

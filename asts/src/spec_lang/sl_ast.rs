@@ -1,7 +1,7 @@
 use std::collections::{HashMap, HashSet};
 
 use crate::ast;
-use crate::readers::dwarfreader::{DwarfTypeDefn, DwarfCtx};
+use dwarf_ctx::dwarfreader::{DwarfTypeDefn, DwarfCtx};
 use crate::utils;
 
 // ==================================================================
@@ -69,7 +69,7 @@ impl VType {
             | ValueOp::BvXor
             | ValueOp::BvOr
             | ValueOp::BvAnd => {
-                /// These operators require all the same types
+                // These operators require all the same types
                 let same_types = exprs
                     .iter()
                     .fold(true, |acc, expr| acc && exprs[0].typ() == expr.typ());
@@ -322,25 +322,25 @@ pub trait ASTRewriter<C> {
             }
         }
     }
-    fn rewrite_bexpr_bool(b: &mut bool, context: &C) {}
-    fn rewrite_bexpr_boolop(bop: &mut BoolOp, context: &C) {}
-    fn rewrite_bexpr_compop(cop: &mut CompOp, context: &C) {}
+    fn rewrite_bexpr_bool(_b: &mut bool, _context: &C) {}
+    fn rewrite_bexpr_boolop(_bop: &mut BoolOp, _context: &C) {}
+    fn rewrite_bexpr_compop(_cop: &mut CompOp, _context: &C) {}
     // VExpr
     fn rewrite_vexpr(vexpr: &mut VExpr, context: &C) {
         match vexpr {
-            VExpr::Bv { value, typ } => {
+            VExpr::Bv { value, typ:_ } => {
                 Self::rewrite_vexpr_bvvalue(value, context);
             }
-            VExpr::Int(i, typ) => Self::rewrite_vexpr_int(i, context),
-            VExpr::Bool(b, typ) => Self::rewrite_vexpr_bool(b, context),
+            VExpr::Int(i, _) => Self::rewrite_vexpr_int(i, context),
+            VExpr::Bool(b, _) => Self::rewrite_vexpr_bool(b, context),
             VExpr::Ident(_, _) => Self::rewrite_vexpr_ident(vexpr, context),
-            VExpr::OpApp(vop, exprs, typ) => {
+            VExpr::OpApp(vop, exprs, _) => {
                 Self::rewrite_vexpr_valueop(vop, context);
                 for vexpr in exprs {
                     Self::rewrite_vexpr(vexpr, context);
                 }
             }
-            VExpr::FuncApp(fid, exprs, typ) => {
+            VExpr::FuncApp(fid, exprs, _) => {
                 Self::rewrite_vexpr_funcid(fid, context);
                 for vexpr in exprs {
                     Self::rewrite_vexpr(vexpr, context);
@@ -348,10 +348,10 @@ pub trait ASTRewriter<C> {
             }
         }
     }
-    fn rewrite_vexpr_bvvalue(value: &mut u64, context: &C) { }
-    fn rewrite_vexpr_int(i: &mut i64, context: &C) {}
-    fn rewrite_vexpr_bool(b: &mut bool, context: &C) {}
-    fn rewrite_vexpr_ident(vexpr: &mut VExpr, context: &C) {}
-    fn rewrite_vexpr_valueop(vop: &mut ValueOp, context: &C) {}
-    fn rewrite_vexpr_funcid(fid: &mut String, context: &C) {}
+    fn rewrite_vexpr_bvvalue(_value: &mut u64, _context: &C) { }
+    fn rewrite_vexpr_int(_i: &mut i64, _context: &C) {}
+    fn rewrite_vexpr_bool(_b: &mut bool, _context: &C) {}
+    fn rewrite_vexpr_ident(_vexpr: &mut VExpr, _context: &C) {}
+    fn rewrite_vexpr_valueop(_vop: &mut ValueOp, _context: &C) {}
+    fn rewrite_vexpr_funcid(_fid: &mut String, _context: &C) {}
 }

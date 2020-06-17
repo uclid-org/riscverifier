@@ -2,16 +2,15 @@
 extern crate log;
 extern crate env_logger;
 
-#[macro_use]
-extern crate lalrpop_util;
-lalrpop_mod!(pub riscv_spec_lang, "/spec_lang/riscv_spec_lang.rs"); // synthesized by LALRPOP
-
 extern crate clap;
 use clap::{App, Arg};
 
 extern crate pest;
 #[macro_use]
 extern crate pest_derive;
+
+extern crate asts;
+use asts::spec_lang::sl_parser;
 
 extern crate topological_sort;
 
@@ -20,15 +19,12 @@ use std::fs::File;
 use std::io::prelude::*;
 use std::rc::Rc;
 
-mod dwarf_interfaces;
-use dwarf_interfaces::cdwarfinterface::CDwarfInterface;
+extern crate dwarf_ctx;
+use dwarf_ctx::dwarfreader::DwarfReader;
+use dwarf_ctx::dwarf_interfaces::cdwarfinterface::CDwarfInterface;
 
 mod readers;
 use readers::disassembler::Disassembler;
-use readers::dwarfreader::DwarfReader;
-
-mod spec_lang;
-use spec_lang::sl_parser;
 
 mod translator;
 use translator::Translator;
@@ -43,8 +39,6 @@ mod system_model;
 
 mod spec_template_generator;
 use spec_template_generator::SpecTemplateGenerator;
-
-mod ast;
 
 mod ir_interface;
 
@@ -159,7 +153,7 @@ fn main() -> Result<(), utils::Error> {
         .value_of("function")
         .map_or(vec![], |lst| lst.split(",").collect::<Vec<&str>>());
     // Specification
-    let spec_parser = sl_parser::SpecParser::new(xlen, dwarf_reader.ctx());
+    let spec_parser = sl_parser::SpecParser::new(dwarf_reader.ctx());
     let spec_files = matches
         .value_of("spec")
         .map_or(vec![], |lst| lst.split(",").collect::<Vec<&str>>());
@@ -200,7 +194,7 @@ fn main() -> Result<(), utils::Error> {
             .unwrap()
             .write_all(model_str.as_bytes());
         match res {
-            Ok(_) => (),
+            Ok(_) => info!("Successfully wrote model to {}", output_file),
             Err(_) => panic!("Unable to write model to {}", output_file),
         }
     }
@@ -213,6 +207,10 @@ fn main() -> Result<(), utils::Error> {
             .ok()
             .unwrap()
             .write_all(spec_template_str.as_bytes());
+        match res {
+            Ok(_) => info!("Successfully wrote specification template to {}", output_file),
+            Err(_) => panic!("Unable to write specificaiton template to {}", output_file),
+        }
     }
     translator.clear();
     Ok(())
