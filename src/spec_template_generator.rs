@@ -20,7 +20,7 @@ impl SpecTemplateGenerator {
             let args = &func_sig.args.iter().fold(format!(""), |acc, arg| {
                 let arg_str = SpecTemplateGenerator::var_to_string(arg);
                 format!("{}, {}", acc, arg_str)
-            })[2..];
+            });
             let ret_type_str = if let Some(ret_type) = &func_sig.ret_type {
                 format!("{} ", SpecTemplateGenerator::type_to_string(ret_type))
             } else {

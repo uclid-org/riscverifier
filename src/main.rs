@@ -204,10 +204,11 @@ fn main() -> Result<(), utils::Error> {
             Err(_) => panic!("Unable to write model to {}", output_file),
         }
     }
-    // Print specification template
+    // Print all specification template
     if let Some(output_file) = matches.value_of("spec_template") {
+        let funcs : HashSet<String> = dwarf_reader.ctx().func_sigs().keys().cloned().collect();
         let spec_template_str =
-            SpecTemplateGenerator::fun_templates(translator.generated_funcs(), dwarf_reader.ctx())?;
+            SpecTemplateGenerator::fun_templates(&funcs, dwarf_reader.ctx())?;
         let res = File::create(output_file)
             .ok()
             .unwrap()
