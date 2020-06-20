@@ -5,15 +5,22 @@ use std::marker::PhantomData;
 use std::rc::Rc;
 use topological_sort::TopologicalSort;
 
-use asts::ast::*;
-use asts::spec_lang::sl_ast;
-use dwarf_ctx::dwarfreader::{DwarfCtx, DwarfTypeDefn};
-use crate::datastructures::cfg;
-use crate::ir_interface::IRInterface;
-use crate::readers::disassembler;
-use crate::readers::disassembler::Inst;
-use crate::system_model;
-use crate::utils;
+use asts::{
+    ast::*,
+    spec_lang::sl_ast,
+};
+
+use dwarf_ctx::dwarfreader::{ DwarfCtx, DwarfTypeDefn };
+
+use rv_model::system_model;
+use rv_model::system_model::BYTE_SIZE;
+
+use crate::{
+    datastructures::cfg,
+    ir_interface::IRInterface,
+    readers::disassembler,
+    readers::disassembler::Inst,
+};
 
 /// Instruction level translator from RISC-V to verification IR
 pub struct Translator<'t, I>
@@ -133,7 +140,7 @@ where
     pub fn to_ir_type(dtd: &DwarfTypeDefn) -> Type {
         match dtd {
             DwarfTypeDefn::Primitive { bytes } => Type::Bv {
-                w: bytes * utils::BYTE_SIZE,
+                w: bytes * BYTE_SIZE,
             },
             DwarfTypeDefn::Array {
                 in_typ,
@@ -149,13 +156,13 @@ where
                     .iter()
                     .map(|(id, struct_field)| (id.clone(), Box::new(Self::to_ir_type(&struct_field.typ))))
                     .collect::<BTreeMap<String, Box<Type>>>(),
-                w: bytes * utils::BYTE_SIZE,
+                w: bytes * BYTE_SIZE,
             },
             DwarfTypeDefn::Pointer {
                 value_typ: _,
                 bytes,
             } => Type::Bv {
-                w: bytes * utils::BYTE_SIZE,
+                w: bytes * BYTE_SIZE,
             },
         }
     }
@@ -276,13 +283,13 @@ where
         // ======== Recursively Generate Callees ===========================
         let callees = self.get_callee_addrs(func_name, &func_cfg);
         for (target, _) in &callees {
-            if let Ok(name) = self.get_func_at(target) {
+            if let Some(name) = self.get_func_at(target) {
                 self.gen_func_model(&name[..]);
             }
         }
         // Add callee modifies set to this function's modifies set
         for (target, _) in &callees {
-            if let Ok(name) = self.get_func_at(target) {
+            if let Some(name) = self.get_func_at(target) {
                 if !self.ignored_funcs.contains(&name[..]) {
                     continue;
                 }
@@ -532,7 +539,7 @@ where
         ts.insert(*cfg_rc.entry_addr());
         // Closure that determines the subgraphs to ignore by entry address
         let ignore = |addr| {
-            self.get_func_at(&addr).is_ok()
+            self.get_func_at(&addr).is_some()
                 && self
                     .ignored_funcs
                     .contains(&self.get_func_at(&addr).unwrap()[..])
@@ -623,19 +630,16 @@ where
     }
 
     /// Returns the function defined at the address "addr"
-    fn get_func_at(&self, addr: &u64) -> Result<String, utils::Error> {
+    fn get_func_at(&self, addr: &u64) -> Option<String> {
         let entry_blk = self
             .bbs
             .get(addr)
             .expect(&format!("Could not find basic block at {}.", addr))
             .entry();
         if entry_blk.is_label_entry() {
-            Ok(entry_blk.function_name().to_string())
+            Some(entry_blk.function_name().to_string())
         } else {
-            Err(utils::Error::TranslatorErr(format!(
-                "{} is not a function entry address.",
-                entry_blk.address()
-            )))
+            None
         }
     }
 

@@ -12,6 +12,8 @@ use std::io::prelude::*;
 use std::process::Command;
 use std::rc::Rc;
 
+use rv_model::system_model::INST_LENGTH_IN_BYTES;
+
 use crate::utils;
 
 /// FIXME: Create static strings for all instructions below
@@ -232,7 +234,7 @@ impl Inst for AssemblyLine {
     }
     fn successors(&self) -> Vec<u64> {
         let mut succs = vec![];
-        let next_addr = self.address() + utils::INST_LENGTH;
+        let next_addr = self.address() + INST_LENGTH_IN_BYTES;
         if self.is_dir_jump() {
             // Add the fallthrough address
             match self.op() {

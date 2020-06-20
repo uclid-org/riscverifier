@@ -7,6 +7,7 @@ use std::{borrow, fs, rc::Rc};
 use crate::utils;
 
 // =========================================================================================
+/// # Dwarf Interface
 
 /// An interface for reading DWARF debugging information.
 /// For every compiler and new language used, there will need to be a new interface
@@ -220,7 +221,7 @@ pub trait DwarfInterface: std::fmt::Debug {
 }
 
 // =========================================================================================
-/// DWARF information structs
+/// # DWARF information structs
 ///
 /// This format is used when the binary is read and transformed into gimli DWARF objects
 /// This intermediate format enables more natural recursive implementations (as opposed
@@ -317,7 +318,7 @@ impl DwarfAttributeValue {
 }
 
 // =========================================================================================
-/// DWARF debugging information struct definitions
+/// # DWARF debugging information struct definitions
 ///
 /// This section contains the struct definitions and implementations used to construct
 /// the dwarf context (struct DwarfCtx) object containing the relevant DWARF information
@@ -490,7 +491,7 @@ impl DwarfCtx {
 }
 
 // =========================================================================================
-/// DWARF reader
+/// # DWARF Reader
 ///
 /// To implement a DWARF reader for the source language of choice, write a dwarf_interface
 /// that implements the trait DwarfInterface (refer to dwarf_interfaces/cdwarfinterface).

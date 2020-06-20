@@ -9,6 +9,8 @@ use dwarf_ctx::dwarfreader::{DwarfCtx, DwarfTypeDefn, DwarfVar};
 use crate::ir_interface::{IRInterface, SpecLangASTInterface};
 use crate::utils;
 
+use rv_model::system_model::BYTE_SIZE;
+
 #[derive(Debug)]
 pub struct Uclid5Interface;
 
@@ -777,12 +779,12 @@ impl SpecLangASTInterface for Uclid5Interface {
                 let index = Self::vexpr_to_string(&exprs[1]);
                 let bytes = match &exprs[0].typ() {
                     sl_ast::VType::Array { in_type:_, out_type } => match &**out_type {
-                        sl_ast::VType::Bv(w) => *w as u64 / utils::BYTE_SIZE,
+                        sl_ast::VType::Bv(w) => *w as u64 / BYTE_SIZE,
                         sl_ast::VType::Struct {
                             id: _,
                             fields: _,
                             size,
-                        } => *size / utils::BYTE_SIZE,
+                        } => *size / BYTE_SIZE,
                         _ => panic!("Expected BV type (op: {:#?}, exprs: {:#?}).", op, exprs),
                     },
                     _ => panic!("Expected array type."),
@@ -812,7 +814,7 @@ impl SpecLangASTInterface for Uclid5Interface {
             }
             sl_ast::ValueOp::Deref => {
                 let expr_str = Self::vexpr_to_string(&exprs[0]);
-                let bytes = exprs[0].typ().get_bv_width() as u64 / utils::BYTE_SIZE;
+                let bytes = exprs[0].typ().get_bv_width() as u64 / BYTE_SIZE;
                 format!("deref_{}(mem, {})", bytes, expr_str)
             }
             sl_ast::ValueOp::Concat => {

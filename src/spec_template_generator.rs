@@ -1,7 +1,8 @@
 use std::collections::HashSet;
 
-use dwarf_ctx::dwarfreader::{DwarfCtx, DwarfTypeDefn, DwarfVar};
-use crate::utils;
+use dwarf_ctx::dwarfreader::{ DwarfCtx, DwarfTypeDefn, DwarfVar };
+
+use rv_model::system_model::BYTE_SIZE;
 
 /// Simple specification template generator
 pub struct SpecTemplateGenerator;
@@ -11,34 +12,36 @@ impl SpecTemplateGenerator {
     pub fn fun_templates(
         func_names: &HashSet<String>,
         dwarf_ctx: &DwarfCtx,
-    ) -> Result<String, utils::Error> {
+    ) -> String {
         let mut template = format!("");
         // Iterate over the function signatures and add them to the template
         for fname in func_names.iter() {
-            let func_sig = dwarf_ctx
-                .func_sig(fname)
-                .expect(&format!("Unable to find dwarf information for {}.", fname));
-            // Create the arguments, return type, and signature strings comments
-            let func_sig_args_iter = &mut func_sig.args.iter();
-            let args_init_str = if let Some(first_arg) = &func_sig_args_iter.next() {
-                SpecTemplateGenerator::var_to_string(first_arg)
+            // Find the function
+            let func_sig_res = dwarf_ctx
+                .func_sig(fname);
+            if let Ok(func_sig) = func_sig_res {
+                // Create comma separated argument and return type strings
+                let args = &func_sig
+                    .args
+                    .iter()
+                    .map(|arg| SpecTemplateGenerator::var_to_string(arg))
+                    .collect::<Vec<String>>()
+                    .join(",");
+                let ret_type_str = &func_sig
+                    .ret_type
+                    .as_ref()
+                    .map_or(String::from(""), |rt| SpecTemplateGenerator::type_to_string(rt));
+                // Construct the signature
+                let signature = format!("{}{}({})", ret_type_str, fname, args);
+                // Add function signature to the specification template string 
+                template = format!("{}fun {} {{\n	// {}\n}}\n", template, fname, signature);
             } else {
-                format!("")
-            };
-            let args = &func_sig_args_iter.fold(args_init_str, |acc, arg| {
-                let arg_str = SpecTemplateGenerator::var_to_string(arg);
-                format!("{}, {}", acc, arg_str)
-            });
-            let ret_type_str = if let Some(ret_type) = &func_sig.ret_type {
-                format!("{} ", SpecTemplateGenerator::type_to_string(ret_type))
-            } else {
-                format!("")
-            };
-            let signature = format!("{}{}({})", ret_type_str, fname, args);
-            // Add the specification template to the file
-            template = format!("{}fun {} {{\n	// {}\n}}\n", template, fname, signature);
+                // Unable to generate template
+                let silent_msg = format!("Unable to generate template for {}.", fname);
+                template = format!("{}// {}", fname, silent_msg);
+            }
         }
-        Ok(template)
+        template
     }
 
     /// Returns the string representation of the variable
@@ -52,17 +55,17 @@ impl SpecTemplateGenerator {
     /// Used for comments in specification templates
     pub fn type_to_string(typ: &DwarfTypeDefn) -> String {
         match typ {
-            DwarfTypeDefn::Primitive { bytes } => format!("bv{}", bytes * utils::BYTE_SIZE),
+            DwarfTypeDefn::Primitive { bytes } => format!("bv{}", bytes * BYTE_SIZE),
             DwarfTypeDefn::Array {
                 in_typ:_,
                 out_typ:_,
                 bytes,
-            } => format!("bv{}", bytes * utils::BYTE_SIZE),
+            } => format!("bv{}", bytes * BYTE_SIZE),
             DwarfTypeDefn::Struct { id:_, fields:_, bytes } => {
-                format!("bv{}", bytes * utils::BYTE_SIZE)
+                format!("bv{}", bytes * BYTE_SIZE)
             }
             DwarfTypeDefn::Pointer { value_typ:_, bytes } => {
-                format!("bv{}", bytes * utils::BYTE_SIZE)
+                format!("bv{}", bytes * BYTE_SIZE)
             }
         }
     }

@@ -2,11 +2,12 @@
 name = "riscverifier"
 version = "0.1.0"
 authors = ["Kevin Cheang <kcheang@berkeley.edu>"]
-edition = "2020"
+edition = "2018"
 
 [dependencies]
 asts = { path = "asts" }
 dwarf_ctx = { path = "dwarf_ctx" }
+rv_model = { path="rv_model" }
 
 clap = "2.33.0"
 object = "0.15"

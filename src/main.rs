@@ -11,17 +11,22 @@ extern crate pest_derive;
 
 extern crate asts;
 use asts::spec_lang::sl_parser;
+extern crate rv_model;
 
 extern crate topological_sort;
 
-use std::collections::HashSet;
-use std::fs::File;
-use std::io::prelude::*;
-use std::rc::Rc;
+use std::{
+    collections::HashSet,
+    fs::File,
+    io::prelude::*,
+    rc::Rc,
+};
 
 extern crate dwarf_ctx;
-use dwarf_ctx::dwarfreader::DwarfReader;
-use dwarf_ctx::dwarf_interfaces::cdwarfinterface::CDwarfInterface;
+use dwarf_ctx::{
+    dwarfreader::DwarfReader,
+    dwarf_interfaces::cdwarfinterface::CDwarfInterface,
+};
 
 mod readers;
 use readers::disassembler::Disassembler;
@@ -35,7 +40,6 @@ use verification_interfaces::uclidinterface::Uclid5Interface;
 mod datastructures;
 use datastructures::cfg::BasicBlock;
 
-mod system_model;
 
 mod spec_template_generator;
 use spec_template_generator::SpecTemplateGenerator;
@@ -126,7 +130,7 @@ fn cl_options<'t, 's>() -> App<'t, 's> {
         )
 }
 
-fn main() -> Result<(), utils::Error> {
+fn main() {
     initialize_logging();
     let matches = cl_options().get_matches();
     let xlen = utils::dec_str_to_u64(matches.value_of("xlen").unwrap_or("64"))
@@ -202,7 +206,7 @@ fn main() -> Result<(), utils::Error> {
     if let Some(output_file) = matches.value_of("spec_template") {
         let funcs : HashSet<String> = dwarf_reader.ctx().func_sigs().keys().cloned().collect();
         let spec_template_str =
-            SpecTemplateGenerator::fun_templates(&funcs, dwarf_reader.ctx())?;
+            SpecTemplateGenerator::fun_templates(&funcs, dwarf_reader.ctx());
         let res = File::create(output_file)
             .ok()
             .unwrap()
@@ -213,5 +217,4 @@ fn main() -> Result<(), utils::Error> {
         }
     }
     translator.clear();
-    Ok(())
 }
