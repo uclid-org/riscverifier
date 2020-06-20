@@ -1,8 +1,11 @@
-use std::boxed::Box;
-use std::collections::{HashMap, BTreeMap};
-use std::collections::HashSet;
-use std::marker::PhantomData;
-use std::rc::Rc;
+use std::{
+    boxed::Box,
+    collections::{HashMap, BTreeMap},
+    collections::HashSet,
+    marker::PhantomData,
+    rc::Rc,
+};
+
 use topological_sort::TopologicalSort;
 
 use asts::{
@@ -13,7 +16,6 @@ use asts::{
 use dwarf_ctx::dwarfreader::{ DwarfCtx, DwarfTypeDefn };
 
 use rv_model::system_model;
-use rv_model::system_model::BYTE_SIZE;
 
 use crate::{
     datastructures::cfg,
@@ -22,15 +24,18 @@ use crate::{
     readers::disassembler::Inst,
 };
 
-/// Instruction level translator from RISC-V to verification IR
+// ================================================================================
+/// # VERI-V Translator
+
+/// Instruction level translator from RISC-V to verification language IR
 pub struct Translator<'t, I>
 where
     I: IRInterface,
 {
-    /// =============================================================
-    /// INPUTS
-    ///
-    /// Width of integer register in bits (FIXME: also currently used for address length)
+    // ====================================================================
+    // Translator inputs
+
+    /// Width of register in bits
     xlen: u64,
     /// Verification model
     model: Model,
@@ -49,10 +54,9 @@ where
     /// and functions are all inlined
     ignore_specs: bool,
 
-    /// ============================================================
-    /// CONTEXT
-    /// Helper variables to keep track of the translation progress
-    ///
+    // ====================================================================
+    // Translator context
+
     /// Map of function names / labels to entry addresses
     labels_to_addr: HashMap<String, u64>,
     /// Memoize map for generated functions at the given address
@@ -61,7 +65,9 @@ where
     generated: HashSet<u64>,
     /// Map of procedure name to thier modifies set
     mod_set_map: HashMap<String, HashSet<String>>,
-    /// ========= Phantom Data ==========
+
+    // =====================================================================
+    // Phantom data
     _phantom_i: PhantomData<I>,
 }
 
@@ -80,15 +86,22 @@ where
         specs_map: &'t HashMap<String, Vec<sl_ast::Spec>>,
         ignore_specs: bool,
     ) -> Self {
+        // Initialize the VERI-V model
+        let mut model = Model::new(module_name);
+        model.add_vars(&system_model::sys_state_vars(xlen));
+        
+        // Create a translator
         Translator {
+            // Inputs
             xlen: xlen,
-            model: Model::new(module_name),
+            model,
             bbs: bbs,
             ignored_funcs: ignored_funcs,
             verify_funcs: verify_funcs,
             dwarf_ctx: dwarf_ctx,
             specs_map: specs_map,
             ignore_specs: ignore_specs,
+            // Context
             labels_to_addr: Translator::<I>::create_label_to_addr_map(bbs),
             cfg_memo: HashMap::new(),
             generated: HashSet::new(),
@@ -96,9 +109,9 @@ where
             _phantom_i: PhantomData,
         }
     }
+
     // =============================================================================
-    // ==================== Translator context =====================================
-    // =============================================================================
+    // Translator context
 
     /// Clear translator context
     pub fn clear(&mut self) {
@@ -122,8 +135,7 @@ where
     }
 
     // =============================================================================
-    // ==================== Helper functions =======================================
-    // =============================================================================
+    // Helper functions
 
     /// Returns the string representation of the model
     pub fn print_model(&self) -> String {
@@ -140,7 +152,7 @@ where
     pub fn to_ir_type(dtd: &DwarfTypeDefn) -> Type {
         match dtd {
             DwarfTypeDefn::Primitive { bytes } => Type::Bv {
-                w: bytes * BYTE_SIZE,
+                w: bytes * system_model::BYTE_SIZE,
             },
             DwarfTypeDefn::Array {
                 in_typ,
@@ -156,20 +168,19 @@ where
                     .iter()
                     .map(|(id, struct_field)| (id.clone(), Box::new(Self::to_ir_type(&struct_field.typ))))
                     .collect::<BTreeMap<String, Box<Type>>>(),
-                w: bytes * BYTE_SIZE,
+                w: bytes * system_model::BYTE_SIZE,
             },
             DwarfTypeDefn::Pointer {
                 value_typ: _,
                 bytes,
             } => Type::Bv {
-                w: bytes * BYTE_SIZE,
+                w: bytes * system_model::BYTE_SIZE,
             },
         }
     }
 
     // =============================================================================
-    // ==================== Translation functions ==================================
-    // =============================================================================
+    // Translation functions
 
     /// Generates a stub function model
     pub fn gen_func_model_stub(&mut self, func_name: &str) {
@@ -214,30 +225,30 @@ where
 
     /// Generates a model for the function at address "addr"
     pub fn gen_func_model(&mut self, func_name: &str) {
-        // Don't generate already generated functions
+        // Skip the functions that have already been generated
         let func_entry = *self
             .func_entry_addr(func_name)
             .expect(&format!("Unable to find {}'s entry address.", func_name));
         if self.generated.get(&func_entry).is_some() {
             return;
         }
-        // Add function to generated function sets
+
+        // Mark the function as generated
         self.generated.insert(func_entry);
-        // Generate stub function models for ignored functions
+
+        // If the function is ignore, only generate a stub models
         if self.ignored_funcs.get(func_name).is_some() {
             self.gen_func_model_stub(func_name);
             return;
         }
+
         // Get the function cfg
         let func_cfg = self.get_func_cfg(func_entry);
 
         // ======= State variables ====================================
-        // FIXME: Remove these later; these variables should be predefined for RISC-V architectures.
-        // Add global variables for the function block
+        // FIXME: Remove these later; these variables should be predefined in the rv_model library
+        // Initialize global variables for the function block
         self.model.add_vars(&self.infer_vars(&func_cfg));
-        // Add system variables
-        self.model
-            .add_vars(&system_model::sys_state_vars(self.xlen));
 
         // ====== Basic Block Function Models ==========================
         // Generate procedure model for each basic block
@@ -248,20 +259,10 @@ where
                 let bb_proc_name = self.bb_proc_name(*addr);
                 let body = self.cfg_node_to_block(bb);
                 let mod_set = self.infer_mod_set(&body);
-                FuncModel::new(
-                    &bb_proc_name,
-                    *addr,
-                    vec![],
-                    None,
-                    None,
-                    None,
-                    None,
-                    Some(mod_set),
-                    body,
-                    true,
-                )
+                FuncModel::new(&bb_proc_name, *addr, vec![], None, None, None, None, Some(mod_set), body, true)
             })
             .collect::<Vec<_>>();
+
         // ====== Modifies sets ============================================
         // Add all basic block mod sets to the model
         let bb_mod_sets = bb_fms
@@ -322,18 +323,7 @@ where
                 Expr::var(&var.name, system_model::bv_type(self.xlen))
             })
             .collect();
-        // Translate specs
-        // let requires = if !self.ignore_specs {
-        //     self.requires_from_spec_map(func_name, &arg_exprs).ok()
-        // } else {
-        //     None
-        // };
-        // let ensures = if !self.ignore_specs {
-        //     self.ensures_from_spec_map(func_name)
-        // } else {
-        //     None
-        // };
-        // let tracked = self.tracked_from_spec_map(func_name);
+        // Translate the specifications
         let requires = if !self.ignore_specs {
             self.requires_from_spec_map(func_name)
         } else {
@@ -989,27 +979,13 @@ where
             .map_or(vec![], |v| v)
     }
 
-    #[allow(dead_code)]
-    /// DEAD_CODE: Function is currently not used because we don't
-    ///            use the return type in the function sig (for now).
-    /// Returns the return type of a function from the DWARF context
-    fn func_ret_type(&self, func_name: &str) -> Option<Type> {
-        self.dwarf_ctx.func_sig(func_name).ok().and_then(|fs| {
-            // fs.ret_type.as_ref().and_then(|rd| Some(self.dwarf_typ_to_ir(rd.as_ref())))
-            fs.ret_type
-                .as_ref()
-                .and_then(|_| Some(Type::Bv { w: self.xlen }))
-        })
-    }
-
     /// Returns the entry address of the function named `func_name`
     fn func_entry_addr(&self, func_name: &str) -> Option<&u64> {
         self.labels_to_addr.get(func_name)
     }
 
     // =============================================================================
-    // ==================== Specification translation ==============================
-    // =============================================================================
+    // Specification translation
 
     /// Returns a vector of specifications from function named `func_name` if
     /// it exists in the specification map `spec_map`
