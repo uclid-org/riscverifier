@@ -2,19 +2,15 @@
 
 use std::collections::{HashSet, HashMap};
 
-use dwarf_ctx::dwarfreader::DwarfCtx;
 use crate::spec_lang::sl_ast as ast;
 use crate::spec_lang::sl_lexer::{Tok, LexError};
-use crate::system_model;
 
 /// A grammar defined with
 /// (1) an input string of the specification `input`,
-/// (2) a DWARF context `dwarf_ctx` containing information about the
-///     function signatures, global variables, and types
-/// (3) `curr_fn` is a stateful variable that keeps track of which function
+/// (2) `curr_fn` is a stateful variable that keeps track of which function
 ///     the parser is currently parsing specifications for.
 ///     `curr_fn` is set whenever a new FuncSpec is parsed
-grammar<'input>(input: &'input str, dwarf_ctx: &DwarfCtx, curr_fn: &mut String, typ_map: &mut HashMap<String, ast::VType>);
+grammar<'input>(input: &'input str, curr_fn: &mut String, typ_map: &mut HashMap<String, ast::VType>);
 
 pub Spec: ast::Spec = {
     "ensures" <e:BExpr> ";" => ast::Spec::Ensures(e),
@@ -62,17 +58,7 @@ pub BExpr: ast::BExpr = {
 }
 
 pub BExpr2: ast::BExpr = {
-    <op:PrefixBoolOp> <e:BExpr2> => {
-        let ret = ast::BExpr::BOpApp(op.clone(), vec![e]);
-        // Remove the bound variables from the map
-        // to avoid conflicts with other functions
-        match op {
-            ast::BoolOp::Forall(v, t) => typ_map.remove(&v.get_ident_name()[..]),
-            ast::BoolOp::Exists(v, t) => typ_map.remove(&v.get_ident_name()[..]),
-            _ => None,
-        };
-        ret
-    },
+    <op:PrefixBoolOp> <e:BExpr2> => ast::BExpr::BOpApp(op.clone(), vec![e]),
     BTerm,
 }
 
@@ -88,7 +74,6 @@ pub BTerm: ast::BExpr = {
 
 pub VarDecl: (ast::VExpr, ast::VType) = {
     <v:"id"> ":" <typ:TypeDecl> => {
-        typ_map.insert(v.to_string(), typ.clone());
         (ast::VExpr::Ident(v.to_string(), typ.clone()), typ)
     },
 }
@@ -136,8 +121,7 @@ pub CompOp: ast::CompOp = {
 pub VExpr: ast::VExpr = {
     <e1:VExpr> <op:ValueOp1> <e2:VExpr2> => {
         let operands = vec![e1, e2];
-        let typ = ast::VType::infer_op_type(&op, &operands);
-        ast::VExpr::OpApp(op, operands, typ)
+        ast::VExpr::OpApp(op, operands, ast::VType::Unknown)
     },
     VExpr2,
 }
@@ -154,42 +138,22 @@ pub ValueOp1: ast::ValueOp = {
 pub VExpr2: ast::VExpr = {
     <e1:VExpr2> <op:ValueOp2> <e2:Term> => {
         let operands = vec![e1, e2];
-        let typ = ast::VType::infer_op_type(&op, &operands);
-        ast::VExpr::OpApp(op, operands, typ)
+        ast::VExpr::OpApp(op, operands, ast::VType::Unknown)
     },
     <a:VExpr2> "[" <ind:VExpr> "]" => {
         let op = ast::ValueOp::ArrayIndex;
         let operands = vec![a, ind];
-        let typ = ast::VType::infer_op_type(&op, &operands);
-        let index_addr = ast::VExpr::OpApp(op, operands, typ.clone());
-        match &typ {
-            ast::VType::Bv(w) => ast::VExpr::OpApp(ast::ValueOp::Deref, vec![index_addr], typ.clone()),
-            _ => index_addr,
-        }
+        ast::VExpr::OpApp(op, operands, ast::VType::Unknown)
     },
     <e:VExpr2> <op:PostfixValueOp> => {
         let operands = vec![e];
-        let typ = ast::VType::infer_op_type(&op, &operands);
-        ast::VExpr::OpApp(op, operands, typ)
+        ast::VExpr::OpApp(op, operands, ast::VType::Unknown)
     },
     <s:VExpr2> "." <f:"id"> => {
         assert!(f.to_string().chars().all(char::is_alphanumeric), "Invalid get field .{}.", f.to_string());
         let op = ast::ValueOp::GetField;
-        let field_typ = match s.typ() {
-            ast::VType::Struct { id:_, fields, size:_ } => {
-                *fields.get(&f[..])
-                    .expect(&format!("Unable to find struct field {}.", f))
-                    .clone()
-            },
-            _ => panic!("Expected struct type: {:?}.", s)
-        };
-        let operands = vec![s, ast::VExpr::Ident(f.to_string(), field_typ)];
-        let typ = ast::VType::infer_op_type(&op, &operands);
-        let get_field_addr = ast::VExpr::OpApp(op, operands, typ.clone());
-        match &typ {
-            ast::VType::Bv(w) => ast::VExpr::OpApp(ast::ValueOp::Deref, vec![get_field_addr], typ.clone()),
-            _ => get_field_addr,
-        }
+        let operands = vec![s, ast::VExpr::Ident(f.to_string(), ast::VType::Unknown)];
+        ast::VExpr::OpApp(op, operands, ast::VType::Unknown)
     },
     Term,
 }
@@ -251,8 +215,7 @@ pub Term: ast::VExpr = {
         }
     },
     <f:BuiltIn> "(" <es:CommaSepVExprs> ")" => {
-        let typ = ast::VType::infer_func_app_type(&f[..], &es);
-        ast::VExpr::FuncApp(f, es, typ)
+        ast::VExpr::FuncApp(f, es, ast::VType::Unknown)
     },
     <d:"*"?> <id:Ident> => {
         if d.is_some() {
@@ -283,65 +246,12 @@ pub BuiltIn: String = {
 pub Ident: ast::VExpr = {
     <d:"$"?> <id:"id"> => match d {
         Some(d) => {
-            let xlen = dwarf_ctx.xlen;
             let var_id = id.to_string();
-            let vtype = match &var_id[..] {
-                system_model::PC_VAR => ast::VType::from_ast_type(&system_model::pc_type(xlen)),
-                system_model::RETURNED_FLAG => ast::VType::from_ast_type(&system_model::returned_type()),
-                system_model::PRIV_VAR => ast::VType::from_ast_type(&system_model::priv_type()),
-                system_model::MEM_VAR => ast::VType::from_ast_type(&system_model::mem_type(xlen)),
-                system_model::A0
-                | system_model::SP
-                | system_model::RA => ast::VType::from_ast_type(&system_model::bv_type(xlen)),
-                _ => panic!("Unimplemented type for variable ${}.", &var_id),
-            };
-            ast::VExpr::Ident(id.to_string(), vtype)
+            ast::VExpr::Ident(id.to_string(), ast::VType::Unknown)
         },
         None => {
             let var_id = id.to_string();
-            let mut typ_opt: Option<ast::VType> = None;
-
-            // Variable is a formal argument
-            let func_sig = dwarf_ctx
-                .func_sigs()
-                .get(curr_fn);
-            if let Some(fs) = func_sig {
-                let formal_arg = fs
-                    .args
-                    .iter()
-                    .find(|dv| dv.name == var_id);
-                if let Some(fa) = formal_arg {
-                    typ_opt = Some(ast::VType::from_dwarf_type(&fa.typ_defn));
-                }
-            }
-
-            // Variable is a bound variable (quantifier)
-            // TODO(kkmc): currently, shadowing variables is not allowed
-            typ_opt = typ_opt
-                .or_else(|| typ_map.get(&var_id[..]).map_or(None, |typ| Some(typ.clone())));
-
-            // Variable is a global variable
-            // Note: formals take precedence over global variables
-            let mut is_global = false;
-            if typ_opt.is_none() {
-                let dt_res = dwarf_ctx.global_var_type(&var_id);
-                assert!(dt_res.is_ok(), "Unable to find global variable type for {} in DWARF info. {}", &var_id, curr_fn);
-                typ_opt = Some(ast::VType::from_dwarf_type(&dt_res.unwrap()));
-                is_global = true;
-            }
-
-            assert!(typ_opt.is_some(), "Unable to find variable {} in DWARF info.", &var_id);
-            let global_addr = ast::VExpr::Ident(format!("{}", id), typ_opt.clone().unwrap());
-            if is_global {
-                match &typ_opt.clone().unwrap() {
-                    ast::VType::Bv(w) =>
-                        ast::VExpr::OpApp(ast::ValueOp::Deref, vec![global_addr], typ_opt.clone().unwrap()),
-                    _ => global_addr,
-                }
-            } else {
-                // FIXME: formals are all xlen for now
-                ast::VExpr::Ident(id.to_string(), ast::VType::Bv(dwarf_ctx.xlen as u16))
-            }
+            ast::VExpr::Ident(format!("{}", id), ast::VType::Unknown)
         },
     }
 }

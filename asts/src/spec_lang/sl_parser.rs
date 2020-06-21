@@ -6,19 +6,15 @@ use crate::spec_lang::{
     sl_lexer,
 };
 
-use dwarf_ctx::dwarfreader::DwarfCtx;
-
 use crate::riscv_spec_lang::FuncSpecsParser;
 
 use crate::utils; 
 
-pub struct SpecParser<'a> {
-    dwarf_ctx: &'a DwarfCtx,
-}
+pub struct SpecParser;
 
-impl<'a> SpecParser<'a> {
-    pub fn new(dwarf_ctx: &'a DwarfCtx) -> Self {
-        SpecParser { dwarf_ctx }
+impl SpecParser {
+    pub fn new() -> Self {
+        SpecParser {}
     }
 
     pub fn process_spec_files(
@@ -46,7 +42,7 @@ impl<'a> SpecParser<'a> {
     fn parse(&self, input: &str) -> Vec<sl_ast::FuncSpec> {
         let lexer = sl_lexer::Lexer::new(input);
         FuncSpecsParser::new()
-            .parse(input, &self.dwarf_ctx, &mut "".to_string(), &mut HashMap::new(), lexer)
+            .parse(input, &mut "".to_string(), &mut HashMap::new(), lexer)
             .unwrap()
     }
 }

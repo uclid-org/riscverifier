@@ -1,8 +1,12 @@
-use std::collections::{HashMap, HashSet};
+use std::{
+    collections::{
+        HashMap,
+        HashSet
+    },
+    cell::RefCell,
+};
 
 use crate::ast;
-use dwarf_ctx::dwarfreader::{DwarfTypeDefn, DwarfCtx};
-use crate::utils;
 
 // ==================================================================
 /// # AST Types
@@ -68,7 +72,8 @@ impl VType {
             | ValueOp::Mul
             | ValueOp::BvXor
             | ValueOp::BvOr
-            | ValueOp::BvAnd => {
+            | ValueOp::BvAnd
+            | ValueOp::Deref => {
                 // These operators require all the same types
                 let same_types = exprs
                     .iter()
@@ -87,7 +92,6 @@ impl VType {
             ValueOp::RightShift
             | ValueOp::URightShift
             | ValueOp::LeftShift => exprs[1].typ().clone(),
-            _ => panic!("Unimplemented type inference."),
         }
     }
     pub fn infer_func_app_type(fapp: &str, exprs: &Vec<VExpr>) -> VType {
@@ -104,37 +108,7 @@ impl VType {
             _ => panic!("Unimplemented type inference for {}.", fapp),
         }
     }
-    /// Translates a DwarfTypeDefn to a specification variable type
-    pub fn from_dwarf_type(dtd: &DwarfTypeDefn) -> Self {
-        match dtd {
-            DwarfTypeDefn::Primitive { bytes }
-            | DwarfTypeDefn::Pointer {
-                value_typ: _,
-                bytes,
-            } => Self::Bv((bytes * utils::BYTE_SIZE) as u16),
-            DwarfTypeDefn::Array {
-                in_typ,
-                out_typ,
-                bytes: _,
-            } => Self::Array {
-                in_type: Box::new(Self::from_dwarf_type(in_typ)),
-                out_type: Box::new(Self::from_dwarf_type(out_typ)),
-            },
-            DwarfTypeDefn::Struct { id, fields, bytes } => {
-                let id = id.to_string();
-                let fields = fields
-                    .iter()
-                    .map(|kv| {
-                        let field_name = (&*kv.0).clone();
-                        let field_type = Self::from_dwarf_type(&*kv.1.typ);
-                        (field_name, Box::new(field_type))
-                    })
-                    .collect::<HashMap<String, Box<VType>>>();
-                let size = bytes * utils::BYTE_SIZE;
-                Self::Struct { id, fields, size }
-            }
-        }
-    }
+
     /// TODO: Replace this and above with generic and have each AST type implement a type trait
     pub fn from_ast_type(typ: &ast::Type) -> Self {
         match typ {
@@ -242,27 +216,6 @@ impl VExpr {
             _ => panic!("Expected `Self::Ident` but found {:?}.", self),
         }
     }
-    /// Helper function that determines if the VExpr is a global variable
-    pub fn is_global(vexpr: &VExpr, dwarf_ctx: &DwarfCtx) -> bool {
-        match vexpr {
-            VExpr::Ident(name, _) => {
-                dwarf_ctx.global_var(&name[..]).is_ok()
-            }
-            VExpr::OpApp(_, vexprs, _) |
-            VExpr::FuncApp(_, vexprs, _) => {
-                Self::has_global(vexprs, dwarf_ctx)
-            }
-            _ => false,
-        }
-    }
-    /// Helper function that determines if one of the VExprs from `vexprs`
-    /// is a global variable
-    pub fn has_global(vexprs: &Vec<VExpr>, dwarf_ctx: &DwarfCtx) -> bool {
-        vexprs.iter()
-            .fold(false, |acc, vexpr| {
-                acc || Self::is_global(vexpr, dwarf_ctx)
-            })
-    }
 }
 
 #[derive(Debug, Clone)]
@@ -312,7 +265,7 @@ pub struct FuncSpec {
 
 pub trait ASTRewriter<C> {
     // BExpr
-    fn rewrite_bexpr(bexpr: &mut BExpr, context: &C) {
+    fn rewrite_bexpr(bexpr: &mut BExpr, context: &RefCell<C>) {
         match bexpr {
             BExpr::Bool(b) => Self::rewrite_bexpr_bool(b, context),
             BExpr::BOpApp(bop, exprs) => {
@@ -329,11 +282,11 @@ pub trait ASTRewriter<C> {
             }
         }
     }
-    fn rewrite_bexpr_bool(_b: &mut bool, _context: &C) {}
-    fn rewrite_bexpr_boolop(_bop: &mut BoolOp, _context: &C) {}
-    fn rewrite_bexpr_compop(_cop: &mut CompOp, _context: &C) {}
+    fn rewrite_bexpr_bool(_b: &mut bool, _context: &RefCell<C>) {}
+    fn rewrite_bexpr_boolop(_bop: &mut BoolOp, _context: &RefCell<C>) {}
+    fn rewrite_bexpr_compop(_cop: &mut CompOp, _context: &RefCell<C>) {}
     // VExpr
-    fn rewrite_vexpr(vexpr: &mut VExpr, context: &C) {
+    fn rewrite_vexpr(vexpr: &mut VExpr, context: &RefCell<C>) {
         match vexpr {
             VExpr::Bv { value:_, typ:_ } => {
                 Self::rewrite_vexpr_bvvalue(vexpr, context);
@@ -341,24 +294,37 @@ pub trait ASTRewriter<C> {
             VExpr::Int(_, _) => Self::rewrite_vexpr_int(vexpr, context),
             VExpr::Bool(_, _) => Self::rewrite_vexpr_bool(vexpr, context),
             VExpr::Ident(_, _) => Self::rewrite_vexpr_ident(vexpr, context),
-            VExpr::OpApp(vop, exprs, _) => {
-                Self::rewrite_vexpr_valueop(vop, context);
-                for vexpr in exprs {
-                    Self::rewrite_vexpr(vexpr, context);
-                }
-            }
-            VExpr::FuncApp(fid, exprs, _) => {
-                Self::rewrite_vexpr_funcid(fid, context);
-                for vexpr in exprs {
-                    Self::rewrite_vexpr(vexpr, context);
-                }
-            }
+            VExpr::OpApp(_, _, _) => Self::rewrite_vexpr_opapp(vexpr, context),
+            VExpr::FuncApp(_, _, _) => Self::rewrite_vexpr_funcapp(vexpr, context),
         }
     }
-    fn rewrite_vexpr_bvvalue(_value: &mut VExpr, _context: &C) { }
-    fn rewrite_vexpr_int(_i: &mut VExpr, _context: &C) {}
-    fn rewrite_vexpr_bool(_b: &mut VExpr, _context: &C) {}
-    fn rewrite_vexpr_ident(_vexpr: &mut VExpr, _context: &C) {}
-    fn rewrite_vexpr_valueop(_vop: &mut ValueOp, _context: &C) {}
-    fn rewrite_vexpr_funcid(_fid: &mut String, _context: &C) {}
+    fn rewrite_vexprs(exprs: &mut Vec<VExpr>, context: &RefCell<C>) {
+        for expr in exprs {
+            Self::rewrite_vexpr(expr, context);
+        }
+    }
+    fn rewrite_vexpr_bvvalue(_value: &mut VExpr, _context: &RefCell<C>) { }
+    fn rewrite_vexpr_int(_i: &mut VExpr, _context: &RefCell<C>) {}
+    fn rewrite_vexpr_bool(_b: &mut VExpr, _context: &RefCell<C>) {}
+    fn rewrite_vexpr_ident(_vexpr: &mut VExpr, _context: &RefCell<C>) {}
+    fn rewrite_vexpr_opapp(opapp: &mut VExpr, context: &RefCell<C>) {
+        match opapp {
+            VExpr::OpApp(op, exprs, _) => {
+                Self::rewrite_vexpr_valueop(op, context);
+                Self::rewrite_vexprs(exprs, context);
+            } 
+            _ => panic!("Implementation error; expected `VExpr::OpApp`."),
+        }
+    }
+    fn rewrite_vexpr_funcapp(funcapp: &mut VExpr, context: &RefCell<C>) {
+        match funcapp {
+            VExpr::FuncApp(fid, exprs, _) => {
+                Self::rewrite_vexpr_funcid(fid, context);
+                Self::rewrite_vexprs(exprs, context);
+            } 
+            _ => panic!("Implementation error; expected `VExpr::FuncApp`."),
+        }
+    }
+    fn rewrite_vexpr_valueop(_vop: &mut ValueOp, _context: &RefCell<C>) {}
+    fn rewrite_vexpr_funcid(_fid: &mut String, _context: &RefCell<C>) {}
 }
