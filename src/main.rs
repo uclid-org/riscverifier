@@ -28,8 +28,8 @@ use dwarf_ctx::{
     dwarf_interfaces::cdwarfinterface::CDwarfInterface,
 };
 
-mod readers;
-use readers::disassembler::Disassembler;
+mod disassembler;
+use disassembler::disassembler::Disassembler;
 
 mod translator;
 use translator::Translator;

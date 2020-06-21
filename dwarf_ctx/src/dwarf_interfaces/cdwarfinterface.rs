@@ -1,9 +1,13 @@
 use std::collections::HashMap;
 use std::{cell::RefCell, rc::Rc};
 
-use crate::dwarfreader::*;
-use crate::utils;
+use crate::{
+    dwarfreader::*,
+    utils,
+};
 
+/// ==================================================================================================
+/// # Dwarf Interface for the C Language
 #[derive(Debug)]
 pub struct CDwarfInterface;
 
@@ -35,6 +39,7 @@ impl CDwarfInterface {
             .collect::<Vec<_>>();
         Ok(DwarfFuncSig::new(name, args, type_defn))
     }
+
     /// Converts a DwarfObject to a DwarfVar if it's a variable tag.
     fn dobj_to_var(dobj: &DwarfObject, comp_unit: &DwarfObject) -> Result<DwarfVar, utils::Error> {
         assert!(dobj.tag_name == "DW_TAG_variable");
@@ -44,6 +49,7 @@ impl CDwarfInterface {
         let memory_addr = *dobj.get_attr("DW_AT_location")?.get_expect_num_val();
         Ok(DwarfVar::new(name, type_defn, memory_addr))
     }
+    
     /// Recursively build the type from comp_unit at dwarf_object_index.
     /// typ_map is used to store the types (to handle mutually recursive)
     /// types.
@@ -162,6 +168,7 @@ impl DwarfInterface for CDwarfInterface {
         }
         func_sigs
     }
+    
     /// Returns a list of statically defined / global variables
     /// from the first level of comp_unit.
     fn process_global_vars(comp_unit: &DwarfObject) -> Vec<DwarfVar> {
@@ -176,6 +183,7 @@ impl DwarfInterface for CDwarfInterface {
         }
         globals
     }
+    
     /// Returns the type defined at index dwarf_object_index
     /// in the first level of comp_unit.
     fn get_type(

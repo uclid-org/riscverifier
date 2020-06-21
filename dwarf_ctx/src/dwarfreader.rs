@@ -1,8 +1,13 @@
 use object::Object;
-use std::collections::BTreeMap;
-use std::collections::HashMap;
-use std::marker::PhantomData;
-use std::{borrow, fs, rc::Rc};
+
+use std::{
+    collections::BTreeMap,
+    collections::HashMap,
+    marker::PhantomData,
+    borrow,
+    fs,
+    rc::Rc,
+};
 
 use crate::utils;
 
@@ -13,7 +18,9 @@ use crate::utils;
 /// For every compiler and new language used, there will need to be a new interface
 /// for that compiler that extend this trait (refer to cdwarfinterface.rs)
 pub trait DwarfInterface: std::fmt::Debug {
-    /// ===================== DWARF Reader functions =================
+    /// ===================================================================
+    /// DWARF Reader functions
+
     /// Process the function signatures from the DwarfObject
     fn process_func_sigs(dobj: &DwarfObject) -> Vec<DwarfFuncSig>;
     /// Process the list of global variables for the DwarfObject
@@ -21,7 +28,9 @@ pub trait DwarfInterface: std::fmt::Debug {
     /// Creates the type searching in comp_unit with the DwarfObject index
     fn get_type(index: &u64, comp_unit: &DwarfObject) -> Result<Rc<DwarfTypeDefn>, utils::Error>;
 
-    /// ====================== Helper functions ======================
+    /// ===================================================================
+    /// Helper functions
+
     /// Parses the binary files in the paths and returns
     /// the corresponding DwarfObjects from the debugging information.
     fn process_dwarf_files(
@@ -88,7 +97,7 @@ pub trait DwarfInterface: std::fmt::Debug {
             {
                 dwarf_object.add_attr(
                     "pointer_size",
-                    DwarfAttributeValue::NumericAttr(*xlen / utils::BYTE_SIZE),
+                    DwarfAttributeValue::NumericAttr(*xlen),
                 );
                 dwarf_objects.push(dwarf_object);
             }

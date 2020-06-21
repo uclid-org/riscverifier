@@ -20,8 +20,8 @@ use rv_model::system_model;
 use crate::{
     datastructures::cfg,
     ir_interface::IRInterface,
-    readers::disassembler,
-    readers::disassembler::Inst,
+    disassembler::disassembler,
+    disassembler::disassembler::Inst,
 };
 
 // ================================================================================
@@ -449,6 +449,7 @@ where
                     bb_entry
                 ));
                 if target_cfg_node.entry().is_label_entry() {
+                    // This is a function in the higher level code because the CFG node has an entry point
                     let f_name = self
                         .get_func_at(&target_addr)
                         .expect(&format!("Could not find function entry at {}.", bb_entry));
@@ -461,13 +462,11 @@ where
                             Expr::var(&format!("a{}", i), arg_var.typ.clone())
                         })
                         .collect::<Vec<_>>();
+                    // TODO(kkmc): Ignore the return value. The current implementation does not
+                    // use the return value and is only tested with functions that have single
+                    // return values. hence lhss is left as an empty vector below.
                     let lhss = vec![];
-                    // if let Some(_) = self.func_ret_type(&f_name) {
-                    //     lhss.push(Expr::var(
-                    //         system_model::A0,
-                    //         system_model::bv_type(self.xlen),
-                    //     ));
-                    // }
+                    // Construct the function call
                     let f_call_stmt = Box::new(Stmt::func_call(f_name, lhss, f_args));
                     let mut then_stmts = vec![];
                     // Add function call to then statement
@@ -672,7 +671,7 @@ where
         Stmt::Block(stmt_vec)
     }
 
-    /// Returns the statment containing the instruction specs
+    /// Returns the instruction / assembly line (al) in the VERI-V IR
     fn al_to_ir_stmt(&self, al: &Rc<disassembler::AssemblyLine>) -> Stmt {
         // Destination registers
         let mut dsts = vec![];
@@ -985,7 +984,7 @@ where
     }
 
     // =============================================================================
-    // Specification translation
+    // Specification retrieval helper functions
 
     /// Returns a vector of specifications from function named `func_name` if
     /// it exists in the specification map `spec_map`

@@ -7,14 +7,10 @@ use asts::spec_lang::sl_ast;
 use dwarf_ctx::dwarfreader::{DwarfCtx};
 
 // =====================================================================================================
-/// IR Interface
+/// # IR Interface
+
 /// Defines functions from ast (ie. ast.rs) to verification language
 pub trait IRInterface: fmt::Debug {
-    /// FIXME: Rewrite all of this to translate expressions at the leaves
-    ///        of the mutually recursive calls not at the root (notice
-    ///        how the operands are currently translated first as
-    ///        e1_str and e2_str)
-
     /// Expressions to string functions
     fn expr_to_string(expr: &ast::Expr, xlen: &u64) -> String {
         match expr {
@@ -69,7 +65,7 @@ pub trait IRInterface: fmt::Debug {
 }
 
 // =================================================================================================
-/// Specification language interface
+/// # Specification language interface
 /// Defines functions from spec lang ast (ie. spec_lang/sl_ast.rs) to verification langauge
 
 pub trait SpecLangASTInterface: fmt::Debug {

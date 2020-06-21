@@ -1,7 +1,15 @@
-use std::collections::{HashMap, HashSet};
-use std::rc::Rc;
+use std::{
+    collections::{
+        HashMap,
+        HashSet,
+    },
+    rc::Rc,
+};
 
-use crate::readers::disassembler::Inst;
+use crate::disassembler::disassembler::Inst;
+
+/// ========================================================================================
+/// # Program control flow graph
 
 #[derive(Debug)]
 pub struct Cfg<T>
@@ -31,15 +39,6 @@ where
 {
     node: &'a CfgNode<T>,
     index: usize,
-}
-
-#[derive(Debug)]
-pub struct BasicBlock<T>
-where
-    T: Inst + std::fmt::Debug + std::fmt::Display,
-{
-    /// Instructions of the basic block
-    insts: Vec<Rc<T>>,
 }
 
 impl<T> Cfg<T>
@@ -182,6 +181,18 @@ where
             None
         }
     }
+}
+
+/// ========================================================================================
+/// # Basic block
+
+#[derive(Debug)]
+pub struct BasicBlock<T>
+where
+    T: Inst + std::fmt::Debug + std::fmt::Display,
+{
+    /// Instructions of the basic block
+    insts: Vec<Rc<T>>,
 }
 
 impl<T> BasicBlock<T>
