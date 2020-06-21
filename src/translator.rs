@@ -142,7 +142,7 @@ where
     }
 
     /// Converts a dwarf type to IR type
-    pub fn to_ir_type(dtd: &DwarfTypeDefn) -> Type {
+    fn to_ir_type(dtd: &DwarfTypeDefn) -> Type {
         match dtd {
             DwarfTypeDefn::Primitive { bytes } => Type::Bv {
                 w: bytes * system_model::BYTE_SIZE,
