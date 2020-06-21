@@ -1,4 +1,3 @@
-use std::collections::HashMap;
 use std::fs;
 
 use crate::spec_lang::{
@@ -42,7 +41,7 @@ impl SpecParser {
     fn parse(&self, input: &str) -> Vec<sl_ast::FuncSpec> {
         let lexer = sl_lexer::Lexer::new(input);
         FuncSpecsParser::new()
-            .parse(input, &mut "".to_string(), &mut HashMap::new(), lexer)
+            .parse(input, lexer)
             .unwrap()
     }
 }

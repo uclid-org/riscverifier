@@ -1,16 +1,16 @@
-// TODO(kkmc): Remove the dependency on DwarfCtx from the parser
+use std::collections::HashSet;
 
-use std::collections::{HashSet, HashMap};
-
-use crate::spec_lang::sl_ast as ast;
-use crate::spec_lang::sl_lexer::{Tok, LexError};
+use crate::spec_lang::{
+    sl_ast as ast,
+    sl_lexer::{
+        Tok,
+        LexError
+    },
+};
 
 /// A grammar defined with
 /// (1) an input string of the specification `input`,
-/// (2) `curr_fn` is a stateful variable that keeps track of which function
-///     the parser is currently parsing specifications for.
-///     `curr_fn` is set whenever a new FuncSpec is parsed
-grammar<'input>(input: &'input str, curr_fn: &mut String, typ_map: &mut HashMap<String, ast::VType>);
+grammar<'input>(input: &'input str);
 
 pub Spec: ast::Spec = {
     "ensures" <e:BExpr> ";" => ast::Spec::Ensures(e),
@@ -42,10 +42,7 @@ pub FuncSpec: ast::FuncSpec = {
 }
 
 pub FuncId: String = {
-    "id" => {
-        *curr_fn = <>.to_string();
-        <>.to_string()
-    }
+    "id" => <>.to_string()
 }
 
 pub FuncSpecs: Vec<ast::FuncSpec> = {
