@@ -45,7 +45,7 @@ impl<'a> SpecParser<'a> {
     fn parse(&self, input: &str) -> HashMap<String, Vec<sl_ast::Spec>> {
         let lexer = sl_lexer::Lexer::new(input);
         let fun_specs_vec = FuncSpecsParser::new()
-            .parse(input, &self.dwarf_ctx, &mut "".to_string(), lexer)
+            .parse(input, &self.dwarf_ctx, &mut "".to_string(), &mut HashMap::new(), lexer)
             .unwrap();
         let mut ret = HashMap::new();
         for mut fun_spec in fun_specs_vec {

@@ -709,12 +709,12 @@ impl SpecLangASTInterface for Uclid5Interface {
             sl_ast::BoolOp::Forall(var, typ) => {
                 let var_str = Self::vexpr_to_string(var);
                 let type_str = Self::vtype_to_string(typ);
-                format!("forall ({} : {}) ", var_str, type_str)
+                format!("forall ({} : {}) :: ", var_str, type_str)
             }
             sl_ast::BoolOp::Exists(var, typ) => {
                 let var_str = Self::vexpr_to_string(var);
                 let type_str = Self::vtype_to_string(typ);
-                format!("exists ({} : {}) ", var_str, type_str)
+                format!("exists ({} : {}) :: ", var_str, type_str)
             }
         }
     }

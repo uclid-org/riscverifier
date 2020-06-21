@@ -63,7 +63,9 @@ pub enum Tok<'input> {
     Asterisk,     // *
     Slash,        // /
     Ampersand,    // &
+    DoubleAmpersand, // &&
     Pipe,         // |
+    DoublePipe,   // ||
     Tilde,        // ~
     Bang,         // !
     Caret,        // ^
@@ -232,8 +234,26 @@ impl<'input> Iterator for Lexer<'input> {
                         return Some(Ok((i, Tok::Slash, i + 1)));
                     }
                 }
-                Some((i, '&')) => return Some(Ok((i, Tok::Ampersand, i + 1))), // &
-                Some((i, '|')) => return Some(Ok((i, Tok::Pipe, i + 1))),      // &
+                Some((i, '&')) => {
+                    if let Some((_, '&')) = self.chars.peek() {
+                        // &&
+                        self.chars.next();
+                        return Some(Ok((i, Tok::DoubleAmpersand, i + 2)))
+                    } else {
+                        // &
+                        return Some(Ok((i, Tok::Ampersand, i + 1)))
+                    }
+                }
+                Some((i, '|')) => {
+                    if let Some((_, '|')) = self.chars.peek() {
+                        // ||
+                        self.chars.next();
+                        return Some(Ok((i, Tok::DoublePipe, i + 2)))
+                    } else {
+                        // |
+                        return Some(Ok((i, Tok::Pipe, i + 1)))
+                    }
+                },      // &
                 Some((i, '~')) => return Some(Ok((i, Tok::Tilde, i + 1))),     // ~
                 Some((i, '!')) => return Some(Ok((i, Tok::Bang, i + 1))),      // !
                 Some((i, '^')) => return Some(Ok((i, Tok::Caret, i + 1))),     // ^

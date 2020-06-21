@@ -1,6 +1,6 @@
-use std::collections::HashSet;
+use std::collections::{HashSet, HashMap};
 
-use dwarf_ctx::dwarfreader::{DwarfCtx, DwarfTypeDefn};
+use dwarf_ctx::dwarfreader::DwarfCtx;
 use crate::spec_lang::sl_ast as ast;
 use crate::spec_lang::sl_lexer::{Tok, LexError};
 use crate::system_model;
@@ -12,7 +12,7 @@ use crate::system_model;
 /// (3) `curr_fn` is a stateful variable that keeps track of which function
 ///     the parser is currently parsing specifications for.
 ///     `curr_fn` is set whenever a new FuncSpec is parsed
-grammar<'input>(input: &'input str, dwarf_ctx: &DwarfCtx, curr_fn: &mut String);
+grammar<'input>(input: &'input str, dwarf_ctx: &DwarfCtx, curr_fn: &mut String, typ_map: &mut HashMap<String, ast::VType>);
 
 pub Spec: ast::Spec = {
     "ensures" <e:BExpr> ";" => ast::Spec::Ensures(e),
@@ -55,23 +55,30 @@ pub FuncSpecs: Vec<ast::FuncSpec> = {
 }
 
 pub BExpr: ast::BExpr = {
-    <e1:BExpr2> <op:InfixBoolOp> <e2:BExpr> => ast::BExpr::BOpApp(op, vec![e1, e2]),
+    <e1:BExpr> <op:InfixBoolOp> <e2:BExpr2> => ast::BExpr::BOpApp(op, vec![e1, e2]),
     BExpr2,
 }
 
 pub BExpr2: ast::BExpr = {
-    <e1:VExpr> <op:CompOp> <e2:VExpr2> => {
+    <op:PrefixBoolOp> <e:BExpr2> => ast::BExpr::BOpApp(op, vec![e]),
+    BTerm,
+}
+
+pub BTerm: ast::BExpr = {
+    <e1:VExpr> <op:CompOp> <e2:VExpr> => {
         let operands = vec![e1, e2];
         ast::BExpr::COpApp(op, operands)
     },
-    <op:PrefixBoolOp> <e:BExpr2> => ast::BExpr::BOpApp(op, vec![e]),
     "true" => ast::BExpr::Bool(true),
     "false" => ast::BExpr::Bool(false),
     "(" <e: BExpr> ")" => e,
 }
 
 pub VarDecl: (ast::VExpr, ast::VType) = {
-    <v:Ident> ":" <typ:TypeDecl> => (v, typ),
+    <v:"id"> ":" <typ:TypeDecl> => {
+        typ_map.insert(v.to_string(), typ.clone());
+        (ast::VExpr::Ident(v.to_string(), typ.clone()), typ)
+    },
 }
 
 pub TypeDecl: ast::VType = {
@@ -80,12 +87,12 @@ pub TypeDecl: ast::VType = {
             Tok::BvType(width) => ast::VType::Bv(width),
             _ => panic!("Not a valid type declaration: {:#?}.", <>),                
         }
-    },
+    }
 }
 
 pub InfixBoolOp: ast::BoolOp = {
-    "|" "|" => ast::BoolOp::Disj,
-    "&" "&" => ast::BoolOp::Conj,
+    "||" => ast::BoolOp::Disj,
+    "&&" => ast::BoolOp::Conj,
     "=" "=" ">" => ast::BoolOp::Implies,
 }
 
@@ -280,7 +287,8 @@ pub Ident: ast::VExpr = {
         },
         None => {
             let var_id = id.to_string();
-            let mut dwarf_type: Option<DwarfTypeDefn> = None;
+            let mut typ_opt: Option<ast::VType> = None;
+
             // Variable is a formal argument
             let func_sig = dwarf_ctx
                 .func_sigs()
@@ -291,24 +299,31 @@ pub Ident: ast::VExpr = {
                     .iter()
                     .find(|dv| dv.name == var_id);
                 if let Some(fa) = formal_arg {
-                    dwarf_type = Some((*fa.typ_defn).clone());
+                    typ_opt = Some(ast::VType::from_dwarf_type(&fa.typ_defn));
                 }
             }
+
+            // Variable is a bound variable (quantifier)
+            // TODO(kkmc): currently, shadowing variables is not allowed
+            typ_opt = typ_opt
+                .or_else(|| typ_map.get(&var_id[..]).map_or(None, |typ| Some(typ.clone())));
+
             // Variable is a global variable
             // Note: formals take precedence over global variables
             let mut is_global = false;
-            if dwarf_type.is_none() {
+            if typ_opt.is_none() {
                 let dt_res = dwarf_ctx.global_var_type(&var_id);
                 assert!(dt_res.is_ok(), "Unable to find global variable type for {} in DWARF info. {}", &var_id, curr_fn);
-                dwarf_type = Some((*dt_res.unwrap()).clone());
+                typ_opt = Some(ast::VType::from_dwarf_type(&dt_res.unwrap()));
                 is_global = true;
             }
-            assert!(dwarf_type.is_some(), "Unable to find variable {} in DWARF info.", &var_id);
-            let typ = ast::VType::from_dwarf_type(&dwarf_type.unwrap());
-            let global_addr = ast::VExpr::Ident(format!("{}", id), typ.clone());
+
+            assert!(typ_opt.is_some(), "Unable to find variable {} in DWARF info.", &var_id);
+            let global_addr = ast::VExpr::Ident(format!("{}", id), typ_opt.clone().unwrap());
             if is_global {
-                match &typ {
-                    ast::VType::Bv(w) => ast::VExpr::OpApp(ast::ValueOp::Deref, vec![global_addr], typ.clone()),
+                match &typ_opt.clone().unwrap() {
+                    ast::VType::Bv(w) =>
+                        ast::VExpr::OpApp(ast::ValueOp::Deref, vec![global_addr], typ_opt.clone().unwrap()),
                     _ => global_addr,
                 }
             } else {
@@ -366,7 +381,9 @@ extern {
         "*" => Tok::Asterisk,       // *
         "/" => Tok::Slash,          // /
         "&" => Tok::Ampersand,      // &
+        "&&" => Tok::DoubleAmpersand, // &&
         "|" => Tok::Pipe,           // |
+        "||" => Tok::DoublePipe,    // ||
         "~" => Tok::Tilde,          // ~
         "!" => Tok::Bang,           // !
         "^" => Tok::Caret,          // ^
