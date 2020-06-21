@@ -11,6 +11,10 @@ use crate::utils;
 
 use rv_model::system_model::BYTE_SIZE;
 
+
+// ========================================================================================================================
+/// # Uclid Interface
+
 #[derive(Debug)]
 pub struct Uclid5Interface;
 
@@ -335,7 +339,8 @@ impl Uclid5Interface {
         utils::indent_text(control_string, 4)
     }
 
-    /// =================== Helper functions ===================
+    // ==================================================================================================================
+    /// # Helper functions
 
     /// Return a UCLID5 variable declaration.
     ///
@@ -865,31 +870,5 @@ impl SpecLangASTInterface for Uclid5Interface {
     /// Spec statement to string
     fn spec_to_string(_spec: &sl_ast::Spec) -> String {
         panic!("Unimplemented.")
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-    type U5I = Uclid5Interface<CDwarfInterface>;
-    #[test]
-    fn test_lit_to_string() {
-        let bv_lit = Literal::Bv { val: 0, width: 1 };
-        assert_eq!(U5I::lit_to_string(&bv_lit), "0bv1");
-    }
-
-    #[test]
-    fn test_assign_to_string() {
-        let bv64_type = Type::Bv { w: 64 };
-        let var_x = Expr::Var(Var {
-            name: "x".to_string(),
-            typ: bv64_type,
-        });
-        let bv_lit = Expr::Literal(Literal::Bv { val: 0, width: 64 });
-        let assign = Assign {
-            lhs: vec![var_x],
-            rhs: vec![bv_lit],
-        };
-        assert_eq!(U5I::assign_to_string(&assign), "x = 0bv64;");
     }
 }

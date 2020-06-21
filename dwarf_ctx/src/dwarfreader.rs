@@ -18,7 +18,7 @@ use crate::utils;
 /// For every compiler and new language used, there will need to be a new interface
 /// for that compiler that extend this trait (refer to cdwarfinterface.rs)
 pub trait DwarfInterface: std::fmt::Debug {
-    /// ===================================================================
+    // ===================================================================
     /// DWARF Reader functions
 
     /// Process the function signatures from the DwarfObject
@@ -28,7 +28,7 @@ pub trait DwarfInterface: std::fmt::Debug {
     /// Creates the type searching in comp_unit with the DwarfObject index
     fn get_type(index: &u64, comp_unit: &DwarfObject) -> Result<Rc<DwarfTypeDefn>, utils::Error>;
 
-    /// ===================================================================
+    // ===================================================================
     /// Helper functions
 
     /// Parses the binary files in the paths and returns
