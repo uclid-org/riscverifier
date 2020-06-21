@@ -1,13 +1,6 @@
 use object::Object;
 
-use std::{
-    collections::BTreeMap,
-    collections::HashMap,
-    marker::PhantomData,
-    borrow,
-    fs,
-    rc::Rc,
-};
+use std::{borrow, collections::BTreeMap, collections::HashMap, fs, marker::PhantomData, rc::Rc};
 
 use crate::utils;
 
@@ -95,10 +88,7 @@ pub trait DwarfInterface: std::fmt::Debug {
             if let Some(mut dwarf_object) =
                 Self::entries_to_dwarf_object(&unit, &dwarf, &mut entries_cursor)?
             {
-                dwarf_object.add_attr(
-                    "pointer_size",
-                    DwarfAttributeValue::NumericAttr(*xlen),
-                );
+                dwarf_object.add_attr("pointer_size", DwarfAttributeValue::NumericAttr(*xlen));
                 dwarf_objects.push(dwarf_object);
             }
         }

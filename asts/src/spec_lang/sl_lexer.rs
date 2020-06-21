@@ -49,33 +49,33 @@ pub enum Tok<'input> {
     // Types:
     BvType(u16),
     // Symbols:
-    Colon,        // :
-    ColonColon,   // ::
-    Semi,         // ;
-    Comma,        // ,
-    Dot,          // .
-    Equals,       // =
-    GreaterThan,  // >
-    LessThan,     // <
-    Plus,         // +
-    Minus,        // -
-    Question,     // ?
-    Asterisk,     // *
-    Slash,        // /
-    Ampersand,    // &
+    Colon,           // :
+    ColonColon,      // ::
+    Semi,            // ;
+    Comma,           // ,
+    Dot,             // .
+    Equals,          // =
+    GreaterThan,     // >
+    LessThan,        // <
+    Plus,            // +
+    Minus,           // -
+    Question,        // ?
+    Asterisk,        // *
+    Slash,           // /
+    Ampersand,       // &
     DoubleAmpersand, // &&
-    Pipe,         // |
-    DoublePipe,   // ||
-    Tilde,        // ~
-    Bang,         // !
-    Caret,        // ^
-    Dollar,       // $
-    LeftBrace,    // {
-    LeftBracket,  // [
-    LeftParen,    // (
-    RightBrace,   // }
-    RightBracket, // ]
-    RightParen,   // )
+    Pipe,            // |
+    DoublePipe,      // ||
+    Tilde,           // ~
+    Bang,            // !
+    Caret,           // ^
+    Dollar,          // $
+    LeftBrace,       // {
+    LeftBracket,     // [
+    LeftParen,       // (
+    RightBrace,      // }
+    RightBracket,    // ]
+    RightParen,      // )
 }
 
 pub type Spanned<Tok, Loc, Error> = Result<(Loc, Tok, Loc), Error>;
@@ -238,26 +238,26 @@ impl<'input> Iterator for Lexer<'input> {
                     if let Some((_, '&')) = self.chars.peek() {
                         // &&
                         self.chars.next();
-                        return Some(Ok((i, Tok::DoubleAmpersand, i + 2)))
+                        return Some(Ok((i, Tok::DoubleAmpersand, i + 2)));
                     } else {
                         // &
-                        return Some(Ok((i, Tok::Ampersand, i + 1)))
+                        return Some(Ok((i, Tok::Ampersand, i + 1)));
                     }
                 }
                 Some((i, '|')) => {
                     if let Some((_, '|')) = self.chars.peek() {
                         // ||
                         self.chars.next();
-                        return Some(Ok((i, Tok::DoublePipe, i + 2)))
+                        return Some(Ok((i, Tok::DoublePipe, i + 2)));
                     } else {
                         // |
-                        return Some(Ok((i, Tok::Pipe, i + 1)))
+                        return Some(Ok((i, Tok::Pipe, i + 1)));
                     }
-                },      // &
-                Some((i, '~')) => return Some(Ok((i, Tok::Tilde, i + 1))),     // ~
-                Some((i, '!')) => return Some(Ok((i, Tok::Bang, i + 1))),      // !
-                Some((i, '^')) => return Some(Ok((i, Tok::Caret, i + 1))),     // ^
-                Some((i, '$')) => return Some(Ok((i, Tok::Dollar, i + 1))),    // $
+                } // &
+                Some((i, '~')) => return Some(Ok((i, Tok::Tilde, i + 1))), // ~
+                Some((i, '!')) => return Some(Ok((i, Tok::Bang, i + 1))),  // !
+                Some((i, '^')) => return Some(Ok((i, Tok::Caret, i + 1))), // ^
+                Some((i, '$')) => return Some(Ok((i, Tok::Dollar, i + 1))), // $
                 Some((i, '{')) => return Some(Ok((i, Tok::LeftBrace, i + 1))), // {
                 Some((i, '[')) => return Some(Ok((i, Tok::LeftBracket, i + 1))), // [
                 Some((i, '(')) => return Some(Ok((i, Tok::LeftParen, i + 1))), // (
@@ -273,7 +273,7 @@ impl<'input> Iterator for Lexer<'input> {
                         return None;
                     }
                 }
-                None => return None,                                           // End of file
+                None => return None, // End of file
                 Some((i, _)) => loop {
                     match self.chars.peek() {
                         Some((j, ' ')) | Some((j, ':')) | Some((j, ';')) | Some((j, ','))

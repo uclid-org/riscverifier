@@ -11,7 +11,6 @@ use crate::utils;
 
 use rv_model::system_model::BYTE_SIZE;
 
-
 // ========================================================================================================================
 /// # Uclid Interface
 
@@ -783,7 +782,10 @@ impl SpecLangASTInterface for Uclid5Interface {
                 let arr = Self::vexpr_to_string(&exprs[0]);
                 let index = Self::vexpr_to_string(&exprs[1]);
                 let bytes = match &exprs[0].typ() {
-                    sl_ast::VType::Array { in_type:_, out_type } => match &**out_type {
+                    sl_ast::VType::Array {
+                        in_type: _,
+                        out_type,
+                    } => match &**out_type {
                         sl_ast::VType::Bv(w) => *w as u64 / BYTE_SIZE,
                         sl_ast::VType::Struct {
                             id: _,
@@ -827,7 +829,7 @@ impl SpecLangASTInterface for Uclid5Interface {
                 let expr_str1 = Self::vexpr_to_string(&exprs[1]);
                 format!("({} ++ {})", expr_str0, expr_str1)
             }
-            sl_ast::ValueOp::Slice {hi, lo} => {
+            sl_ast::ValueOp::Slice { hi, lo } => {
                 let expr_str = Self::vexpr_to_string(&exprs[0]);
                 format!("({}[{}:{}])", expr_str, hi, lo)
             }

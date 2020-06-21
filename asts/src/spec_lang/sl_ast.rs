@@ -1,9 +1,6 @@
 use std::{
-    collections::{
-        HashMap,
-        HashSet
-    },
     cell::RefCell,
+    collections::{HashMap, HashSet},
 };
 
 use crate::ast;
@@ -89,9 +86,9 @@ impl VType {
                 let width1 = exprs[1].typ().get_bv_width();
                 Self::Bv(width0 + width1)
             }
-            ValueOp::RightShift
-            | ValueOp::URightShift
-            | ValueOp::LeftShift => exprs[1].typ().clone(),
+            ValueOp::RightShift | ValueOp::URightShift | ValueOp::LeftShift => {
+                exprs[1].typ().clone()
+            }
         }
     }
     pub fn infer_func_app_type(fapp: &str, exprs: &Vec<VExpr>) -> VType {
@@ -288,7 +285,7 @@ pub trait ASTRewriter<C> {
     // VExpr
     fn rewrite_vexpr(vexpr: &mut VExpr, context: &RefCell<C>) {
         match vexpr {
-            VExpr::Bv { value:_, typ:_ } => {
+            VExpr::Bv { value: _, typ: _ } => {
                 Self::rewrite_vexpr_bvvalue(vexpr, context);
             }
             VExpr::Int(_, _) => Self::rewrite_vexpr_int(vexpr, context),
@@ -303,7 +300,7 @@ pub trait ASTRewriter<C> {
             Self::rewrite_vexpr(expr, context);
         }
     }
-    fn rewrite_vexpr_bvvalue(_value: &mut VExpr, _context: &RefCell<C>) { }
+    fn rewrite_vexpr_bvvalue(_value: &mut VExpr, _context: &RefCell<C>) {}
     fn rewrite_vexpr_int(_i: &mut VExpr, _context: &RefCell<C>) {}
     fn rewrite_vexpr_bool(_b: &mut VExpr, _context: &RefCell<C>) {}
     fn rewrite_vexpr_ident(_vexpr: &mut VExpr, _context: &RefCell<C>) {}
@@ -312,7 +309,7 @@ pub trait ASTRewriter<C> {
             VExpr::OpApp(op, exprs, _) => {
                 Self::rewrite_vexpr_valueop(op, context);
                 Self::rewrite_vexprs(exprs, context);
-            } 
+            }
             _ => panic!("Implementation error; expected `VExpr::OpApp`."),
         }
     }
@@ -321,7 +318,7 @@ pub trait ASTRewriter<C> {
             VExpr::FuncApp(fid, exprs, _) => {
                 Self::rewrite_vexpr_funcid(fid, context);
                 Self::rewrite_vexprs(exprs, context);
-            } 
+            }
             _ => panic!("Implementation error; expected `VExpr::FuncApp`."),
         }
     }

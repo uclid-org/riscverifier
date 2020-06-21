@@ -67,14 +67,14 @@ impl fmt::Display for Type {
             Type::Array { in_typs, out_typ } => {
                 let in_typs = &in_typs
                     .iter()
-                    .fold("".to_string(), |acc, typ| {
-                        format!("{}, {}", acc, typ)
-                    })[2..];
+                    .fold("".to_string(), |acc, typ| format!("{}, {}", acc, typ))[2..];
                 write!(f, "[{}]{}", in_typs, out_typ)
-            },
-            Type::Struct { id, fields:_, w:_ } => {
-                write!(f, "struct {}", id)
             }
+            Type::Struct {
+                id,
+                fields: _,
+                w: _,
+            } => write!(f, "struct {}", id),
         }
     }
 }
@@ -179,9 +179,9 @@ pub enum Literal {
 impl fmt::Display for Literal {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            Literal::Bv {val, width} => write!(f, "{}bv{}", val, width),
-            Literal::Bool {val } => write!(f, "{}", val),
-            Literal::Int {val } => write!(f, "{}", val),
+            Literal::Bv { val, width } => write!(f, "{}bv{}", val, width),
+            Literal::Bool { val } => write!(f, "{}", val),
+            Literal::Int { val } => write!(f, "{}", val),
         }
     }
 }
@@ -221,11 +221,9 @@ pub struct OpApp {
 }
 impl fmt::Display for OpApp {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        let operands = &self.operands
-            .iter()
-            .fold("".to_string(), |acc, operand| {
-                format!("{}, {}", acc, operand)
-            })[2..];
+        let operands = &self.operands.iter().fold("".to_string(), |acc, operand| {
+            format!("{}, {}", acc, operand)
+        })[2..];
         write!(f, "({:?} {})", self.op, operands)
     }
 }
@@ -287,11 +285,9 @@ pub struct FuncApp {
 }
 impl fmt::Display for FuncApp {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        let operands = &self.operands
-            .iter()
-            .fold("".to_string(), |acc, operand| {
-                format!("{}, {}", acc, operand)
-            })[2..];
+        let operands = &self.operands.iter().fold("".to_string(), |acc, operand| {
+            format!("{}, {}", acc, operand)
+        })[2..];
         write!(f, "{}({})", self.func_name, operands)
     }
 }

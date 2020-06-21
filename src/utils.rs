@@ -59,6 +59,3 @@ pub fn global_var_ptr_name(name: &str) -> String {
 pub fn global_func_addr_name(func_name: &str) -> String {
     format!("global_func_{}", func_name)
 }
-
-
-

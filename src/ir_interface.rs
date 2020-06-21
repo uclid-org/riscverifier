@@ -4,7 +4,7 @@ use std::rc::Rc;
 
 use asts::ast;
 use asts::spec_lang::sl_ast;
-use dwarf_ctx::dwarfreader::{DwarfCtx};
+use dwarf_ctx::dwarfreader::DwarfCtx;
 
 // =====================================================================================================
 /// # IR Interface

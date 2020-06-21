@@ -1,13 +1,10 @@
 use std::fs;
 
-use crate::spec_lang::{
-    sl_ast,
-    sl_lexer,
-};
+use crate::spec_lang::{sl_ast, sl_lexer};
 
 use crate::riscv_spec_lang::FuncSpecsParser;
 
-use crate::utils; 
+use crate::utils;
 
 pub struct SpecParser;
 
@@ -40,9 +37,6 @@ impl SpecParser {
 
     fn parse(&self, input: &str) -> Vec<sl_ast::FuncSpec> {
         let lexer = sl_lexer::Lexer::new(input);
-        FuncSpecsParser::new()
-            .parse(input, lexer)
-            .unwrap()
+        FuncSpecsParser::new().parse(input, lexer).unwrap()
     }
 }
-

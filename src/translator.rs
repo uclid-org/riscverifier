@@ -1,27 +1,22 @@
 use std::{
     boxed::Box,
-    collections::{HashMap, BTreeMap},
     collections::HashSet,
+    collections::{BTreeMap, HashMap},
     marker::PhantomData,
     rc::Rc,
 };
 
 use topological_sort::TopologicalSort;
 
-use asts::{
-    ast::*,
-    spec_lang::sl_ast,
-};
+use asts::{ast::*, spec_lang::sl_ast};
 
-use dwarf_ctx::dwarfreader::{ DwarfCtx, DwarfTypeDefn };
+use dwarf_ctx::dwarfreader::{DwarfCtx, DwarfTypeDefn};
 
 use rv_model::system_model;
 
 use crate::{
-    datastructures::cfg,
+    datastructures::cfg, disassembler::disassembler, disassembler::disassembler::Inst,
     ir_interface::IRInterface,
-    disassembler::disassembler,
-    disassembler::disassembler::Inst,
 };
 
 // ================================================================================
@@ -34,7 +29,6 @@ where
 {
     // ====================================================================
     // Translator inputs
-
     /// Width of register in bits
     xlen: u64,
     /// Verification model
@@ -56,7 +50,6 @@ where
 
     // ====================================================================
     // Translator context
-
     /// Map of function names / labels to entry addresses
     labels_to_addr: HashMap<String, u64>,
     /// Memoize map for generated functions at the given address
@@ -89,7 +82,7 @@ where
         // Initialize the VERI-V model
         let mut model = Model::new(module_name);
         model.add_vars(&system_model::sys_state_vars(xlen));
-        
+
         // Create a translator
         Translator {
             // Inputs
@@ -166,7 +159,9 @@ where
                 id: id.clone(),
                 fields: fields
                     .iter()
-                    .map(|(id, struct_field)| (id.clone(), Box::new(Self::to_ir_type(&struct_field.typ))))
+                    .map(|(id, struct_field)| {
+                        (id.clone(), Box::new(Self::to_ir_type(&struct_field.typ)))
+                    })
                     .collect::<BTreeMap<String, Box<Type>>>(),
                 w: bytes * system_model::BYTE_SIZE,
             },
@@ -259,7 +254,18 @@ where
                 let bb_proc_name = self.bb_proc_name(*addr);
                 let body = self.cfg_node_to_block(bb);
                 let mod_set = self.infer_mod_set(&body);
-                FuncModel::new(&bb_proc_name, *addr, vec![], None, None, None, None, Some(mod_set), body, true)
+                FuncModel::new(
+                    &bb_proc_name,
+                    *addr,
+                    vec![],
+                    None,
+                    None,
+                    None,
+                    None,
+                    Some(mod_set),
+                    body,
+                    true,
+                )
             })
             .collect::<Vec<_>>();
 
