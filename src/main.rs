@@ -10,7 +10,6 @@ extern crate pest;
 extern crate pest_derive;
 
 extern crate asts;
-use asts::spec_lang::sl_parser;
 extern crate rv_model;
 
 extern crate topological_sort;
@@ -24,9 +23,13 @@ use std::{
 
 extern crate dwarf_ctx;
 use dwarf_ctx::{
-    dwarfreader::DwarfReader,
+    dwarfreader::{
+        DwarfReader,
+    },
     dwarf_interfaces::cdwarfinterface::CDwarfInterface,
 };
+
+mod lib;
 
 mod disassembler;
 use disassembler::disassembler::Disassembler;
@@ -157,13 +160,10 @@ fn main() {
         .value_of("function")
         .map_or(vec![], |lst| lst.split(",").collect::<Vec<&str>>());
     // Specification
-    let spec_parser = sl_parser::SpecParser::new(dwarf_reader.ctx());
     let spec_files = matches
         .value_of("spec")
         .map_or(vec![], |lst| lst.split(",").collect::<Vec<&str>>());
-    let specs_map = spec_parser
-        .process_spec_files(&spec_files)
-        .expect("Could not read spec.");
+    let specs_map = lib::process_specs(&spec_files, &dwarf_reader.ctx());
     // Get ignored functions
     let ignored_funcs = matches
         .value_of("ignore-funcs")

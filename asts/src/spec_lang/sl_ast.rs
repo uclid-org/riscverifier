@@ -5,7 +5,7 @@ use dwarf_ctx::dwarfreader::{DwarfTypeDefn, DwarfCtx};
 use crate::utils;
 
 // ==================================================================
-/// AST Types
+/// # AST Types
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum VType {
@@ -165,7 +165,7 @@ impl VType {
 }
 
 // ==================================================================
-/// AST Expressions
+/// # AST Expressions
 
 // Boolean expression
 #[derive(Debug, Clone)]
@@ -308,7 +308,7 @@ pub struct FuncSpec {
 }
 
 // ==================================================================
-/// AST Rewriter
+/// # AST Rewriter
 
 pub trait ASTRewriter<C> {
     // BExpr
@@ -335,11 +335,11 @@ pub trait ASTRewriter<C> {
     // VExpr
     fn rewrite_vexpr(vexpr: &mut VExpr, context: &C) {
         match vexpr {
-            VExpr::Bv { value, typ:_ } => {
-                Self::rewrite_vexpr_bvvalue(value, context);
+            VExpr::Bv { value:_, typ:_ } => {
+                Self::rewrite_vexpr_bvvalue(vexpr, context);
             }
-            VExpr::Int(i, _) => Self::rewrite_vexpr_int(i, context),
-            VExpr::Bool(b, _) => Self::rewrite_vexpr_bool(b, context),
+            VExpr::Int(_, _) => Self::rewrite_vexpr_int(vexpr, context),
+            VExpr::Bool(_, _) => Self::rewrite_vexpr_bool(vexpr, context),
             VExpr::Ident(_, _) => Self::rewrite_vexpr_ident(vexpr, context),
             VExpr::OpApp(vop, exprs, _) => {
                 Self::rewrite_vexpr_valueop(vop, context);
@@ -355,9 +355,9 @@ pub trait ASTRewriter<C> {
             }
         }
     }
-    fn rewrite_vexpr_bvvalue(_value: &mut u64, _context: &C) { }
-    fn rewrite_vexpr_int(_i: &mut i64, _context: &C) {}
-    fn rewrite_vexpr_bool(_b: &mut bool, _context: &C) {}
+    fn rewrite_vexpr_bvvalue(_value: &mut VExpr, _context: &C) { }
+    fn rewrite_vexpr_int(_i: &mut VExpr, _context: &C) {}
+    fn rewrite_vexpr_bool(_b: &mut VExpr, _context: &C) {}
     fn rewrite_vexpr_ident(_vexpr: &mut VExpr, _context: &C) {}
     fn rewrite_vexpr_valueop(_vop: &mut ValueOp, _context: &C) {}
     fn rewrite_vexpr_funcid(_fid: &mut String, _context: &C) {}
