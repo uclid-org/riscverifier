@@ -232,7 +232,14 @@ impl VExpr {
     pub fn get_int_value(&self) -> i64 {
         match self {
             Self::Int(value, _) => *value,
-            _ => panic!("Should be `Self::Bv` expression. Found {:?} instead", self),
+            _ => panic!("Expected `Self::Bv` but found {:?}.", self),
+        }
+    }
+    /// Helper function that returns the identifier name as a string
+    pub fn get_ident_name(&self) -> &str {
+        match self {
+            Self::Ident(name, _) => name,
+            _ => panic!("Expected `Self::Ident` but found {:?}.", self),
         }
     }
     /// Helper function that determines if the VExpr is a global variable

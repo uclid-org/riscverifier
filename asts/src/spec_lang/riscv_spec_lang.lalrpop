@@ -60,7 +60,17 @@ pub BExpr: ast::BExpr = {
 }
 
 pub BExpr2: ast::BExpr = {
-    <op:PrefixBoolOp> <e:BExpr2> => ast::BExpr::BOpApp(op, vec![e]),
+    <op:PrefixBoolOp> <e:BExpr2> => {
+        let ret = ast::BExpr::BOpApp(op.clone(), vec![e]);
+        // Remove the bound variables from the map
+        // to avoid conflicts with other functions
+        match op {
+            ast::BoolOp::Forall(v, t) => typ_map.remove(&v.get_ident_name()[..]),
+            ast::BoolOp::Exists(v, t) => typ_map.remove(&v.get_ident_name()[..]),
+            _ => None,
+        };
+        ret
+    },
     BTerm,
 }
 
