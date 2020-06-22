@@ -1,5 +1,4 @@
 use std::collections::HashSet;
-use std::fs;
 use std::rc::Rc;
 
 use asts::ast::*;
@@ -9,7 +8,7 @@ use dwarf_ctx::dwarfreader::{DwarfCtx, DwarfTypeDefn, DwarfVar};
 use crate::ir_interface::{IRInterface, SpecLangASTInterface};
 use crate::utils;
 
-use rv_model::system_model::BYTE_SIZE;
+use rv_model::{system_model, system_model::BYTE_SIZE};
 
 // ========================================================================================================================
 /// # Uclid Interface
@@ -33,10 +32,52 @@ impl Uclid5Interface {
             .join("\n");
         format!("// RISC-V system state variables\n{}", defns)
     }
+
     /// Reads the model for the RISC-V instructions (provided by utils::PRELUDE_PATH) and returns it as a string
-    fn prelude() -> String {
-        fs::read_to_string(utils::PRELUDE_PATH).expect("Unable to read prelude.")
+    fn prelude(xlen: &u64) -> String {
+        // Create aliases for dereferencing 1, 2, 4, and 8 byte values
+        // load byte
+        let load_byte_str = Self::expr_to_string(
+            &system_model::load_byte(Expr::var("addr", system_model::bv_type(*xlen)), *xlen),
+            xlen,
+        );
+        let deref_1_alias = format!(
+            "    define deref_1(mem: [bv{}]bv8, addr: bv{}): bv8 = {};",
+            xlen, xlen, load_byte_str
+        );
+        // load half
+        let load_half_str = Self::expr_to_string(
+            &system_model::load_half(Expr::var("addr", system_model::bv_type(*xlen)), *xlen),
+            xlen,
+        );
+        let deref_2_alias = format!(
+            "    define deref_2(mem: [bv{}]bv8, addr: bv{}): bv16 = {};",
+            xlen, xlen, load_half_str
+        );
+        // load word
+        let load_word_str = Self::expr_to_string(
+            &system_model::load_word(Expr::var("addr", system_model::bv_type(*xlen)), *xlen),
+            xlen,
+        );
+        let deref_4_alias = format!(
+            "    define deref_4(mem: [bv{}]bv8, addr: bv{}): bv32 = {};",
+            xlen, xlen, load_word_str
+        );
+        // load double
+        let load_double_str = Self::expr_to_string(
+            &system_model::load_double(Expr::var("addr", system_model::bv_type(*xlen)), *xlen),
+            xlen,
+        );
+        let deref_8_alias = format!(
+            "    define deref_8(mem: [bv{}]bv8, addr: bv{}): bv64 = {};",
+            xlen, xlen, load_double_str
+        );
+        format!(
+            "{}\n{}\n{}\n{}\n",
+            deref_1_alias, deref_2_alias, deref_4_alias, deref_8_alias
+        )
     }
+
     /// Generate a define macro string for each type of array variable
     /// that is a global variable or function argument
     ///
@@ -61,6 +102,7 @@ impl Uclid5Interface {
         defns.dedup();
         utils::indent_text(format!("// Array helpers\n{}", defns.join("\n")), 4)
     }
+
     /// Recursively generate define macros for a given type (size in bytes).
     /// The macro is a function that takes a base address and index
     /// and returns 'base + index * typ_defn.bytes'.
@@ -127,10 +169,12 @@ impl Uclid5Interface {
         };
         defns
     }
+
     /// Returns the name of the array index macro given the byte size
     fn array_index_macro_name(bytes: &u64) -> String {
         format!("index_by_{}", bytes)
     }
+
     /// Creates an expression that represents 'num_const * expr'
     /// TODO: Does SMT support precise multiplication? Maybe we can take this out
     fn multiply_expr(num_const: &u64, expr: &str, xlen: &u64) -> String {
@@ -160,6 +204,7 @@ impl Uclid5Interface {
         // SLOWER:
         // format!("{} * {}bv{}", expr, num_const, xlen)
     }
+
     /// Return a string of get field macros for all the type definitions in the global variables
     /// and formal arguments of functions.
     ///  
@@ -183,6 +228,7 @@ impl Uclid5Interface {
         defns.dedup();
         utils::indent_text(format!("// Struct helpers\n{}", defns.join("\n")), 4)
     }
+
     /// Recursively generate string representations of get field macros for type definition 'typ'.
     ///
     /// # Example
@@ -224,10 +270,12 @@ impl Uclid5Interface {
         }
         defns
     }
+
     /// Given the `struct_id` and `field_name`, return the get field macro name.
     fn get_field_macro_name(struct_id: &str, field_name: &String) -> String {
         format!("{}_{}", struct_id, field_name)
     }
+
     /// Given the dwarf_ctx, returns a string of global variable definitions.
     fn gen_global_defns(dwarf_ctx: &DwarfCtx, xlen: &u64) -> String {
         let mut defns = String::from("// Global variables\n");
@@ -236,6 +284,7 @@ impl Uclid5Interface {
         }
         utils::indent_text(defns, 4)
     }
+
     /// Given a global variable, returns a string of a macro that refers to the static
     /// memory location of the variable.
     fn gen_global_defn(global_var: &DwarfVar, xlen: &u64) -> String {
@@ -246,6 +295,7 @@ impl Uclid5Interface {
             format!("{}bv{}", global_var.memory_addr, xlen)
         )
     }
+
     /// Returns a string of macros to refer to a static function's entry address.
     fn gen_global_func_defns(model: &Model, xlen: &u64) -> String {
         let mut defns = String::from("// Global function entry addresses\n");
@@ -258,6 +308,7 @@ impl Uclid5Interface {
         }
         utils::indent_text(defns, 4)
     }
+
     /// Returns a define macro that returns the `func_entry_addr`
     fn gen_global_func_defn(func_name: &str, func_entry_addr: u64, xlen: &u64) -> String {
         format!(
@@ -297,6 +348,7 @@ impl Uclid5Interface {
             .join("\n\n");
         utils::indent_text(procs_string, 4)
     }
+
     /// Returns the control block for the UCLID5 model.
     /// This currently will automatically verify all functions with
     /// a specification.
@@ -365,6 +417,7 @@ impl IRInterface for Uclid5Interface {
             Literal::Int { val } => format!("{}", val),
         }
     }
+
     fn typ_to_string(typ: &Type) -> String {
         match typ {
             Type::Unknown => panic!("Type is unknown!"),
@@ -387,6 +440,7 @@ impl IRInterface for Uclid5Interface {
             } => panic!("Should not need to print struct types in this model."),
         }
     }
+
     fn comp_app_to_string(compop: &CompOp, exprs: &Vec<Expr>, xlen: &u64) -> String {
         assert!(
             exprs.len() == 2,
@@ -409,6 +463,7 @@ impl IRInterface for Uclid5Interface {
             CompOp::Geu => format!("({} >=_u {})", expr_strs[0], expr_strs[1]),
         }
     }
+
     fn bv_app_to_string(bvop: &BVOp, exprs: &Vec<Expr>, xlen: &u64) -> String {
         let e1 = Self::expr_to_string(&exprs[0], xlen);
         let e2 = if exprs.len() > 1 {
@@ -438,6 +493,7 @@ impl IRInterface for Uclid5Interface {
             BVOp::Slice { l, r } => format!("{}[{}:{}]", e1, l, r),
         }
     }
+
     fn bool_app_to_string(bop: &BoolOp, exprs: &Vec<Expr>, xlen: &u64) -> String {
         let e1_str = Self::expr_to_string(&exprs[0], xlen);
         let e2_str = if exprs.len() > 1 {
@@ -453,6 +509,7 @@ impl IRInterface for Uclid5Interface {
             BoolOp::Neg => format!("!{}", e1_str),
         }
     }
+
     fn fapp_to_string(fapp: &FuncApp, xlen: &u64) -> String {
         format!(
             "{}({})",
@@ -464,14 +521,17 @@ impl IRInterface for Uclid5Interface {
                 .join(", ")
         )
     }
+
     fn var_to_string(var: &Var) -> String {
         format!("{}", var.name)
     }
+
     fn array_index_to_string(arr: &Expr, index: &Expr, xlen: &u64) -> String {
         let arr_str = Self::expr_to_string(arr, xlen);
         let index_str = Self::expr_to_string(index, xlen);
         format!("{}[{}]", arr_str, index_str)
     }
+
     fn get_field_to_string(struct_: &Expr, field: &String, xlen: &u64) -> String {
         let struct_str = Self::expr_to_string(struct_, xlen);
         format!("{}.{}", struct_str, field)
@@ -488,18 +548,23 @@ impl IRInterface for Uclid5Interface {
             Stmt::Comment(comment) => Self::comment_to_string(&comment),
         }
     }
+
     fn skip_to_string() -> String {
         format!("")
     }
+
     fn assert_to_string(expr: &Expr, xlen: &u64) -> String {
         format!("assert ({});", Self::expr_to_string(expr, xlen))
     }
+
     fn assume_to_string(expr: &Expr, xlen: &u64) -> String {
         format!("assume ({});", Self::expr_to_string(expr, xlen))
     }
+
     fn havoc_to_string(var: &Rc<Var>) -> String {
         format!("havoc {};", Self::var_to_string(&*var))
     }
+
     fn func_call_to_string(func_call: &FuncCall, xlen: &u64) -> String {
         let lhs = func_call
             .lhs
@@ -527,6 +592,7 @@ impl IRInterface for Uclid5Interface {
             args
         )
     }
+
     fn assign_to_string(assign: &Assign, xlen: &u64) -> String {
         let lhs = assign
             .lhs
@@ -542,6 +608,7 @@ impl IRInterface for Uclid5Interface {
             .join(", ");
         format!("{} = {};", lhs, rhs)
     }
+
     fn ite_to_string(ite: &IfThenElse, xlen: &u64) -> String {
         let cond = Self::expr_to_string(&ite.cond, xlen);
         let thn = utils::indent_text(Self::stmt_to_string(&*ite.then_stmt, xlen), 4);
@@ -555,6 +622,7 @@ impl IRInterface for Uclid5Interface {
         };
         format!("if ({}) {{\n{}\n}}{}", cond, thn, els)
     }
+
     fn block_to_string(blk: &Vec<Box<Stmt>>, xlen: &u64) -> String {
         let inner = blk
             .iter()
@@ -564,9 +632,11 @@ impl IRInterface for Uclid5Interface {
         let inner = utils::indent_text(inner, 4);
         format!("{{\n{}\n}}", inner)
     }
+
     fn comment_to_string(string: &String) -> String {
         format!("// {}\n", string)
     }
+
     fn func_model_to_string(fm: &FuncModel, dwarf_ctx: &DwarfCtx, xlen: &u64) -> String {
         let args = fm
             .sig
@@ -642,7 +712,7 @@ impl IRInterface for Uclid5Interface {
         verify_funcs: &Vec<&str>,
     ) -> String {
         // prelude
-        let prelude = Self::prelude();
+        let prelude = Self::prelude(xlen);
         // variables
         let var_defns = utils::indent_text(Self::gen_var_defns(model), 4);
         // definitions
@@ -676,6 +746,7 @@ impl SpecLangASTInterface for Uclid5Interface {
             false => "false".to_string(),
         }
     }
+
     fn bexpr_bopapp_to_string(bop: &sl_ast::BoolOp, exprs: &Vec<sl_ast::BExpr>) -> String {
         let bop_str = Self::bopp_to_string(bop);
         let mut exprs_iter = exprs.iter();
@@ -694,6 +765,7 @@ impl SpecLangASTInterface for Uclid5Interface {
         }
         ret
     }
+
     fn bexpr_copapp_to_string(cop: &sl_ast::CompOp, exprs: &Vec<sl_ast::VExpr>) -> String {
         assert!(
             exprs.len() == 2,
@@ -704,6 +776,7 @@ impl SpecLangASTInterface for Uclid5Interface {
         let expr_str2 = Self::vexpr_to_string(&exprs[1]);
         format!("({} {} {})", expr_str1, cop_str, expr_str2)
     }
+
     fn bopp_to_string(bop: &sl_ast::BoolOp) -> String {
         match bop {
             sl_ast::BoolOp::Conj => "&&".to_string(),
@@ -722,6 +795,7 @@ impl SpecLangASTInterface for Uclid5Interface {
             }
         }
     }
+
     fn cop_to_string(cop: &sl_ast::CompOp) -> String {
         match cop {
             sl_ast::CompOp::Equal => "==".to_string(),
@@ -736,6 +810,7 @@ impl SpecLangASTInterface for Uclid5Interface {
             sl_ast::CompOp::Leu => "<=_u".to_string(),
         }
     }
+
     /// VExpr translation functions
     fn vexpr_bv_to_string(value: &u64, typ: &sl_ast::VType) -> String {
         match typ {
@@ -743,18 +818,22 @@ impl SpecLangASTInterface for Uclid5Interface {
             _ => panic!("Should be bv typed."),
         }
     }
+
     fn vexpr_int_to_string(i: &i64) -> String {
         format!("{}", i)
     }
+
     fn vexpr_bool_to_string(b: &bool) -> String {
         match b {
             true => "true".to_string(),
             false => "false".to_string(),
         }
     }
+
     fn vexpr_ident_to_string(v: &String) -> String {
         v.clone()
     }
+
     fn vexpr_opapp_to_string(op: &sl_ast::ValueOp, exprs: &Vec<sl_ast::VExpr>) -> String {
         match op {
             sl_ast::ValueOp::Add
@@ -822,7 +901,10 @@ impl SpecLangASTInterface for Uclid5Interface {
             sl_ast::ValueOp::Deref => {
                 let expr_str = Self::vexpr_to_string(&exprs[0]);
                 let bytes = exprs[0].typ().get_bv_width() as u64 / BYTE_SIZE;
-                format!("deref_{}(mem, {})", bytes, expr_str)
+                match bytes {
+                    1 | 2 | 4 | 8 => format!("deref_{}(mem, {})", bytes, expr_str),
+                    _ => panic!("VERI-V does not support dereferencing values that are not 1, 2, 4, or 8 bytes."),
+                }
             }
             sl_ast::ValueOp::Concat => {
                 let expr_str0 = Self::vexpr_to_string(&exprs[0]);
@@ -835,6 +917,7 @@ impl SpecLangASTInterface for Uclid5Interface {
             }
         }
     }
+
     fn vexpr_funcapp_to_string(fname: &String, args: &Vec<sl_ast::VExpr>) -> String {
         let args_str = args
             .iter()
@@ -848,6 +931,7 @@ impl SpecLangASTInterface for Uclid5Interface {
         };
         format!("{}({})", fname, args_str)
     }
+
     fn valueop_to_string(op: &sl_ast::ValueOp) -> String {
         match op {
             sl_ast::ValueOp::Add => String::from("+"),
@@ -862,6 +946,7 @@ impl SpecLangASTInterface for Uclid5Interface {
             _ => panic!("Unimplemented value op {:#?}.", op),
         }
     }
+
     /// Value Type to string
     fn vtype_to_string(typ: &sl_ast::VType) -> String {
         match typ {
@@ -869,6 +954,7 @@ impl SpecLangASTInterface for Uclid5Interface {
             _ => panic!("Unimplemented type to string translation for {:#?}.", typ),
         }
     }
+
     /// Spec statement to string
     fn spec_to_string(_spec: &sl_ast::Spec) -> String {
         panic!("Unimplemented.")

@@ -132,6 +132,37 @@ pub fn unimplemented_inst(op: &str, xlen: u64) -> Stmt {
     Stmt::Block(stmts.iter().map(|x| Box::new(x.clone())).collect())
 }
 
+/// A helper to add nbv64 to the given expression
+pub fn add_const(expr: Expr, n: u64, xlen: u64) -> Expr {
+    Expr::op_app(Op::Bv(BVOp::Add), vec![expr, Expr::bv_lit(n, xlen)])
+} 
+
+/// An expression that returns a byte at the address `addr`
+pub fn load_byte(addr: Expr, xlen: u64) -> Expr {
+    Expr::op_app(Op::ArrayIndex, vec![mem_expr(xlen), addr])
+}
+
+/// An expression that returns a half at the address `addr`
+pub fn load_half(addr: Expr, xlen: u64) -> Expr {
+    let byte_0 = load_byte(addr.clone(), xlen);
+    let byte_1 = load_byte(add_const(addr, 1, xlen), xlen);
+    Expr::op_app(Op::Bv(BVOp::Concat), vec![byte_1, byte_0])
+}
+
+/// An expression that returns a word at the address `addr`
+pub fn load_word(addr: Expr, xlen: u64) -> Expr {
+    let half_0 = load_half(addr.clone(), xlen);
+    let half_1 = load_half(add_const(addr, 2, xlen), xlen);
+    Expr::op_app(Op::Bv(BVOp::Concat), vec![half_1, half_0])
+}
+
+/// An expression that returns a double at the address `addr`
+pub fn load_double(addr: Expr, xlen: u64) -> Expr {
+    let word_0 = load_word(addr.clone(), xlen);
+    let word_1 = load_word(add_const(addr, 4, xlen), xlen);
+    Expr::op_app(Op::Bv(BVOp::Concat), vec![word_1, word_0])
+}
+
 // ========================================================================
 /// ## RISC-V Instructions
 
@@ -466,17 +497,11 @@ pub fn jalr_inst(rd: Expr, rs1: Expr, imm: Expr, xlen: u64) -> Stmt {
 pub fn lb_inst(rd: Expr, rs1: Expr, imm: Expr, xlen: u64) -> Stmt {
     let mut stmts = vec![];
     stmts.push(Stmt::Comment(format!("lb {}, {}, {}", rd, rs1, imm)));
+    let addr = Expr::op_app(Op::Bv(BVOp::Add), vec![rs1, imm]);
     let ret = Expr::op_app(
         Op::Bv(BVOp::SignExt),
         vec![
-            Expr::func_app(
-                "loadByte_macro".to_string(),
-                vec![
-                    mem_expr(xlen),
-                    Expr::op_app(Op::Bv(BVOp::Add), vec![rs1, imm]),
-                ],
-                bv_type(xlen),
-            ),
+            load_byte(addr, xlen),
             Expr::int_lit(56),
         ],
     );
@@ -489,17 +514,11 @@ pub fn lb_inst(rd: Expr, rs1: Expr, imm: Expr, xlen: u64) -> Stmt {
 pub fn lh_inst(rd: Expr, rs1: Expr, imm: Expr, xlen: u64) -> Stmt {
     let mut stmts = vec![];
     stmts.push(Stmt::Comment(format!("lh {}, {}, {}", rd, rs1, imm)));
+    let addr = Expr::op_app(Op::Bv(BVOp::Add), vec![rs1, imm]);
     let ret = Expr::op_app(
         Op::Bv(BVOp::SignExt),
         vec![
-            Expr::func_app(
-                "loadHalf_macro".to_string(),
-                vec![
-                    mem_expr(xlen),
-                    Expr::op_app(Op::Bv(BVOp::Add), vec![rs1, imm]),
-                ],
-                bv_type(xlen),
-            ),
+            load_half(addr, xlen),
             Expr::int_lit(48),
         ],
     );
@@ -512,17 +531,11 @@ pub fn lh_inst(rd: Expr, rs1: Expr, imm: Expr, xlen: u64) -> Stmt {
 pub fn lw_inst(rd: Expr, rs1: Expr, imm: Expr, xlen: u64) -> Stmt {
     let mut stmts = vec![];
     stmts.push(Stmt::Comment(format!("lw {}, {}, {}", rd, rs1, imm)));
+    let addr = Expr::op_app(Op::Bv(BVOp::Add), vec![rs1, imm]);
     let ret = Expr::op_app(
         Op::Bv(BVOp::SignExt),
         vec![
-            Expr::func_app(
-                "loadWord_macro".to_string(),
-                vec![
-                    mem_expr(xlen),
-                    Expr::op_app(Op::Bv(BVOp::Add), vec![rs1, imm]),
-                ],
-                bv_type(xlen),
-            ),
+            load_word(addr, xlen),
             Expr::int_lit(32),
         ],
     );
@@ -536,17 +549,11 @@ pub fn lw_inst(rd: Expr, rs1: Expr, imm: Expr, xlen: u64) -> Stmt {
 pub fn lbu_inst(rd: Expr, rs1: Expr, imm: Expr, xlen: u64) -> Stmt {
     let mut stmts = vec![];
     stmts.push(Stmt::Comment(format!("lbu {}, {}, {}", rd, rs1, imm)));
+    let addr = Expr::op_app(Op::Bv(BVOp::Add), vec![rs1, imm]);
     let ret = Expr::op_app(
         Op::Bv(BVOp::ZeroExt),
         vec![
-            Expr::func_app(
-                "loadByte_macro".to_string(),
-                vec![
-                    mem_expr(xlen),
-                    Expr::op_app(Op::Bv(BVOp::Add), vec![rs1, imm]),
-                ],
-                bv_type(xlen),
-            ),
+            load_byte(addr, xlen),
             Expr::int_lit(56),
         ],
     );
@@ -560,17 +567,11 @@ pub fn lbu_inst(rd: Expr, rs1: Expr, imm: Expr, xlen: u64) -> Stmt {
 pub fn lhu_inst(rd: Expr, rs1: Expr, imm: Expr, xlen: u64) -> Stmt {
     let mut stmts = vec![];
     stmts.push(Stmt::Comment(format!("lhu {}, {}, {}", rd, rs1, imm)));
+    let addr = Expr::op_app(Op::Bv(BVOp::Add), vec![rs1, imm]);
     let ret = Expr::op_app(
         Op::Bv(BVOp::ZeroExt),
         vec![
-            Expr::func_app(
-                "loadHalf_macro".to_string(),
-                vec![
-                    mem_expr(xlen),
-                    Expr::op_app(Op::Bv(BVOp::Add), vec![rs1, imm]),
-                ],
-                bv_type(xlen),
-            ),
+            load_half(addr, xlen),
             Expr::int_lit(48),
         ],
     );
@@ -739,17 +740,11 @@ pub fn srai_inst(rd: Expr, rs1: Expr, imm: Expr, xlen: u64) -> Stmt {
 pub fn lwu_inst(rd: Expr, rs1: Expr, imm: Expr, xlen: u64) -> Stmt {
     let mut stmts = vec![];
     stmts.push(Stmt::Comment(format!("lwu {}, {}, {}", rd, rs1, imm)));
+    let addr = Expr::op_app(Op::Bv(BVOp::Add), vec![rs1, imm]);
     let ret = Expr::op_app(
         Op::Bv(BVOp::ZeroExt),
         vec![
-            Expr::func_app(
-                "loadWord_macro".to_string(),
-                vec![
-                    mem_expr(xlen),
-                    Expr::op_app(Op::Bv(BVOp::Add), vec![rs1, imm]),
-                ],
-                bv_type(xlen),
-            ),
+            load_word(addr, xlen),
             Expr::int_lit(32),
         ],
     );
@@ -762,14 +757,8 @@ pub fn lwu_inst(rd: Expr, rs1: Expr, imm: Expr, xlen: u64) -> Stmt {
 pub fn ld_inst(rd: Expr, rs1: Expr, imm: Expr, xlen: u64) -> Stmt {
     let mut stmts = vec![];
     stmts.push(Stmt::Comment(format!("ld {}, {}, {}", rd, rs1, imm)));
-    let ret = Expr::func_app(
-        "loadDouble_macro".to_string(),
-        vec![
-            mem_expr(xlen),
-            Expr::op_app(Op::Bv(BVOp::Add), vec![rs1, imm]),
-        ],
-        bv_type(xlen),
-    );
+    let addr = Expr::op_app(Op::Bv(BVOp::Add), vec![rs1, imm]);
+    let ret = load_double(addr, xlen);
     stmts.push(Stmt::assign(vec![rd], vec![ret]));
     stmts.push(update_pc(xlen));
     Stmt::Block(stmts.iter().map(|x| Box::new(x.clone())).collect())

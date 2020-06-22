@@ -343,14 +343,12 @@ where
         let tracked = self.tracked_from_spec_map(func_name);
         // Create the procedure body
         let body = self.cfg_to_symbolic_blk(&func_entry, &func_cfg);
-        // let ret = self.func_ret_type(func_name);
-        let ret = None;
         // Add the function to the verification model
         self.model.add_func_model(FuncModel::new(
             func_name,
             func_entry,
             arg_exprs,
-            ret,
+            None,
             requires,
             ensures,
             tracked,
@@ -365,7 +363,6 @@ where
         let mut mod_set = HashSet::new();
         mod_set.insert(system_model::PC_VAR.to_string());
         mod_set.insert(system_model::RETURNED_FLAG.to_string());
-        mod_set.insert(system_model::MEM_VAR.to_string());
         match stmt {
             Stmt::FuncCall(fc) => {
                 // Add modifies set if it's a function call
@@ -976,7 +973,6 @@ where
                 Some(
                     fs.args
                         .iter()
-                        // .map(|x| Expr::var(&x.name[..], self.dwarf_typ_to_ir(&x.typ_defn)))
                         .map(|x| Expr::var(&x.name[..], Self::to_ir_type(&x.typ_defn)))
                         .collect::<Vec<Expr>>(),
                 )

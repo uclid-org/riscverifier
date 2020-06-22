@@ -254,6 +254,7 @@ pub fn process_specs(
     ret
 }
 
+/// Iterates over all spec AST passes
 fn sl_bexpr_rewrite_passes(bexpr: &mut sl_ast::BExpr, dwarf_ctx: &DwarfCtx, fname: &str) {
     // Type inference pass. Before the initial pass, we expect the specficiation
     // AST to have Unknown types for all VExpr.

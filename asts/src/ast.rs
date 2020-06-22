@@ -5,7 +5,10 @@ use std::fmt;
 use crate::spec_lang::sl_ast;
 
 // =======================================================
-/// AST Types
+/// # VERI-V IR AST
+
+// =======================================================
+/// ## AST Types
 
 #[derive(PartialEq, Eq, Hash, Clone)]
 pub enum Type {
@@ -80,7 +83,7 @@ impl fmt::Display for Type {
 }
 
 // =======================================================
-/// AST Expressions
+/// ## AST Expressions
 
 #[derive(PartialEq, Eq, Hash, Clone)]
 pub enum Expr {
@@ -293,7 +296,7 @@ impl fmt::Display for FuncApp {
 }
 
 // =======================================================
-/// AST Statements
+/// ## AST Statements
 
 #[derive(Clone)]
 pub enum Stmt {
@@ -358,7 +361,7 @@ pub struct IfThenElse {
 }
 
 // =======================================================
-/// (Software) Procedure Model
+/// ## (Software) Procedure Model
 
 #[derive(Clone)]
 pub struct FuncModel {
@@ -438,7 +441,7 @@ impl FuncSig {
 }
 
 // =======================================================
-/// Verification Model
+/// ## Verification Model
 
 #[derive(Clone)]
 pub struct Model {
