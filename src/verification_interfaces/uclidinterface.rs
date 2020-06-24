@@ -1,7 +1,7 @@
 use std::collections::HashSet;
 use std::rc::Rc;
 
-use asts::ast::*;
+use asts::veriv_ast::*;
 use asts::spec_lang::sl_ast;
 use dwarf_ctx::dwarfreader::{DwarfCtx, DwarfTypeDefn, DwarfVar};
 
@@ -27,7 +27,7 @@ impl Uclid5Interface {
         sorted.sort();
         let defns = sorted
             .iter()
-            .map(|v| format!("var {};", Self::var_decl(v)))
+            .map(|v| format!("var {};", Self::var_decl(&v.name, &v.typ)))
             .collect::<Vec<String>>()
             .join("\n");
         format!("// RISC-V system state variables\n{}", defns)
@@ -399,11 +399,11 @@ impl Uclid5Interface {
     ///
     /// Var = { name: "x".to_string(), typ: Type::Bv { bytes: 64 } } will return:
     /// `x: bv64`
-    fn var_decl(var: &Var) -> String {
+    fn var_decl(var_name: &str, typ: &Type) -> String {
         format!(
             "{}: {}",
-            Self::var_to_string(var),
-            Self::typ_to_string(&var.typ)
+            var_name,
+            Self::typ_to_string(&typ)
         )
     }
 }
@@ -642,7 +642,7 @@ impl IRInterface for Uclid5Interface {
             .sig
             .arg_decls
             .iter()
-            .map(|var| Self::var_decl(&var.get_expect_var()))
+            .map(|arg_expr| Self::var_decl(&arg_expr.get_var_name(), arg_expr.typ()))
             .collect::<Vec<_>>()
             .join(", ");
         let ret = if let Some(rd) = &fm.sig.ret_decl {
@@ -675,7 +675,7 @@ impl IRInterface for Uclid5Interface {
             .iter()
             .enumerate()
             .map(|(i, var)| {
-                let var_name = &var.get_expect_var().name;
+                let var_name = &var.get_var_name();
                 format!("requires {} == a{};", var_name, i)
             })
             .collect::<Vec<String>>()

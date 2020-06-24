@@ -1,6 +1,10 @@
-use std::cmp::Ordering;
-use std::collections::{BTreeMap, HashSet};
-use std::fmt;
+use std::{
+    cmp::Ordering,
+    collections::{BTreeMap, HashSet},
+    fmt,
+    cell::RefCell,
+    hash::{Hash, Hasher},
+};
 
 use crate::spec_lang::sl_ast;
 
@@ -85,13 +89,37 @@ impl fmt::Display for Type {
 // =======================================================
 /// ## AST Expressions
 
-#[derive(PartialEq, Eq, Hash, Clone)]
+#[derive(PartialEq, Eq, Clone)]
 pub enum Expr {
-    Literal(Literal, Type),
-    Var(Var, Type),
-    OpApp(OpApp, Type),
-    FuncApp(FuncApp, Type),
+    Literal(RefCell<Literal>, Type),
+    Var(RefCell<Var>, Type),
+    OpApp(RefCell<OpApp>, Type),
+    FuncApp(RefCell<FuncApp>, Type),
 }
+
+impl std::hash::Hash for Expr {
+    fn hash<H: Hasher>(&self, state: &mut H) {
+        match self {
+            Self::Literal(c, t) => {
+                c.borrow().hash(state);
+                t.hash(state);
+            }
+            | Self::Var(c, t) => {
+                c.borrow().hash(state);
+                t.hash(state);
+            }
+            | Self::OpApp(c, t) => {
+                c.borrow().hash(state);
+                t.hash(state);                
+            }
+            | Self::FuncApp(c, t) => {
+                c.borrow().hash(state);
+                t.hash(state);
+            }
+        }
+    }
+}
+
 impl Expr {
     /// Returns the type of the expression.
     pub fn typ(&self) -> &Type {
@@ -100,10 +128,10 @@ impl Expr {
         }
     }
 
-    /// Returns the variable or panics.
-    pub fn get_expect_var(&self) -> &Var {
+    /// Returns the variable name or panics if it's not a variable.
+    pub fn get_var_name(&self) -> String {
         match self {
-            Expr::Var(v, _) => v,
+            Expr::Var(v, _) => v.borrow().name.clone(),
             _ => panic!("Not a variable/constant: {}.", self),
         }
     }
@@ -119,26 +147,26 @@ impl Expr {
 
     /// Returns a bitvector literal of value `val` and width `width`.
     pub fn bv_lit(val: u64, width: u64) -> Self {
-        Expr::Literal(Literal::Bv { val, width }, Type::Bv { w: width })
+        Expr::Literal(RefCell::new(Literal::Bv { val, width }), Type::Bv { w: width })
     }
 
     /// Returns a integer literal of value `val`.
     pub fn int_lit(val: u64) -> Self {
-        Expr::Literal(Literal::Int { val }, Type::Int)
+        Expr::Literal(RefCell::new(Literal::Int { val }), Type::Int)
     }
 
     /// Returns a boolean literal of value `val`.
     pub fn bool_lit(val: bool) -> Self {
-        Expr::Literal(Literal::Bool { val }, Type::Bool)
+        Expr::Literal(RefCell::new(Literal::Bool { val }), Type::Bool)
     }
 
     /// Creates a variable named `name` of type `typ`.
     pub fn var(name: &str, typ: Type) -> Self {
         Expr::Var(
-            Var {
+            RefCell::new(Var {
                 name: name.to_string(),
                 typ: typ.clone(),
-            },
+            }),
             typ.clone(),
         )
     }
@@ -164,16 +192,16 @@ impl Expr {
                 _ => panic!("Can only get field from struct type."),
             },
         };
-        Expr::OpApp(OpApp { op, operands }, typ)
+        Expr::OpApp(RefCell::new(OpApp { op, operands }), typ)
     }
 
     /// Creates a function application expression.
     pub fn func_app(func_name: String, operands: Vec<Self>, typ: Type) -> Self {
         Expr::FuncApp(
-            FuncApp {
+            RefCell::new(FuncApp {
                 func_name,
                 operands,
-            },
+            }),
             typ,
         )
     }
@@ -181,10 +209,10 @@ impl Expr {
 impl fmt::Display for Expr {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            Expr::Literal(l, _) => write!(f, "{}", l),
-            Expr::Var(v, _) => write!(f, "{}", v),
-            Expr::OpApp(op, _) => write!(f, "{}", op),
-            Expr::FuncApp(fapp, _) => write!(f, "{}", fapp),
+            Expr::Literal(l, _) => write!(f, "{}", l.borrow()),
+            Expr::Var(v, _) => write!(f, "{}", v.borrow()),
+            Expr::OpApp(op, _) => write!(f, "{}", op.borrow()),
+            Expr::FuncApp(fapp, _) => write!(f, "{}", fapp.borrow()),
         }
     }
 }

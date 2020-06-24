@@ -3,7 +3,7 @@ use std::{
     collections::{HashMap, HashSet},
 };
 
-use crate::ast;
+use crate::veriv_ast as ast;
 
 // ==================================================================
 /// # AST Types

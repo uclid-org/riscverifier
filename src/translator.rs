@@ -4,11 +4,15 @@ use std::{
     collections::{BTreeMap, HashMap},
     marker::PhantomData,
     rc::Rc,
+    cell::RefCell,
 };
 
 use topological_sort::TopologicalSort;
 
-use asts::{ast::*, spec_lang::sl_ast};
+use asts::{
+    veriv_ast::*,
+    spec_lang::sl_ast
+};
 
 use dwarf_ctx::dwarfreader::{DwarfCtx, DwarfTypeDefn};
 
@@ -183,8 +187,8 @@ where
             .func_args(func_name)
             .iter()
             .map(|expr| {
-                let var = expr.get_expect_var();
-                Expr::var(&var.name, system_model::bv_type(self.xlen))
+                let var_name = expr.get_var_name();
+                Expr::var(&var_name, system_model::bv_type(self.xlen))
             })
             .collect();
         let mod_set = self.mod_set_from_spec_map(func_name);
@@ -325,8 +329,8 @@ where
             .func_args(func_name)
             .iter()
             .map(|expr| {
-                let var = expr.get_expect_var();
-                Expr::var(&var.name, system_model::bv_type(self.xlen))
+                let var_name = expr.get_var_name();
+                Expr::var(&var_name, system_model::bv_type(self.xlen))
             })
             .collect();
         // Translate the specifications
@@ -373,7 +377,7 @@ where
                 let lhs = fc
                     .lhs
                     .iter()
-                    .map(|v| v.get_expect_var().name.to_string())
+                    .map(|v| v.get_var_name())
                     .collect::<HashSet<_>>();
                 mod_set = mod_set.union(&lhs).cloned().collect();
             }
@@ -383,7 +387,7 @@ where
                     .iter()
                     .map(|e| match e {
                         // Either the LHS is a register, returned, pc, etc
-                        Expr::Var(v, _) => v.name.clone(),
+                        Expr::Var(v, _) => v.borrow().name.clone(),
                         // Or memory (for stores)
                         _ => system_model::MEM_VAR.to_string(),
                     })
@@ -461,8 +465,7 @@ where
                         .iter()
                         .enumerate()
                         .map(|(i, arg_expr)| {
-                            let arg_var = arg_expr.get_expect_var();
-                            Expr::var(&format!("a{}", i), arg_var.typ.clone())
+                            Expr::var(&format!("a{}", i), arg_expr.typ().clone())
                         })
                         .collect::<Vec<_>>();
                     // TODO(kkmc): Ignore the return value. The current implementation does not
@@ -505,7 +508,7 @@ where
             Op::Comp(CompOp::Equality),
             vec![
                 Expr::Var(
-                    system_model::pc_var(self.xlen),
+                    RefCell::new(system_model::pc_var(self.xlen)),
                     system_model::bv_type(self.xlen),
                 ),
                 Expr::bv_lit(*entry, self.xlen),

@@ -1,5 +1,5 @@
 use std::collections::HashSet;
-use asts::ast::*;
+use asts::veriv_ast::*;
 
 // ========================================================================
 /// # Constants
