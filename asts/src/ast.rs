@@ -93,17 +93,22 @@ pub enum Expr {
     FuncApp(FuncApp, Type),
 }
 impl Expr {
+    /// Returns the type of the expression.
     pub fn typ(&self) -> &Type {
         match self {
             Expr::Literal(_, t) | Expr::Var(_, t) | Expr::OpApp(_, t) | Expr::FuncApp(_, t) => &t,
         }
     }
+
+    /// Returns the variable or panics.
     pub fn get_expect_var(&self) -> &Var {
         match self {
             Expr::Var(v, _) => v,
             _ => panic!("Not a variable/constant: {}.", self),
         }
     }
+
+    /// Returns whether or not the expression is a variable.
     pub fn is_var(&self) -> bool {
         if let Expr::Var(_, _) = self {
             true
@@ -111,15 +116,23 @@ impl Expr {
             false
         }
     }
+
+    /// Returns a bitvector literal of value `val` and width `width`.
     pub fn bv_lit(val: u64, width: u64) -> Self {
         Expr::Literal(Literal::Bv { val, width }, Type::Bv { w: width })
     }
+
+    /// Returns a integer literal of value `val`.
     pub fn int_lit(val: u64) -> Self {
         Expr::Literal(Literal::Int { val }, Type::Int)
     }
+
+    /// Returns a boolean literal of value `val`.
     pub fn bool_lit(val: bool) -> Self {
         Expr::Literal(Literal::Bool { val }, Type::Bool)
     }
+
+    /// Creates a variable named `name` of type `typ`.
     pub fn var(name: &str, typ: Type) -> Self {
         Expr::Var(
             Var {
@@ -129,6 +142,8 @@ impl Expr {
             typ.clone(),
         )
     }
+
+    /// Create an operator application expression.
     pub fn op_app(op: Op, operands: Vec<Self>) -> Self {
         let typ = match &op {
             Op::Comp(_) | Op::Bool(_) => Type::Bool,
@@ -151,6 +166,8 @@ impl Expr {
         };
         Expr::OpApp(OpApp { op, operands }, typ)
     }
+
+    /// Creates a function application expression.
     pub fn func_app(func_name: String, operands: Vec<Self>, typ: Type) -> Self {
         Expr::FuncApp(
             FuncApp {
