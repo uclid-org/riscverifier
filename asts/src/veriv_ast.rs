@@ -206,6 +206,7 @@ impl Expr {
         )
     }
 }
+
 impl fmt::Display for Expr {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
@@ -224,6 +225,7 @@ pub enum Literal {
     Bool { val: bool },
     Int { val: u64 },
 }
+
 impl fmt::Display for Literal {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
@@ -235,26 +237,24 @@ impl fmt::Display for Literal {
 }
 
 /// Variable
-#[derive(Eq, Hash, Clone)]
+#[derive(PartialEq, Eq, Hash, Clone)]
 pub struct Var {
     pub name: String,
     pub typ: Type,
 }
+
 impl Ord for Var {
     fn cmp(&self, other: &Self) -> Ordering {
         self.name.cmp(&other.name)
     }
 }
+
 impl PartialOrd for Var {
     fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
         Some(self.cmp(other))
     }
 }
-impl PartialEq for Var {
-    fn eq(&self, other: &Self) -> bool {
-        self.name == other.name
-    }
-}
+
 impl fmt::Display for Var {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "{}", self.name)
@@ -267,6 +267,7 @@ pub struct OpApp {
     pub op: Op,
     pub operands: Vec<Expr>,
 }
+
 impl fmt::Display for OpApp {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         let operands = &self.operands.iter().fold("".to_string(), |acc, operand| {
@@ -285,6 +286,7 @@ pub enum Op {
     ArrayIndex,
     GetField(String),
 }
+
 /// Comparison operators
 #[derive(Debug, PartialEq, Eq, Hash, Clone)]
 pub enum CompOp {
@@ -299,6 +301,7 @@ pub enum CompOp {
     Gtu, // >_u
     Geu, // >=_u
 }
+
 /// BV operators
 #[derive(Debug, PartialEq, Eq, Hash, Clone)]
 pub enum BVOp {
@@ -316,6 +319,7 @@ pub enum BVOp {
     Concat,
     Slice { l: u64, r: u64 },
 }
+
 /// Boolean operators
 #[derive(Debug, PartialEq, Eq, Hash, Clone)]
 pub enum BoolOp {
@@ -325,12 +329,14 @@ pub enum BoolOp {
     Impl, // implication: ==>
     Neg,  // negation: !
 }
+
 /// Function application
 #[derive(PartialEq, Eq, Hash, Clone)]
 pub struct FuncApp {
     pub func_name: String,
     pub operands: Vec<Expr>,
 }
+
 impl fmt::Display for FuncApp {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         let operands = &self.operands.iter().fold("".to_string(), |acc, operand| {
@@ -338,6 +344,13 @@ impl fmt::Display for FuncApp {
         })[2..];
         write!(f, "{}({})", self.func_name, operands)
     }
+}
+
+// =======================================================
+/// ## AST Expression Rewriter
+
+pub trait ASTRewriter<C> {
+    // Expr
 }
 
 // =======================================================
@@ -352,6 +365,7 @@ pub enum Stmt {
     Block(Vec<Box<Stmt>>),
     Comment(String),
 }
+
 impl Stmt {
     pub fn get_expect_block(&self) -> &Vec<Box<Stmt>> {
         match self {
@@ -384,6 +398,7 @@ impl Stmt {
         Stmt::Assign(Assign { lhs, rhs })
     }
 }
+
 /// Function call statement
 #[derive(Clone)]
 pub struct FuncCall {
@@ -391,12 +406,14 @@ pub struct FuncCall {
     pub lhs: Vec<Expr>,
     pub operands: Vec<Expr>,
 }
+
 /// Assign statement
 #[derive(Clone)]
 pub struct Assign {
     pub lhs: Vec<Expr>,
     pub rhs: Vec<Expr>,
 }
+
 /// If then else statement
 #[derive(Clone)]
 pub struct IfThenElse {
@@ -414,6 +431,7 @@ pub struct FuncModel {
     pub body: Stmt,
     pub inline: bool,
 }
+
 /// Function Model for pre/post verification
 impl FuncModel {
     pub fn new(
@@ -445,6 +463,7 @@ impl FuncModel {
         }
     }
 }
+
 /// Function signature
 #[derive(Clone)]
 pub struct FuncSig {
@@ -457,6 +476,7 @@ pub struct FuncSig {
     pub tracked: Vec<sl_ast::Spec>,
     pub mod_set: HashSet<String>,
 }
+
 impl FuncSig {
     pub fn new(
         name: &str,
@@ -494,6 +514,7 @@ pub struct Model {
     pub vars: HashSet<Var>,
     pub func_models: Vec<FuncModel>,
 }
+
 impl Model {
     pub fn new(name: &str) -> Self {
         Model {
