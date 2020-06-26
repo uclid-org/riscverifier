@@ -32,6 +32,7 @@ pub enum Type {
         w: u64,
     },
 }
+
 impl Type {
     pub fn get_expect_bv_width(&self) -> u64 {
         match self {
@@ -64,6 +65,7 @@ impl Type {
         }
     }
 }
+
 impl fmt::Display for Type {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
@@ -89,6 +91,7 @@ impl fmt::Display for Type {
 // =======================================================
 /// ## AST Expressions
 
+// TODO: Should we use refcell or &mut for the rewriter here?
 #[derive(PartialEq, Eq, Clone)]
 pub enum Expr {
     Literal(RefCell<Literal>, Type),

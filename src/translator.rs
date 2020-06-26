@@ -1,18 +1,15 @@
 use std::{
     boxed::Box,
+    cell::RefCell,
     collections::HashSet,
     collections::{BTreeMap, HashMap},
     marker::PhantomData,
     rc::Rc,
-    cell::RefCell,
 };
 
 use topological_sort::TopologicalSort;
 
-use asts::{
-    veriv_ast::*,
-    spec_lang::sl_ast
-};
+use asts::{spec_lang::sl_ast, veriv_ast::*};
 
 use dwarf_ctx::dwarfreader::{DwarfCtx, DwarfTypeDefn};
 
@@ -464,9 +461,7 @@ where
                         .func_args(&f_name)
                         .iter()
                         .enumerate()
-                        .map(|(i, arg_expr)| {
-                            Expr::var(&format!("a{}", i), arg_expr.typ().clone())
-                        })
+                        .map(|(i, arg_expr)| Expr::var(&format!("a{}", i), arg_expr.typ().clone()))
                         .collect::<Vec<_>>();
                     // TODO(kkmc): Ignore the return value. The current implementation does not
                     // use the return value and is only tested with functions that have single

@@ -1,8 +1,8 @@
 use std::collections::HashSet;
 use std::rc::Rc;
 
-use asts::veriv_ast::*;
 use asts::spec_lang::sl_ast;
+use asts::veriv_ast::*;
 use dwarf_ctx::dwarfreader::{DwarfCtx, DwarfTypeDefn, DwarfVar};
 
 use crate::ir_interface::{IRInterface, SpecLangASTInterface};
@@ -400,11 +400,7 @@ impl Uclid5Interface {
     /// Var = { name: "x".to_string(), typ: Type::Bv { bytes: 64 } } will return:
     /// `x: bv64`
     fn var_decl(var_name: &str, typ: &Type) -> String {
-        format!(
-            "{}: {}",
-            var_name,
-            Self::typ_to_string(&typ)
-        )
+        format!("{}: {}", var_name, Self::typ_to_string(&typ))
     }
 }
 
