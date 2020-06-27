@@ -51,7 +51,6 @@ where
         };
         // Populate the CFG starting from the entry address
         cfg.create_cfg(entry_addr, &bbs);
-        cfg.print();
         cfg
     }
     /// Recursively builds a CFG starting with the entry address
@@ -113,7 +112,7 @@ where
         seen_nodes.remove(current_node);
         None
     }
-    /// Prints the CFG in a more readable format
+    /// Prints the CFG in a more readable format to debugging info
     pub fn print(&self) {
         info!(
             "========== Created CFG with entry address {} ===========",

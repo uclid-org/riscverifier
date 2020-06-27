@@ -1,4 +1,6 @@
-use std::collections::HashSet;
+use std::{
+    collections::HashSet,
+};
 
 use crate::spec_lang::{
     sl_ast as ast,

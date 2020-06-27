@@ -238,33 +238,31 @@ pub fn process_specs(
 
     // Run a set of passes over each individual specification expression
     let mut ret = HashMap::new();
-    for mut fun_spec in fun_specs_vec {
+    for fun_spec in fun_specs_vec {
         let fname = fun_spec.fname.to_string();
-        let specs = &mut fun_spec.specs;
-        for spec in specs {
-            match spec {
-                sl_ast::Spec::Requires(bexpr) | sl_ast::Spec::Ensures(bexpr) => {
-                    sl_bexpr_rewrite_passes(bexpr, dwarf_ctx, &fname[..]);
-                }
-                _ => (),
-            }
-        }
-        ret.insert(fname, fun_spec.specs);
+        let rw_specs = fun_spec.specs
+            .into_iter()
+            .map(|spec| match spec {
+                sl_ast::Spec::Requires(bexpr) => sl_ast::Spec::Requires(sl_bexpr_rewrite_passes(bexpr, dwarf_ctx, &fname[..])),
+                sl_ast::Spec::Ensures(bexpr) => sl_ast::Spec::Ensures(sl_bexpr_rewrite_passes(bexpr, dwarf_ctx, &fname[..])),
+                _ => spec,
+            })
+            .collect::<Vec<_>>();
+        ret.insert(fname, rw_specs);
     }
     ret
 }
 
 /// Iterates over all spec AST passes
-fn sl_bexpr_rewrite_passes(bexpr: &mut sl_ast::BExpr, dwarf_ctx: &DwarfCtx, fname: &str) {
+fn sl_bexpr_rewrite_passes(bexpr: sl_ast::BExpr, dwarf_ctx: &DwarfCtx, fname: &str) -> sl_ast::BExpr {
     // Type inference pass. Before the initial pass, we expect the specficiation
     // AST to have Unknown types for all VExpr.
-    VExprTypeInference::rewrite_bexpr(
-        bexpr,
-        &RefCell::new((dwarf_ctx, fname, &mut HashMap::new())),
-    );
+    let mut rw_bexpr = VExprTypeInference::rewrite_bexpr(bexpr, &RefCell::new((dwarf_ctx, fname, &mut HashMap::new())));
     // Rewrite all quantified variable names. Identifiers that are global variables are
     // replaced with a function application and prefix that calls an alias.
-    RenameGlobals::rewrite_bexpr(bexpr, &RefCell::new(dwarf_ctx));
+    rw_bexpr = RenameGlobals::rewrite_bexpr(rw_bexpr, &RefCell::new(dwarf_ctx));
+    // Return rewritten bexpr
+    rw_bexpr
 }
 
 // ====================================================================================================
@@ -274,15 +272,16 @@ fn sl_bexpr_rewrite_passes(bexpr: &mut sl_ast::BExpr, dwarf_ctx: &DwarfCtx, fnam
 /// Identifiers `name` to FuncApp `global_var_name()`.
 struct RenameGlobals {}
 impl sl_ast::ASTRewriter<&DwarfCtx> for RenameGlobals {
-    fn rewrite_vexpr_ident(ident: &mut sl_ast::VExpr, context: &RefCell<&DwarfCtx>) {
-        if is_global(ident, &*context.borrow()) {
+    fn rewrite_vexpr_ident(ident: sl_ast::VExpr, context: &RefCell<&DwarfCtx>) -> sl_ast::VExpr {
+        if is_global(&ident, &*context.borrow()) {
             match ident {
                 sl_ast::VExpr::Ident(name, typ) => {
-                    *ident =
-                        sl_ast::VExpr::FuncApp(format!("global_var_{}", name), vec![], typ.clone());
+                    sl_ast::VExpr::FuncApp(format!("global_var_{}", name), vec![], typ)
                 }
                 _ => panic!("Expected identifier."),
             }
+        } else {
+            ident
         }
     }
 }
@@ -294,12 +293,12 @@ impl sl_ast::ASTRewriter<(&DwarfCtx, &str, &mut HashMap<String, sl_ast::VType>)>
 {
     /// Add the bound variable to the type map when it's encountered in a quantifier
     fn rewrite_bexpr_boolop(
-        vop: &mut sl_ast::BoolOp,
+        vop: sl_ast::BoolOp,
         context: &RefCell<(&DwarfCtx, &str, &mut HashMap<String, sl_ast::VType>)>,
-    ) {
+    ) -> sl_ast::BoolOp {
         let mut borrowed_ctx = context.borrow_mut();
         // Add the types of the bound variables to the type map
-        match vop {
+        match &vop {
             sl_ast::BoolOp::Forall(v, _) => borrowed_ctx
                 .2
                 .insert(v.get_ident_name().to_string(), v.typ().clone()),
@@ -308,13 +307,14 @@ impl sl_ast::ASTRewriter<(&DwarfCtx, &str, &mut HashMap<String, sl_ast::VType>)>
                 .insert(v.get_ident_name().to_string(), v.typ().clone()),
             _ => None,
         };
+        vop
     }
 
     /// Replace the identifiers with their actual types (instead of unknown)
     fn rewrite_vexpr_ident(
-        vexpr: &mut sl_ast::VExpr,
+        vexpr: sl_ast::VExpr,
         context: &RefCell<(&DwarfCtx, &str, &mut HashMap<String, sl_ast::VType>)>,
-    ) {
+    ) -> sl_ast::VExpr {
         let borrowed_ctx = context.borrow();
         // Unpack the context tuple
         let dwarf_ctx = borrowed_ctx.0;
@@ -370,7 +370,11 @@ impl sl_ast::ASTRewriter<(&DwarfCtx, &str, &mut HashMap<String, sl_ast::VType>)>
             let dt_res = dwarf_ctx.global_var_type(&var_id);
             if dt_res.is_err() {
                 // Unable to find any type. Must be struct field.
-                return;
+                // In this case, we don't need to return the type.
+                // Maybe we should so that it's easier to refer to,
+                // but the parent node should be a struct type
+                // that contains the type of this field select.
+                return vexpr;
             }
             typ_opt = Some(from_dwarf_type(&dt_res.unwrap()));
             is_global = true;
@@ -382,7 +386,7 @@ impl sl_ast::ASTRewriter<(&DwarfCtx, &str, &mut HashMap<String, sl_ast::VType>)>
             &var_id
         );
         let global_addr = sl_ast::VExpr::Ident(format!("{}", var_id), typ_opt.clone().unwrap());
-        *vexpr = if is_global {
+        if is_global {
             match &typ_opt.clone().unwrap() {
                 sl_ast::VType::Bv(_) => {
                     // Primitive type; dereference this global
@@ -397,27 +401,25 @@ impl sl_ast::ASTRewriter<(&DwarfCtx, &str, &mut HashMap<String, sl_ast::VType>)>
         } else {
             // FIXME: formals are all xlen for now
             sl_ast::VExpr::Ident(var_id.to_string(), sl_ast::VType::Bv(dwarf_ctx.xlen as u16))
-        };
+        }
     }
 
     /// Infer types for the operator applications of VExprs
     fn rewrite_vexpr_opapp(
-        opapp: &mut sl_ast::VExpr,
+        opapp: sl_ast::VExpr,
         context: &RefCell<(&DwarfCtx, &str, &mut HashMap<String, sl_ast::VType>)>,
-    ) {
+    ) -> sl_ast::VExpr {
         match opapp {
             sl_ast::VExpr::OpApp(op, exprs, _) => {
-                Self::rewrite_vexpr_valueop(op, context);
-                Self::rewrite_vexprs(exprs, context);
+                let rw_op = Self::rewrite_vexpr_valueop(op, context);
+                let rw_exprs =  Self::rewrite_vexprs(exprs, context);
+                let rw_typ = sl_ast::VType::infer_op_type(&rw_op, &rw_exprs);
 
-                let new_exprs = exprs.clone();
-                let new_typ = sl_ast::VType::infer_op_type(op, &new_exprs);
-
-                *opapp = match &op {
+                match &rw_op {
                     sl_ast::ValueOp::GetField => {
                         // Implicit dereference for field operator if the type is a primitive
-                        let struct_type = &new_exprs[0].typ();
-                        let field_name = &new_exprs[1].get_ident_name();
+                        let struct_type = &rw_exprs[0].typ();
+                        let field_name = &rw_exprs[1].get_ident_name();
                         let field_type = match struct_type {
                             sl_ast::VType::Struct {
                                 id: _,
@@ -427,61 +429,65 @@ impl sl_ast::ASTRewriter<(&DwarfCtx, &str, &mut HashMap<String, sl_ast::VType>)>
                                 .get(&field_name[..])
                                 .expect(&format!("Unable to find struct field {}.", field_name))
                                 .clone(),
-                            _ => panic!("Expected struct type for variable {:?}.", new_exprs[0]),
+                            _ => panic!("Expected struct type for variable {:?}.", rw_exprs[0]),
                         };
                         // This opapp has the field type infered
                         let field_ident = sl_ast::VExpr::Ident(
-                            new_exprs[1].get_ident_name().to_string(),
+                            rw_exprs[1].get_ident_name().to_string(),
                             field_type.clone(),
                         );
-                        let new_opapp = sl_ast::VExpr::OpApp(
-                            op.clone(),
-                            vec![new_exprs[0].clone(), field_ident],
-                            new_typ,
+                        let select_opapp = sl_ast::VExpr::OpApp(
+                            rw_op,
+                            vec![rw_exprs[0].clone(), field_ident],
+                            rw_typ,
                         );
                         match &field_type {
                             sl_ast::VType::Bv(_) => sl_ast::VExpr::OpApp(
                                 sl_ast::ValueOp::Deref,
-                                vec![new_opapp],
+                                vec![select_opapp],
                                 field_type,
                             ),
-                            _ => new_opapp,
+                            _ => select_opapp,
                         }
                     }
                     sl_ast::ValueOp::ArrayIndex => {
                         // Implicit dereference for array index if the type is a primitive
-                        match &new_exprs[0].typ() {
+                        match &rw_exprs[0].typ().clone() {
                             sl_ast::VType::Array {
                                 in_type: _,
                                 out_type,
                             } => match &**out_type {
-                                sl_ast::VType::Bv(_) => sl_ast::VExpr::OpApp(
-                                    sl_ast::ValueOp::Deref,
-                                    vec![opapp.clone()],
-                                    *out_type.clone(),
-                                ),
-                                _ => sl_ast::VExpr::OpApp(op.clone(), new_exprs, new_typ),
+                                sl_ast::VType::Bv(_) => {
+                                    let rw_opapp = sl_ast::VExpr::OpApp(rw_op, rw_exprs, rw_typ);
+                                    sl_ast::VExpr::OpApp(
+                                        sl_ast::ValueOp::Deref,
+                                        vec![rw_opapp],
+                                        *out_type.clone(),
+                                    )
+                                },
+                                _ => sl_ast::VExpr::OpApp(rw_op, rw_exprs, rw_typ),
                             },
-                            _ => panic!("Expected array type for variable {:?}", new_exprs[0]),
+                            _ => panic!("Expected array type for variable {:?}", rw_exprs[0]),
                         }
                     }
                     // Update the expressions and infer the type for everything else
-                    _ => sl_ast::VExpr::OpApp(op.clone(), new_exprs, new_typ),
-                };
+                    _ => sl_ast::VExpr::OpApp(rw_op, rw_exprs, rw_typ),
+                }
             }
             _ => panic!("Implementation error; expected `VExpr::OpApp`."),
         }
     }
 
     fn rewrite_vexpr_funcapp(
-        funcapp: &mut sl_ast::VExpr,
+        funcapp: sl_ast::VExpr,
         context: &RefCell<(&DwarfCtx, &str, &mut HashMap<String, sl_ast::VType>)>,
-    ) {
+    ) -> sl_ast::VExpr {
         match funcapp {
-            sl_ast::VExpr::FuncApp(fapp, exprs, typ) => {
-                Self::rewrite_vexpr_funcid(fapp, context);
-                Self::rewrite_vexprs(exprs, context);
-                *typ = sl_ast::VType::infer_func_app_type(fapp, exprs);
+            sl_ast::VExpr::FuncApp(fid, exprs, _) => {
+                let rw_fid = Self::rewrite_vexpr_funcid(fid, context);
+                let rw_exprs = Self::rewrite_vexprs(exprs, context);
+                let rw_typ = sl_ast::VType::infer_func_app_type(&rw_fid, &rw_exprs);
+                sl_ast::VExpr::FuncApp(rw_fid, rw_exprs, rw_typ)
             }
             _ => panic!("Implementation error; expected `VExpr::FuncApp`."),
         }

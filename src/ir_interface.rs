@@ -1,9 +1,14 @@
-use std::collections::HashSet;
-use std::fmt;
-use std::rc::Rc;
+use std::{
+    collections::HashSet,
+    fmt,
+    rc::Rc,
+};
 
-use asts::spec_lang::sl_ast;
-use asts::veriv_ast as ast;
+use asts::{
+    spec_lang::sl_ast,
+    veriv_ast as ast,
+};
+
 use dwarf_ctx::dwarfreader::DwarfCtx;
 
 // =====================================================================================================

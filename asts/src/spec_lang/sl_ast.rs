@@ -262,32 +262,43 @@ pub struct FuncSpec {
 
 pub trait ASTRewriter<C> {
     // BExpr
-    fn rewrite_bexpr(bexpr: &mut BExpr, context: &RefCell<C>) {
+    fn rewrite_bexpr(bexpr: BExpr, context: &RefCell<C>) -> BExpr {
         match bexpr {
-            BExpr::Bool(b) => Self::rewrite_bexpr_bool(b, context),
-            BExpr::BOpApp(bop, exprs) => {
-                Self::rewrite_bexpr_boolop(bop, context);
-                for bexpr in exprs {
-                    Self::rewrite_bexpr(bexpr, context);
-                }
-            }
-            BExpr::COpApp(cop, exprs) => {
-                Self::rewrite_bexpr_compop(cop, context);
-                for vexpr in exprs {
-                    Self::rewrite_vexpr(vexpr, context);
-                }
-            }
+            BExpr::Bool(_) => Self::rewrite_bexpr_bool(bexpr, context),
+            BExpr::BOpApp(_, _) => Self::rewrite_bexpr_bopapp(bexpr, context),
+            BExpr::COpApp(_, _) => Self::rewrite_bexpr_copapp(bexpr, context),
         }
     }
-    fn rewrite_bexpr_bool(_b: &mut bool, _context: &RefCell<C>) {}
-    fn rewrite_bexpr_boolop(_bop: &mut BoolOp, _context: &RefCell<C>) {}
-    fn rewrite_bexpr_compop(_cop: &mut CompOp, _context: &RefCell<C>) {}
-    // VExpr
-    fn rewrite_vexpr(vexpr: &mut VExpr, context: &RefCell<C>) {
-        match vexpr {
-            VExpr::Bv { value: _, typ: _ } => {
-                Self::rewrite_vexpr_bvvalue(vexpr, context);
+    fn rewrite_bexpr_bool(bool_expr: BExpr, _context: &RefCell<C>) -> BExpr { bool_expr }
+    fn rewrite_bexpr_bopapp(bopapp: BExpr, context: &RefCell<C>) -> BExpr {
+        match bopapp {
+            BExpr::BOpApp(bop, exprs) => {
+                let rw_bop = Self::rewrite_bexpr_boolop(bop, context);
+                let rw_bexprs = Self::rewrite_bexprs(exprs, context);
+                BExpr::BOpApp(rw_bop, rw_bexprs)
             }
+            _ => panic!("Impleemntation error; expected `BExpr::BOpApp`.")
+        }
+    }
+    fn rewrite_bexpr_copapp(copapp: BExpr, context: &RefCell<C>) -> BExpr {
+        match copapp {
+            BExpr::COpApp(cop, exprs) => {
+                let rw_cop = Self::rewrite_bexpr_compop(cop, context);
+                let rw_vexprs = Self::rewrite_vexprs(exprs, context);
+                BExpr::COpApp(rw_cop, rw_vexprs)
+            }
+            _ => panic!("Impleemntation error; expected `BExpr::COpApp`.")
+        }
+    }
+    fn rewrite_bexpr_boolop(bop: BoolOp, _context: &RefCell<C>) -> BoolOp { bop }
+    fn rewrite_bexpr_compop(cop: CompOp, _context: &RefCell<C>) -> CompOp { cop }
+    fn rewrite_bexprs(exprs: Vec<BExpr>, context: &RefCell<C>) -> Vec<BExpr> {
+        exprs.into_iter().map(|expr| Self::rewrite_bexpr(expr, context)).collect::<Vec<_>>()
+    }
+    // VExpr
+    fn rewrite_vexpr(vexpr: VExpr, context: &RefCell<C>) -> VExpr {
+        match vexpr {
+            VExpr::Bv { value: _, typ: _ } => Self::rewrite_vexpr_bvvalue(vexpr, context),
             VExpr::Int(_, _) => Self::rewrite_vexpr_int(vexpr, context),
             VExpr::Bool(_, _) => Self::rewrite_vexpr_bool(vexpr, context),
             VExpr::Ident(_, _) => Self::rewrite_vexpr_ident(vexpr, context),
@@ -295,33 +306,33 @@ pub trait ASTRewriter<C> {
             VExpr::FuncApp(_, _, _) => Self::rewrite_vexpr_funcapp(vexpr, context),
         }
     }
-    fn rewrite_vexprs(exprs: &mut Vec<VExpr>, context: &RefCell<C>) {
-        for expr in exprs {
-            Self::rewrite_vexpr(expr, context);
-        }
+    fn rewrite_vexprs(exprs: Vec<VExpr>, context: &RefCell<C>) -> Vec<VExpr> {
+        exprs.into_iter().map(|expr| Self::rewrite_vexpr(expr, context)).collect::<Vec<_>>()
     }
-    fn rewrite_vexpr_bvvalue(_value: &mut VExpr, _context: &RefCell<C>) {}
-    fn rewrite_vexpr_int(_i: &mut VExpr, _context: &RefCell<C>) {}
-    fn rewrite_vexpr_bool(_b: &mut VExpr, _context: &RefCell<C>) {}
-    fn rewrite_vexpr_ident(_vexpr: &mut VExpr, _context: &RefCell<C>) {}
-    fn rewrite_vexpr_opapp(opapp: &mut VExpr, context: &RefCell<C>) {
+    fn rewrite_vexpr_bvvalue(value: VExpr, _context: &RefCell<C>) -> VExpr { value }
+    fn rewrite_vexpr_int(i: VExpr, _context: &RefCell<C>) -> VExpr { i }
+    fn rewrite_vexpr_bool(b: VExpr, _context: &RefCell<C>) -> VExpr { b }
+    fn rewrite_vexpr_ident(vexpr: VExpr, _context: &RefCell<C>) -> VExpr { vexpr }
+    fn rewrite_vexpr_opapp(opapp: VExpr, context: &RefCell<C>) -> VExpr {
         match opapp {
-            VExpr::OpApp(op, exprs, _) => {
-                Self::rewrite_vexpr_valueop(op, context);
-                Self::rewrite_vexprs(exprs, context);
+            VExpr::OpApp(op, exprs, typ) => {
+                let rw_op = Self::rewrite_vexpr_valueop(op, context);
+                let rw_vexprs = Self::rewrite_vexprs(exprs, context);
+                VExpr::OpApp(rw_op, rw_vexprs, typ)
             }
             _ => panic!("Implementation error; expected `VExpr::OpApp`."),
         }
     }
-    fn rewrite_vexpr_funcapp(funcapp: &mut VExpr, context: &RefCell<C>) {
+    fn rewrite_vexpr_funcapp(funcapp: VExpr, context: &RefCell<C>) -> VExpr {
         match funcapp {
-            VExpr::FuncApp(fid, exprs, _) => {
-                Self::rewrite_vexpr_funcid(fid, context);
-                Self::rewrite_vexprs(exprs, context);
+            VExpr::FuncApp(fid, exprs, typ) => {
+                let rw_fid = Self::rewrite_vexpr_funcid(fid, context);
+                let rw_vexprs = Self::rewrite_vexprs(exprs, context);
+                VExpr::FuncApp(rw_fid, rw_vexprs, typ)
             }
             _ => panic!("Implementation error; expected `VExpr::FuncApp`."),
         }
     }
-    fn rewrite_vexpr_valueop(_vop: &mut ValueOp, _context: &RefCell<C>) {}
-    fn rewrite_vexpr_funcid(_fid: &mut String, _context: &RefCell<C>) {}
+    fn rewrite_vexpr_valueop(vop: ValueOp, _context: &RefCell<C>) -> ValueOp { vop }
+    fn rewrite_vexpr_funcid(fid: String, _context: &RefCell<C>) -> String { fid }
 }

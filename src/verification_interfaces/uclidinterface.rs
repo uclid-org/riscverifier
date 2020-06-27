@@ -1,12 +1,22 @@
-use std::collections::HashSet;
-use std::rc::Rc;
+use std::{
+    collections::HashSet,
+    rc::Rc,
+};
 
-use asts::spec_lang::sl_ast;
-use asts::veriv_ast::*;
+use asts::{
+    spec_lang::sl_ast,
+    veriv_ast::*,
+};
+
 use dwarf_ctx::dwarfreader::{DwarfCtx, DwarfTypeDefn, DwarfVar};
 
-use crate::ir_interface::{IRInterface, SpecLangASTInterface};
-use crate::utils;
+use crate::{
+    ir_interface::{
+        IRInterface,
+        SpecLangASTInterface
+    },
+    utils,
+};
 
 use rv_model::{system_model, system_model::BYTE_SIZE};
 
@@ -746,7 +756,7 @@ impl SpecLangASTInterface for Uclid5Interface {
     fn bexpr_bopapp_to_string(bop: &sl_ast::BoolOp, exprs: &Vec<sl_ast::BExpr>) -> String {
         let bop_str = Self::bopp_to_string(bop);
         let mut exprs_iter = exprs.iter();
-        let mut ret = Self::bexpr_to_string(exprs_iter.next().unwrap());
+        let mut ret = Self::bexpr_to_string(&exprs_iter.next().unwrap());
         // Unary prefix operators
         match bop {
             sl_ast::BoolOp::Neg | sl_ast::BoolOp::Forall(_, _) | sl_ast::BoolOp::Exists(_, _) => {
@@ -756,7 +766,7 @@ impl SpecLangASTInterface for Uclid5Interface {
         }
         // Infix operator, comma separated by operands
         while let Some(expr) = exprs_iter.next() {
-            let expr_str = Self::bexpr_to_string(expr);
+            let expr_str = Self::bexpr_to_string(&expr);
             ret = format!("({} {} {})", ret, bop_str, expr_str)
         }
         ret
