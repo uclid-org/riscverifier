@@ -1,6 +1,5 @@
 use std::{
     boxed::Box,
-    cell::RefCell,
     collections::HashSet,
     collections::{BTreeMap, HashMap},
     marker::PhantomData,
@@ -384,9 +383,16 @@ where
                     .iter()
                     .map(|e| match e {
                         // Either the LHS is a register, returned, pc, etc
-                        Expr::Var(v, _) => v.borrow().name.clone(),
-                        // Or memory (for stores)
-                        _ => system_model::MEM_VAR.to_string(),
+                        Expr::Var(v, _) => v.name.clone(),
+                        Expr::OpApp(opapp, _) => {
+                            assert!(opapp.op == Op::ArrayIndex, "Assignment should be a register or memory index.");
+                            // Or the LHS is memory (for stores)
+                            match &opapp.operands[0] {
+                                Expr::Var(v, _) => v.name.clone(),
+                                _ => panic!("LHS of array index should be memory type but found {}.", &opapp.operands[0]),
+                            }
+                        }
+                        _ => panic!("LHS of assign should be a register or memory."),
                     })
                     .collect::<HashSet<String>>();
                 mod_set = mod_set.union(&lhs_mod_set).cloned().collect();
@@ -503,7 +509,7 @@ where
             Op::Comp(CompOp::Equality),
             vec![
                 Expr::Var(
-                    RefCell::new(system_model::pc_var(self.xlen)),
+                    system_model::pc_var(self.xlen),
                     system_model::bv_type(self.xlen),
                 ),
                 Expr::bv_lit(*entry, self.xlen),

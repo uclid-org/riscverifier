@@ -1,20 +1,11 @@
-use std::{
-    collections::HashSet,
-    rc::Rc,
-};
+use std::{collections::HashSet, rc::Rc};
 
-use asts::{
-    spec_lang::sl_ast,
-    veriv_ast::*,
-};
+use asts::{spec_lang::sl_ast, veriv_ast::*};
 
 use dwarf_ctx::dwarfreader::{DwarfCtx, DwarfTypeDefn, DwarfVar};
 
 use crate::{
-    ir_interface::{
-        IRInterface,
-        SpecLangASTInterface
-    },
+    ir_interface::{IRInterface, SpecLangASTInterface},
     utils,
 };
 
@@ -61,7 +52,7 @@ impl Uclid5Interface {
             xlen,
         );
         let deref_2_alias = format!(
-            "    define deref_2(mem: [bv{}]bv8, addr: bv{}): bv16 = {};",
+            "    define deref_2(mem: [bv{}]bv16, addr: bv{}): bv16 = {};",
             xlen, xlen, load_half_str
         );
         // load word
@@ -70,7 +61,7 @@ impl Uclid5Interface {
             xlen,
         );
         let deref_4_alias = format!(
-            "    define deref_4(mem: [bv{}]bv8, addr: bv{}): bv32 = {};",
+            "    define deref_4(mem: [bv{}]bv32, addr: bv{}): bv32 = {};",
             xlen, xlen, load_word_str
         );
         // load double
@@ -79,7 +70,7 @@ impl Uclid5Interface {
             xlen,
         );
         let deref_8_alias = format!(
-            "    define deref_8(mem: [bv{}]bv8, addr: bv{}): bv64 = {};",
+            "    define deref_8(mem: [bv{}]bv64, addr: bv{}): bv64 = {};",
             xlen, xlen, load_double_str
         );
         format!(
@@ -907,8 +898,15 @@ impl SpecLangASTInterface for Uclid5Interface {
             sl_ast::ValueOp::Deref => {
                 let expr_str = Self::vexpr_to_string(&exprs[0]);
                 let bytes = exprs[0].typ().get_bv_width() as u64 / BYTE_SIZE;
+                let mem_suffix = match bytes {
+                    1 => "b",
+                    2 => "h",
+                    4 => "w",
+                    8 => "d",
+                    _ => panic!("Invalid memory access width."),
+                };
                 match bytes {
-                    1 | 2 | 4 | 8 => format!("deref_{}(mem, {})", bytes, expr_str),
+                    1 | 2 | 4 | 8 => format!("deref_{}(mem_{}, {})", bytes, mem_suffix, expr_str),
                     _ => panic!("VERI-V does not support dereferencing values that are not 1, 2, 4, or 8 bytes."),
                 }
             }

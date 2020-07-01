@@ -11,7 +11,10 @@ pub const INST_LENGTH_IN_BYTES: u64 = 4; // Instructions are 4 bytes long
 /// ## System variable names
 pub const PC_VAR: &'static str = "pc";
 pub const RETURNED_FLAG: &'static str = "returned";
-pub const MEM_VAR: &'static str = "mem";
+pub const MEM_VAR_B: &'static str = "mem_b";
+pub const MEM_VAR_H: &'static str = "mem_h";
+pub const MEM_VAR_W: &'static str = "mem_w";
+pub const MEM_VAR_D: &'static str = "mem_d";
 pub const PRIV_VAR: &'static str = "current_priv";
 pub const A0: &'static str = "a0";
 pub const SP: &'static str = "sp";
@@ -53,26 +56,92 @@ pub fn returned_type() -> Type {
     bv_type(1)
 }
 
+/// ===== byte memory =====
 /// Memory state variable
-pub fn mem_var(xlen: u64) -> Var {
+pub fn mem_b_var(xlen: u64) -> Var {
     Var {
-        name: MEM_VAR.to_string(),
-        typ: mem_type(xlen),
+        name: MEM_VAR_B.to_string(),
+        typ: mem_b_type(xlen),
     }
 }
 
 /// Helper function that returns the memory expression
-pub fn mem_expr(xlen: u64) -> Expr {
-    Expr::var(MEM_VAR, mem_type(xlen))
+pub fn mem_b_expr(xlen: u64) -> Expr {
+    Expr::var(MEM_VAR_B, mem_b_type(xlen))
 }
 
 /// Returns the type of memory (XLEN addressable byte valued array)
-pub fn mem_type(xlen: u64) -> Type {
+pub fn mem_b_type(xlen: u64) -> Type {
     Type::Array {
         in_typs: vec![Box::new(bv_type(xlen))],
         out_typ: Box::new(bv_type(BYTE_SIZE)),
     }
 }
+/// ==== half memory ====
+/// Memory state variable
+pub fn mem_h_var(xlen: u64) -> Var {
+    Var {
+        name: MEM_VAR_H.to_string(),
+        typ: mem_h_type(xlen),
+    }
+}
+
+/// Helper function that returns the memory expression
+pub fn mem_h_expr(xlen: u64) -> Expr {
+    Expr::var(MEM_VAR_H, mem_h_type(xlen))
+}
+
+/// Returns the type of memory (XLEN addressable byte valued array)
+pub fn mem_h_type(xlen: u64) -> Type {
+    Type::Array {
+        in_typs: vec![Box::new(bv_type(xlen))],
+        out_typ: Box::new(bv_type(2*BYTE_SIZE)),
+    }
+}
+
+/// ===== word memory =====
+/// Memory state variable
+pub fn mem_w_var(xlen: u64) -> Var {
+    Var {
+        name: MEM_VAR_W.to_string(),
+        typ: mem_w_type(xlen),
+    }
+}
+
+/// Helper function that returns the memory expression
+pub fn mem_w_expr(xlen: u64) -> Expr {
+    Expr::var(MEM_VAR_W, mem_w_type(xlen))
+}
+
+/// Returns the type of memory (XLEN addressable byte valued array)
+pub fn mem_w_type(xlen: u64) -> Type {
+    Type::Array {
+        in_typs: vec![Box::new(bv_type(xlen))],
+        out_typ: Box::new(bv_type(4*BYTE_SIZE)),
+    }
+}
+/// ===== double memory ====
+/// Memory state variable
+pub fn mem_d_var(xlen: u64) -> Var {
+    Var {
+        name: MEM_VAR_D.to_string(),
+        typ: mem_d_type(xlen),
+    }
+}
+
+/// Helper function that returns the memory expression
+pub fn mem_d_expr(xlen: u64) -> Expr {
+    Expr::var(MEM_VAR_D, mem_d_type(xlen))
+}
+
+/// Returns the type of memory (XLEN addressable byte valued array)
+pub fn mem_d_type(xlen: u64) -> Type {
+    Type::Array {
+        in_typs: vec![Box::new(bv_type(xlen))],
+        out_typ: Box::new(bv_type(8*BYTE_SIZE)),
+    }
+}
+
 
 /// Privilege state variable
 pub fn priv_var() -> Var {
@@ -97,7 +166,10 @@ pub fn sys_state_vars(xlen: u64) -> HashSet<Var> {
     let mut vec_var = HashSet::new();
     vec_var.insert(pc_var(xlen));
     vec_var.insert(returned_var());
-    vec_var.insert(mem_var(xlen));
+    vec_var.insert(mem_b_var(xlen));
+    vec_var.insert(mem_h_var(xlen));
+    vec_var.insert(mem_w_var(xlen));
+    vec_var.insert(mem_d_var(xlen));
     vec_var.insert(priv_var());
     vec_var
 }
@@ -139,28 +211,22 @@ pub fn add_const(expr: Expr, n: u64, xlen: u64) -> Expr {
 
 /// An expression that returns a byte at the address `addr`
 pub fn load_byte(addr: Expr, xlen: u64) -> Expr {
-    Expr::op_app(Op::ArrayIndex, vec![mem_expr(xlen), addr])
+    Expr::op_app(Op::ArrayIndex, vec![mem_b_expr(xlen), addr])
 }
 
 /// An expression that returns a half at the address `addr`
 pub fn load_half(addr: Expr, xlen: u64) -> Expr {
-    let byte_0 = load_byte(addr.clone(), xlen);
-    let byte_1 = load_byte(add_const(addr, 1, xlen), xlen);
-    Expr::op_app(Op::Bv(BVOp::Concat), vec![byte_1, byte_0])
+    Expr::op_app(Op::ArrayIndex, vec![mem_h_expr(xlen), addr])
 }
 
 /// An expression that returns a word at the address `addr`
 pub fn load_word(addr: Expr, xlen: u64) -> Expr {
-    let half_0 = load_half(addr.clone(), xlen);
-    let half_1 = load_half(add_const(addr, 2, xlen), xlen);
-    Expr::op_app(Op::Bv(BVOp::Concat), vec![half_1, half_0])
+    Expr::op_app(Op::ArrayIndex, vec![mem_w_expr(xlen), addr])
 }
 
 /// An expression that returns a double at the address `addr`
 pub fn load_double(addr: Expr, xlen: u64) -> Expr {
-    let word_0 = load_word(addr.clone(), xlen);
-    let word_1 = load_word(add_const(addr, 4, xlen), xlen);
-    Expr::op_app(Op::Bv(BVOp::Concat), vec![word_1, word_0])
+    Expr::op_app(Op::ArrayIndex, vec![mem_d_expr(xlen), addr])
 }
 
 // ========================================================================
@@ -858,15 +924,15 @@ pub fn sraiw_inst(rd: Expr, rs1: Expr, imm: Expr, xlen: u64) -> Stmt {
 pub fn sb_inst(rs1: Expr, imm: Expr, rs2: Expr, xlen: u64) -> Stmt {
     let mut stmts = vec![];
     stmts.push(Stmt::Comment(format!("sb {}, {}, {}", rs1, imm, rs2)));
-    let mem_addr = Expr::op_app(
+    let mem_indexed = Expr::op_app(
         Op::ArrayIndex,
         vec![
-            mem_expr(xlen),
+            mem_b_expr(xlen),
             Expr::op_app(Op::Bv(BVOp::Add), vec![rs1, imm]),
         ],
     );
     stmts.push(Stmt::assign(
-        vec![mem_addr],
+        vec![mem_indexed],
         vec![Expr::op_app(Op::Bv(BVOp::Slice { l: 7, r: 0 }), vec![rs2])],
     ));
     stmts.push(update_pc(xlen));
@@ -877,36 +943,19 @@ pub fn sb_inst(rs1: Expr, imm: Expr, rs2: Expr, xlen: u64) -> Stmt {
 pub fn sh_inst(rs1: Expr, imm: Expr, rs2: Expr, xlen: u64) -> Stmt {
     let mut stmts = vec![];
     stmts.push(Stmt::Comment(format!("sh {}, {}, {}", rs1, imm, rs2)));
-    let mem_addr = Expr::op_app(
+    let mem_indexed = Expr::op_app(
         Op::ArrayIndex,
         vec![
-            mem_expr(xlen),
+            mem_h_expr(xlen),
             Expr::op_app(Op::Bv(BVOp::Add), vec![rs1.clone(), imm.clone()]),
         ],
     );
-    let mem_addr_1 = Expr::op_app(
-        Op::ArrayIndex,
-        vec![
-            mem_expr(xlen),
-            Expr::op_app(
-                Op::Bv(BVOp::Add),
-                vec![
-                    Expr::op_app(Op::Bv(BVOp::Add), vec![rs1.clone(), imm.clone()]),
-                    Expr::bv_lit(1, xlen),
-                ],
-            ),
-        ],
-    );
     stmts.push(Stmt::assign(
-        vec![mem_addr.clone()],
+        vec![mem_indexed.clone()],
         vec![Expr::op_app(
-            Op::Bv(BVOp::Slice { l: 7, r: 0 }),
+            Op::Bv(BVOp::Slice { l: 15, r: 0 }),
             vec![rs2.clone()],
         )],
-    ));
-    stmts.push(Stmt::assign(
-        vec![mem_addr_1.clone()],
-        vec![Expr::op_app(Op::Bv(BVOp::Slice { l: 15, r: 8 }), vec![rs2])],
     ));
     stmts.push(update_pc(xlen));
     Stmt::Block(stmts.iter().map(|x| Box::new(x.clone())).collect())
@@ -916,77 +965,17 @@ pub fn sh_inst(rs1: Expr, imm: Expr, rs2: Expr, xlen: u64) -> Stmt {
 pub fn sw_inst(rs1: Expr, imm: Expr, rs2: Expr, xlen: u64) -> Stmt {
     let mut stmts = vec![];
     stmts.push(Stmt::Comment(format!("sw {}, {}, {}", rs1, imm, rs2)));
-    let mem_addr = Expr::op_app(
+    let mem_indexed = Expr::op_app(
         Op::ArrayIndex,
         vec![
-            mem_expr(xlen),
+            mem_w_expr(xlen),
             Expr::op_app(Op::Bv(BVOp::Add), vec![rs1.clone(), imm.clone()]),
         ],
     );
-    let mem_addr_1 = Expr::op_app(
-        Op::ArrayIndex,
-        vec![
-            mem_expr(xlen),
-            Expr::op_app(
-                Op::Bv(BVOp::Add),
-                vec![
-                    Expr::op_app(Op::Bv(BVOp::Add), vec![rs1.clone(), imm.clone()]),
-                    Expr::bv_lit(1, xlen),
-                ],
-            ),
-        ],
-    );
-    let mem_addr_2 = Expr::op_app(
-        Op::ArrayIndex,
-        vec![
-            mem_expr(xlen),
-            Expr::op_app(
-                Op::Bv(BVOp::Add),
-                vec![
-                    Expr::op_app(Op::Bv(BVOp::Add), vec![rs1.clone(), imm.clone()]),
-                    Expr::bv_lit(2, xlen),
-                ],
-            ),
-        ],
-    );
-    let mem_addr_3 = Expr::op_app(
-        Op::ArrayIndex,
-        vec![
-            mem_expr(xlen),
-            Expr::op_app(
-                Op::Bv(BVOp::Add),
-                vec![
-                    Expr::op_app(Op::Bv(BVOp::Add), vec![rs1.clone(), imm.clone()]),
-                    Expr::bv_lit(3, xlen),
-                ],
-            ),
-        ],
-    );
     stmts.push(Stmt::assign(
-        vec![mem_addr],
+        vec![mem_indexed],
         vec![Expr::op_app(
-            Op::Bv(BVOp::Slice { l: 7, r: 0 }),
-            vec![rs2.clone()],
-        )],
-    ));
-    stmts.push(Stmt::assign(
-        vec![mem_addr_1],
-        vec![Expr::op_app(
-            Op::Bv(BVOp::Slice { l: 15, r: 8 }),
-            vec![rs2.clone()],
-        )],
-    ));
-    stmts.push(Stmt::assign(
-        vec![mem_addr_2],
-        vec![Expr::op_app(
-            Op::Bv(BVOp::Slice { l: 23, r: 16 }),
-            vec![rs2.clone()],
-        )],
-    ));
-    stmts.push(Stmt::assign(
-        vec![mem_addr_3],
-        vec![Expr::op_app(
-            Op::Bv(BVOp::Slice { l: 31, r: 24 }),
+            Op::Bv(BVOp::Slice { l: 31, r: 0 }),
             vec![rs2.clone()],
         )],
     ));
@@ -998,157 +987,17 @@ pub fn sw_inst(rs1: Expr, imm: Expr, rs2: Expr, xlen: u64) -> Stmt {
 pub fn sd_inst(rs1: Expr, imm: Expr, rs2: Expr, xlen: u64) -> Stmt {
     let mut stmts = vec![];
     stmts.push(Stmt::Comment(format!("sd {}, {}, {}", rs1, imm, rs2)));
-    let mem_addr = Expr::op_app(
+    let mem_indexed = Expr::op_app(
         Op::ArrayIndex,
         vec![
-            mem_expr(xlen),
+            mem_d_expr(xlen),
             Expr::op_app(Op::Bv(BVOp::Add), vec![rs1.clone(), imm.clone()]),
         ],
     );
-    let mem_addr_1 = Expr::op_app(
-        Op::ArrayIndex,
-        vec![
-            mem_expr(xlen),
-            Expr::op_app(
-                Op::Bv(BVOp::Add),
-                vec![
-                    Expr::op_app(Op::Bv(BVOp::Add), vec![rs1.clone(), imm.clone()]),
-                    Expr::bv_lit(1, xlen),
-                ],
-            ),
-        ],
-    );
-    let mem_addr_2 = Expr::op_app(
-        Op::ArrayIndex,
-        vec![
-            mem_expr(xlen),
-            Expr::op_app(
-                Op::Bv(BVOp::Add),
-                vec![
-                    Expr::op_app(Op::Bv(BVOp::Add), vec![rs1.clone(), imm.clone()]),
-                    Expr::bv_lit(2, xlen),
-                ],
-            ),
-        ],
-    );
-    let mem_addr_3 = Expr::op_app(
-        Op::ArrayIndex,
-        vec![
-            mem_expr(xlen),
-            Expr::op_app(
-                Op::Bv(BVOp::Add),
-                vec![
-                    Expr::op_app(Op::Bv(BVOp::Add), vec![rs1.clone(), imm.clone()]),
-                    Expr::bv_lit(3, xlen),
-                ],
-            ),
-        ],
-    );
-    let mem_addr_4 = Expr::op_app(
-        Op::ArrayIndex,
-        vec![
-            mem_expr(xlen),
-            Expr::op_app(
-                Op::Bv(BVOp::Add),
-                vec![
-                    Expr::op_app(Op::Bv(BVOp::Add), vec![rs1.clone(), imm.clone()]),
-                    Expr::bv_lit(4, xlen),
-                ],
-            ),
-        ],
-    );
-    let mem_addr_5 = Expr::op_app(
-        Op::ArrayIndex,
-        vec![
-            mem_expr(xlen),
-            Expr::op_app(
-                Op::Bv(BVOp::Add),
-                vec![
-                    Expr::op_app(Op::Bv(BVOp::Add), vec![rs1.clone(), imm.clone()]),
-                    Expr::bv_lit(5, xlen),
-                ],
-            ),
-        ],
-    );
-    let mem_addr_6 = Expr::op_app(
-        Op::ArrayIndex,
-        vec![
-            mem_expr(xlen),
-            Expr::op_app(
-                Op::Bv(BVOp::Add),
-                vec![
-                    Expr::op_app(Op::Bv(BVOp::Add), vec![rs1.clone(), imm.clone()]),
-                    Expr::bv_lit(6, xlen),
-                ],
-            ),
-        ],
-    );
-    let mem_addr_7 = Expr::op_app(
-        Op::ArrayIndex,
-        vec![
-            mem_expr(xlen),
-            Expr::op_app(
-                Op::Bv(BVOp::Add),
-                vec![
-                    Expr::op_app(Op::Bv(BVOp::Add), vec![rs1.clone(), imm.clone()]),
-                    Expr::bv_lit(7, xlen),
-                ],
-            ),
-        ],
-    );
     stmts.push(Stmt::assign(
-        vec![mem_addr],
+        vec![mem_indexed],
         vec![Expr::op_app(
-            Op::Bv(BVOp::Slice { l: 7, r: 0 }),
-            vec![rs2.clone()],
-        )],
-    ));
-    stmts.push(Stmt::assign(
-        vec![mem_addr_1],
-        vec![Expr::op_app(
-            Op::Bv(BVOp::Slice { l: 15, r: 8 }),
-            vec![rs2.clone()],
-        )],
-    ));
-    stmts.push(Stmt::assign(
-        vec![mem_addr_2],
-        vec![Expr::op_app(
-            Op::Bv(BVOp::Slice { l: 23, r: 16 }),
-            vec![rs2.clone()],
-        )],
-    ));
-    stmts.push(Stmt::assign(
-        vec![mem_addr_3],
-        vec![Expr::op_app(
-            Op::Bv(BVOp::Slice { l: 31, r: 24 }),
-            vec![rs2.clone()],
-        )],
-    ));
-    stmts.push(Stmt::assign(
-        vec![mem_addr_4],
-        vec![Expr::op_app(
-            Op::Bv(BVOp::Slice { l: 39, r: 32 }),
-            vec![rs2.clone()],
-        )],
-    ));
-    stmts.push(Stmt::assign(
-        vec![mem_addr_5],
-        vec![Expr::op_app(
-            Op::Bv(BVOp::Slice { l: 47, r: 40 }),
-            vec![rs2.clone()],
-        )],
-    ));
-    stmts.push(Stmt::assign(
-        vec![mem_addr_6],
-        vec![Expr::op_app(
-            Op::Bv(BVOp::Slice { l: 55, r: 48 }),
-            vec![rs2.clone()],
-        )],
-    ));
-    stmts.push(Stmt::assign(
-        vec![mem_addr_7],
-        vec![Expr::op_app(
-            Op::Bv(BVOp::Slice { l: 63, r: 56 }),
+            Op::Bv(BVOp::Slice { l: 63, r: 0 }),
             vec![rs2.clone()],
         )],
     ));

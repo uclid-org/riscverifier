@@ -240,11 +240,16 @@ pub fn process_specs(
     let mut ret = HashMap::new();
     for fun_spec in fun_specs_vec {
         let fname = fun_spec.fname.to_string();
-        let rw_specs = fun_spec.specs
+        let rw_specs = fun_spec
+            .specs
             .into_iter()
             .map(|spec| match spec {
-                sl_ast::Spec::Requires(bexpr) => sl_ast::Spec::Requires(sl_bexpr_rewrite_passes(bexpr, dwarf_ctx, &fname[..])),
-                sl_ast::Spec::Ensures(bexpr) => sl_ast::Spec::Ensures(sl_bexpr_rewrite_passes(bexpr, dwarf_ctx, &fname[..])),
+                sl_ast::Spec::Requires(bexpr) => {
+                    sl_ast::Spec::Requires(sl_bexpr_rewrite_passes(bexpr, dwarf_ctx, &fname[..]))
+                }
+                sl_ast::Spec::Ensures(bexpr) => {
+                    sl_ast::Spec::Ensures(sl_bexpr_rewrite_passes(bexpr, dwarf_ctx, &fname[..]))
+                }
                 _ => spec,
             })
             .collect::<Vec<_>>();
@@ -254,10 +259,17 @@ pub fn process_specs(
 }
 
 /// Iterates over all spec AST passes
-fn sl_bexpr_rewrite_passes(bexpr: sl_ast::BExpr, dwarf_ctx: &DwarfCtx, fname: &str) -> sl_ast::BExpr {
+fn sl_bexpr_rewrite_passes(
+    bexpr: sl_ast::BExpr,
+    dwarf_ctx: &DwarfCtx,
+    fname: &str,
+) -> sl_ast::BExpr {
     // Type inference pass. Before the initial pass, we expect the specficiation
     // AST to have Unknown types for all VExpr.
-    let mut rw_bexpr = VExprTypeInference::rewrite_bexpr(bexpr, &RefCell::new((dwarf_ctx, fname, &mut HashMap::new())));
+    let mut rw_bexpr = VExprTypeInference::rewrite_bexpr(
+        bexpr,
+        &RefCell::new((dwarf_ctx, fname, &mut HashMap::new())),
+    );
     // Rewrite all quantified variable names. Identifiers that are global variables are
     // replaced with a function application and prefix that calls an alias.
     rw_bexpr = RenameGlobals::rewrite_bexpr(rw_bexpr, &RefCell::new(dwarf_ctx));
@@ -338,9 +350,18 @@ impl sl_ast::ASTRewriter<(&DwarfCtx, &str, &mut HashMap<String, sl_ast::VType>)>
             system_model::PRIV_VAR => {
                 Some(sl_ast::VType::from_ast_type(&system_model::priv_type()))
             }
-            system_model::MEM_VAR => {
-                Some(sl_ast::VType::from_ast_type(&system_model::mem_type(xlen)))
-            }
+            system_model::MEM_VAR_B => Some(sl_ast::VType::from_ast_type(
+                &system_model::mem_b_type(xlen),
+            )),
+            system_model::MEM_VAR_H => Some(sl_ast::VType::from_ast_type(
+                &system_model::mem_h_type(xlen),
+            )),
+            system_model::MEM_VAR_W => Some(sl_ast::VType::from_ast_type(
+                &system_model::mem_w_type(xlen),
+            )),
+            system_model::MEM_VAR_D => Some(sl_ast::VType::from_ast_type(
+                &system_model::mem_d_type(xlen),
+            )),
             system_model::A0 | system_model::SP | system_model::RA => {
                 Some(sl_ast::VType::from_ast_type(&system_model::bv_type(xlen)))
             }
@@ -412,7 +433,7 @@ impl sl_ast::ASTRewriter<(&DwarfCtx, &str, &mut HashMap<String, sl_ast::VType>)>
         match opapp {
             sl_ast::VExpr::OpApp(op, exprs, _) => {
                 let rw_op = Self::rewrite_vexpr_valueop(op, context);
-                let rw_exprs =  Self::rewrite_vexprs(exprs, context);
+                let rw_exprs = Self::rewrite_vexprs(exprs, context);
                 let rw_typ = sl_ast::VType::infer_op_type(&rw_op, &rw_exprs);
 
                 match &rw_op {
@@ -464,7 +485,7 @@ impl sl_ast::ASTRewriter<(&DwarfCtx, &str, &mut HashMap<String, sl_ast::VType>)>
                                         vec![rw_opapp],
                                         *out_type.clone(),
                                     )
-                                },
+                                }
                                 _ => sl_ast::VExpr::OpApp(rw_op, rw_exprs, rw_typ),
                             },
                             _ => panic!("Expected array type for variable {:?}", rw_exprs[0]),

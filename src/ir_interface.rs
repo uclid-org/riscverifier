@@ -1,13 +1,6 @@
-use std::{
-    collections::HashSet,
-    fmt,
-    rc::Rc,
-};
+use std::{collections::HashSet, fmt, rc::Rc};
 
-use asts::{
-    spec_lang::sl_ast,
-    veriv_ast as ast,
-};
+use asts::{spec_lang::sl_ast, veriv_ast as ast};
 
 use dwarf_ctx::dwarfreader::DwarfCtx;
 
@@ -19,10 +12,10 @@ pub trait IRInterface: fmt::Debug {
     /// Expressions to string functions
     fn expr_to_string(expr: &ast::Expr, xlen: &u64) -> String {
         match expr {
-            ast::Expr::Literal(l, _) => Self::lit_to_string(&l.borrow()),
-            ast::Expr::FuncApp(fapp, _) => Self::fapp_to_string(&fapp.borrow(), xlen),
-            ast::Expr::OpApp(opapp, _) => Self::opapp_to_string(&opapp.borrow(), xlen),
-            ast::Expr::Var(v, _) => Self::var_to_string(&v.borrow()),
+            ast::Expr::Literal(l, _) => Self::lit_to_string(&l),
+            ast::Expr::FuncApp(fapp, _) => Self::fapp_to_string(&fapp, xlen),
+            ast::Expr::OpApp(opapp, _) => Self::opapp_to_string(&opapp, xlen),
+            ast::Expr::Var(v, _) => Self::var_to_string(&v),
         }
     }
     fn opapp_to_string(opapp: &ast::OpApp, xlen: &u64) -> String {
