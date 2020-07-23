@@ -34,6 +34,8 @@ pub mod ir_interface;
 
 pub mod utils;
 
+pub mod model_rewriters;
+
 use std::{
     cell::RefCell,
     collections::{HashMap, HashSet},
@@ -63,40 +65,50 @@ pub fn process_commands() {
         warn!("uclidinterface is hard-coded with 64 bit dependent definitions.");
         panic!("[main] Non-64 bit XLEN is not yet implemented.");
     }
+
     // Parse function blocks from binary
     let binary_paths = matches
         .value_of("binaries")
         .map_or(vec![], |lst| lst.split(",").collect::<Vec<&str>>());
+
     // Disassemble binaries and create basic blocks
     let mut disassembler = Disassembler::new(None, Some("debug_log"));
     let als = disassembler.read_binaries(&binary_paths);
     let bbs = BasicBlock::split(&als);
-    // Module name
+
+    // Get module name
     let module_name = matches.value_of("modname").unwrap_or("main");
+
     // Initialize DWARF reader
     let dwarf_reader: Rc<DwarfReader<CDwarfInterface>> =
         Rc::new(DwarfReader::new(&xlen, &binary_paths).unwrap());
-    // Function to generate
+
+    // Get list of functions to generate
     let func_names = matches
         .value_of("function")
         .map_or(vec![], |lst| lst.split(",").collect::<Vec<&str>>());
-    // Specification
+
+    // Get specification map
     let spec_files = matches
         .value_of("spec")
         .map_or(vec![], |lst| lst.split(",").collect::<Vec<&str>>());
     let specs_map = process_specs(&spec_files, &dwarf_reader.ctx());
+
     // Get ignored functions
     let ignored_funcs = matches
         .value_of("ignore-funcs")
         .map_or(HashSet::new(), |lst| {
             lst.split(",").collect::<HashSet<&str>>()
         });
+
     // Get list of functions to verify
     let verify_funcs = matches
         .value_of("verify-funcs")
         .map_or(vec![], |lst| lst.split(",").collect::<Vec<&str>>());
-    // Flag for ignoring and inlining functions
+
+    // Get flag for ignoring and inlining functions
     let ignore_specs = matches.is_present("ignore-specs");
+
     // Translate and write to output file
     let mut translator: Translator<Uclid5Interface> = Translator::new(
         xlen,
@@ -111,6 +123,10 @@ pub fn process_commands() {
     for func_name in func_names {
         translator.gen_func_model(&func_name);
     }
+
+    // Process models after generation
+    translator.model_post_gen_process();
+
     // Print model to file
     let model_str = translator.print_model();
     if let Some(output_file) = matches.value_of("output") {
@@ -123,6 +139,7 @@ pub fn process_commands() {
             Err(_) => panic!("Unable to write model to {}", output_file),
         }
     }
+
     // Print all specification template
     if let Some(output_file) = matches.value_of("spec_template") {
         let funcs: HashSet<String> = dwarf_reader.ctx().func_sigs().keys().cloned().collect();
@@ -139,6 +156,7 @@ pub fn process_commands() {
             Err(_) => panic!("Unable to write specificaiton template to {}", output_file),
         }
     }
+
     translator.clear();
 }
 
@@ -255,13 +273,16 @@ pub fn process_specs(
 
 /// Iterates over all spec AST passes
 fn sl_bexpr_rewrite_passes(bexpr: sl_ast::BExpr, dwarf_ctx: &DwarfCtx, fname: &str) -> sl_ast::BExpr {
+    let mut rw_bexpr = bexpr;
+
     // Type inference pass. Before the initial pass, we expect the specficiation
     // AST to have Unknown types for all VExpr.
-    let mut rw_bexpr = VExprTypeInference::rewrite_bexpr(bexpr, &RefCell::new((dwarf_ctx, fname, &mut HashMap::new())));
+    rw_bexpr = VExprTypeInference::rewrite_bexpr(rw_bexpr, &RefCell::new((dwarf_ctx, fname, &mut HashMap::new())));
+
     // Rewrite all quantified variable names. Identifiers that are global variables are
     // replaced with a function application and prefix that calls an alias.
     rw_bexpr = RenameGlobals::rewrite_bexpr(rw_bexpr, &RefCell::new(dwarf_ctx));
-    // Return rewritten bexpr
+
     rw_bexpr
 }
 
@@ -270,7 +291,7 @@ fn sl_bexpr_rewrite_passes(bexpr: sl_ast::BExpr, dwarf_ctx: &DwarfCtx, fname: &s
 
 /// AST pass that renames the identifiers for global variables from
 /// Identifiers `name` to FuncApp `global_var_name()`.
-struct RenameGlobals {}
+struct RenameGlobals;
 impl sl_ast::ASTRewriter<&DwarfCtx> for RenameGlobals {
     fn rewrite_vexpr_ident(ident: sl_ast::VExpr, context: &RefCell<&DwarfCtx>) -> sl_ast::VExpr {
         if is_global(&ident, &*context.borrow()) {
@@ -287,10 +308,8 @@ impl sl_ast::ASTRewriter<&DwarfCtx> for RenameGlobals {
 }
 
 /// AST pass that automatically infers and rewrites the type of the VExpr
-struct VExprTypeInference {}
-impl sl_ast::ASTRewriter<(&DwarfCtx, &str, &mut HashMap<String, sl_ast::VType>)>
-    for VExprTypeInference
-{
+struct VExprTypeInference;
+impl sl_ast::ASTRewriter<(&DwarfCtx, &str, &mut HashMap<String, sl_ast::VType>)> for VExprTypeInference {
     /// Add the bound variable to the type map when it's encountered in a quantifier
     fn rewrite_bexpr_boolop(
         vop: sl_ast::BoolOp,

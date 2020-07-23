@@ -3,7 +3,7 @@ use std::{
     collections::{BTreeMap, HashSet},
     fmt,
     cell::RefCell,
-    hash::{Hash, Hasher},
+    hash::Hash,
 };
 
 use crate::spec_lang::sl_ast;
@@ -14,7 +14,7 @@ use crate::spec_lang::sl_ast;
 // =======================================================
 /// ## AST Types
 
-#[derive(PartialEq, Eq, Hash, Clone)]
+#[derive(Debug, PartialEq, Eq, Hash, Clone)]
 pub enum Type {
     Unknown,
     Bool,
@@ -92,35 +92,12 @@ impl fmt::Display for Type {
 /// ## AST Expressions
 
 // TODO: Should we use refcell or &mut for the rewriter here?
-#[derive(PartialEq, Eq, Clone)]
+#[derive(Debug, PartialEq, Eq, Clone, Hash)]
 pub enum Expr {
-    Literal(RefCell<Literal>, Type),
-    Var(RefCell<Var>, Type),
-    OpApp(RefCell<OpApp>, Type),
-    FuncApp(RefCell<FuncApp>, Type),
-}
-
-impl std::hash::Hash for Expr {
-    fn hash<H: Hasher>(&self, state: &mut H) {
-        match self {
-            Self::Literal(c, t) => {
-                c.borrow().hash(state);
-                t.hash(state);
-            }
-            | Self::Var(c, t) => {
-                c.borrow().hash(state);
-                t.hash(state);
-            }
-            | Self::OpApp(c, t) => {
-                c.borrow().hash(state);
-                t.hash(state);                
-            }
-            | Self::FuncApp(c, t) => {
-                c.borrow().hash(state);
-                t.hash(state);
-            }
-        }
-    }
+    Literal(Literal, Type),
+    Var(Var, Type),
+    OpApp(OpApp, Type),
+    FuncApp(FuncApp, Type),
 }
 
 impl Expr {
@@ -134,7 +111,7 @@ impl Expr {
     /// Returns the variable name or panics if it's not a variable.
     pub fn get_var_name(&self) -> String {
         match self {
-            Expr::Var(v, _) => v.borrow().name.clone(),
+            Expr::Var(v, _) => v.name.clone(),
             _ => panic!("Not a variable/constant: {}.", self),
         }
     }
@@ -150,26 +127,26 @@ impl Expr {
 
     /// Returns a bitvector literal of value `val` and width `width`.
     pub fn bv_lit(val: u64, width: u64) -> Self {
-        Expr::Literal(RefCell::new(Literal::Bv { val, width }), Type::Bv { w: width })
+        Expr::Literal(Literal::Bv { val, width }, Type::Bv { w: width })
     }
 
     /// Returns a integer literal of value `val`.
     pub fn int_lit(val: u64) -> Self {
-        Expr::Literal(RefCell::new(Literal::Int { val }), Type::Int)
+        Expr::Literal(Literal::Int { val }, Type::Int)
     }
 
     /// Returns a boolean literal of value `val`.
     pub fn bool_lit(val: bool) -> Self {
-        Expr::Literal(RefCell::new(Literal::Bool { val }), Type::Bool)
+        Expr::Literal(Literal::Bool { val }, Type::Bool)
     }
 
     /// Creates a variable named `name` of type `typ`.
     pub fn var(name: &str, typ: Type) -> Self {
         Expr::Var(
-            RefCell::new(Var {
+            Var {
                 name: name.to_string(),
                 typ: typ.clone(),
-            }),
+            },
             typ.clone(),
         )
     }
@@ -195,16 +172,16 @@ impl Expr {
                 _ => panic!("Can only get field from struct type."),
             },
         };
-        Expr::OpApp(RefCell::new(OpApp { op, operands }), typ)
+        Expr::OpApp(OpApp { op, operands }, typ)
     }
 
     /// Creates a function application expression.
     pub fn func_app(func_name: String, operands: Vec<Self>, typ: Type) -> Self {
         Expr::FuncApp(
-            RefCell::new(FuncApp {
+            FuncApp {
                 func_name,
                 operands,
-            }),
+            },
             typ,
         )
     }
@@ -213,16 +190,16 @@ impl Expr {
 impl fmt::Display for Expr {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            Expr::Literal(l, _) => write!(f, "{}", l.borrow()),
-            Expr::Var(v, _) => write!(f, "{}", v.borrow()),
-            Expr::OpApp(op, _) => write!(f, "{}", op.borrow()),
-            Expr::FuncApp(fapp, _) => write!(f, "{}", fapp.borrow()),
+            Expr::Literal(l, _) => write!(f, "{}", l),
+            Expr::Var(v, _) => write!(f, "{}", v),
+            Expr::OpApp(op, _) => write!(f, "{}", op),
+            Expr::FuncApp(fapp, _) => write!(f, "{}", fapp),
         }
     }
 }
 
 /// Literals
-#[derive(PartialEq, Eq, Hash, Clone)]
+#[derive(Debug, PartialEq, Eq, Hash, Clone)]
 pub enum Literal {
     Bv { val: u64, width: u64 },
     Bool { val: bool },
@@ -240,7 +217,7 @@ impl fmt::Display for Literal {
 }
 
 /// Variable
-#[derive(PartialEq, Eq, Hash, Clone)]
+#[derive(Debug, PartialEq, Eq, Hash, Clone)]
 pub struct Var {
     pub name: String,
     pub typ: Type,
@@ -265,7 +242,7 @@ impl fmt::Display for Var {
 }
 
 // Operator application
-#[derive(PartialEq, Eq, Hash, Clone)]
+#[derive(Debug, PartialEq, Eq, Hash, Clone)]
 pub struct OpApp {
     pub op: Op,
     pub operands: Vec<Expr>,
@@ -334,7 +311,7 @@ pub enum BoolOp {
 }
 
 /// Function application
-#[derive(PartialEq, Eq, Hash, Clone)]
+#[derive(Debug, PartialEq, Eq, Hash, Clone)]
 pub struct FuncApp {
     pub func_name: String,
     pub operands: Vec<Expr>,
@@ -350,15 +327,7 @@ impl fmt::Display for FuncApp {
 }
 
 // =======================================================
-/// ## AST Expression Rewriter
-
-pub trait ASTRewriter<C> {
-    // Expr
-}
-
-// =======================================================
 /// ## AST Statements
-
 #[derive(Clone)]
 pub enum Stmt {
     Assume(Expr),
@@ -548,5 +517,182 @@ impl Model {
         for v in vars.iter() {
             self.add_var(v.clone());
         }
+    }
+}
+
+// ==================================================================
+// # VERI-V AST Rewriter
+
+pub trait ASTRewriter<C> {
+    // Expr
+    fn rewrite_expr(expr: Expr, context: &RefCell<C>) -> Expr {
+        use Expr::*;
+        match expr {
+            Literal(_, _) => Self::rewrite_expr_literal(expr, context),
+            Var(_, _) => Self::rewrite_expr_var(expr, context),
+            OpApp(_, _) => Self::rewrite_expr_opapp(expr, context),
+            FuncApp(_, _) => Self::rewrite_expr_funcapp(expr, context),
+        }
+    }
+
+    fn rewrite_expr_literal(expr: Expr, context: &RefCell<C>) -> Expr {
+        match expr {
+            Expr::Literal(lit, typ) => {
+                let rw_lit = Self::rewrite_literal(lit, context);
+                let rw_typ = Self::rewrite_type(typ, context);
+                Expr::Literal(rw_lit, rw_typ)
+            },
+            _ => panic!("Expected Expr::Literal."),
+        }
+    }
+
+    fn rewrite_expr_var(expr: Expr, context: &RefCell<C>) -> Expr {
+        match expr {
+            Expr::Var(var, typ) => {
+                let rw_var = Self::rewrite_var(var, context);
+                let rw_typ = Self::rewrite_type(typ, context);
+                Expr::Var(rw_var, rw_typ)
+            },
+            _ => panic!("Expected Expr::Var."),
+        }
+    }
+
+    fn rewrite_expr_opapp(expr: Expr, context: &RefCell<C>) -> Expr {
+        match expr {
+            Expr::OpApp(opapp, typ) => {
+                let rw_opapp = Self::rewrite_opapp(opapp, context);
+                let rw_typ = Self::rewrite_type(typ, context);
+                Expr::OpApp(rw_opapp, rw_typ)
+            },
+            _ => panic!("Expected Expr::OpApp."),
+        }
+    }
+
+    fn rewrite_expr_funcapp(expr: Expr, context: &RefCell<C>) -> Expr {
+        match expr {
+            Expr::FuncApp(funcapp, typ) => {
+                let rw_funcapp = Self::rewrite_funcapp(funcapp, context);
+                let rw_typ = Self::rewrite_type(typ, context);
+                Expr::FuncApp(rw_funcapp, rw_typ)
+            },
+            _ => panic!("Expected Expr::FuncApp"),
+        }
+    }
+
+    // Type
+    fn rewrite_type(typ: Type, _context: &RefCell<C>) -> Type {
+        typ
+    }
+
+    // Literal
+    fn rewrite_literal(lit: Literal, _context: &RefCell<C>) -> Literal {
+        lit
+    }
+
+    // Var
+    fn rewrite_var(var: Var, _context: &RefCell<C>) -> Var {
+        var
+    }
+
+    // OpApp
+    fn rewrite_opapp(opapp: OpApp, context: &RefCell<C>) -> OpApp {
+        let rw_op = Self::rewrite_op(opapp.op, context);
+        let rw_operands = opapp.operands.into_iter().map(|expr| Self::rewrite_expr(expr, context)).collect::<Vec<_>>();
+        OpApp { op: rw_op, operands: rw_operands }
+    }
+
+    // Op
+    fn rewrite_op(op: Op, _context: &RefCell<C>) -> Op {
+        op
+    }
+
+    // FuncApp
+    fn rewrite_funcapp(funcapp: FuncApp, _context: &RefCell<C>) -> FuncApp {
+        funcapp
+    }
+
+    // Statements
+    fn rewrite_stmt(stmt: Stmt, context: &RefCell<C>) -> Stmt {
+        use Stmt::*;
+        match stmt {
+            Assume(_) => Self::rewrite_stmt_assume(stmt, context),
+            FuncCall(_) => Self::rewrite_stmt_funccall(stmt, context),
+            Assign(_) => Self::rewrite_stmt_assign(stmt, context),
+            IfThenElse(_) => Self::rewrite_stmt_ifthenelse(stmt, context),
+            Block(_) => Self::rewrite_stmt_block(stmt, context),
+            Comment(_) => stmt,
+        }
+    }
+
+    fn rewrite_stmt_assume(stmt: Stmt, context: &RefCell<C>) -> Stmt {
+        match stmt {
+            Stmt::Assume(expr) => {
+                let rw_expr = Self::rewrite_expr(expr, context);
+                Stmt::Assume(rw_expr)
+            },
+            _ => panic!("Expected Stmt::Assume."),
+        }
+    }
+
+    fn rewrite_stmt_funccall(stmt: Stmt, context: &RefCell<C>) -> Stmt {
+        match stmt {
+            Stmt::FuncCall(funccall) => {
+                let rw_lhs = funccall.lhs.into_iter().map(|expr| Self::rewrite_expr(expr, context)).collect::<Vec<_>>();
+                let rw_operands = funccall.operands.into_iter().map(|expr| Self::rewrite_expr(expr, context)).collect::<Vec<_>>();
+                Stmt::FuncCall(FuncCall { lhs: rw_lhs, operands: rw_operands, ..funccall })
+            },
+            _ => panic!("Expected Expr::FuncCall."),
+        }
+    }
+
+    fn rewrite_stmt_assign(stmt: Stmt, context: &RefCell<C>) -> Stmt {
+        match stmt {
+            Stmt::Assign(assign) => {
+                let rw_lhs = assign.lhs.into_iter().map(|expr| Self::rewrite_expr(expr, context)).collect::<Vec<_>>();
+                let rw_rhs = assign.rhs.into_iter().map(|expr| Self::rewrite_expr(expr, context)).collect::<Vec<_>>();
+                Stmt::Assign(Assign { lhs: rw_lhs, rhs: rw_rhs })
+            },
+            _ => panic!("Expected Stmt::Assign."),
+        }
+    }
+
+    fn rewrite_stmt_ifthenelse(stmt: Stmt, context: &RefCell<C>) -> Stmt {
+        match stmt {
+            Stmt::IfThenElse(ite) => {
+                let rw_cond = Self::rewrite_expr(ite.cond, context);
+                let rw_then_stmt = Box::new(Self::rewrite_stmt(*ite.then_stmt.clone(), context));
+                let rw_else_stmt = ite.else_stmt.map(|stmt_| Box::new(Self::rewrite_stmt(*stmt_.clone(), context)));
+                Stmt::IfThenElse(IfThenElse { cond: rw_cond, then_stmt: rw_then_stmt, else_stmt: rw_else_stmt })
+            },
+            _ => panic!("Expected Stmt::IfThenElse."), 
+        }
+    }
+
+    fn rewrite_stmt_block(stmt: Stmt, context: &RefCell<C>) -> Stmt {
+        match stmt {
+            Stmt::Block(stmts) => {
+                let rw_stmts = stmts
+                    .into_iter()
+                    .map(|stmt_| Box::new(Self::rewrite_stmt(*stmt_.clone(), context)))
+                    .collect::<Vec<_>>();
+                Stmt::Block(rw_stmts)
+            },
+            _ => panic!("Expected Stmt::Block"),
+        }
+    }
+
+    // FuncModel
+    fn rewrite_funcmodel(funcmodel: FuncModel, context: &RefCell<C>) -> FuncModel {
+        let rw_body = Self::rewrite_stmt(funcmodel.body, context);
+        FuncModel { body: rw_body, ..funcmodel}
+    }
+
+    fn rewrite_model(model: Model, context: &RefCell<C>) -> Model {
+        let rw_func_models = model
+            .func_models
+            .into_iter()
+            .map(|func_model| Self::rewrite_funcmodel(func_model, context))
+            .collect::<Vec<_>>();
+        Model { func_models: rw_func_models, ..model }
     }
 }

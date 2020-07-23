@@ -1,10 +1,10 @@
 use std::{
     boxed::Box,
-    cell::RefCell,
     collections::HashSet,
     collections::{BTreeMap, HashMap},
     marker::PhantomData,
     rc::Rc,
+    cell::RefCell,
 };
 
 use topological_sort::TopologicalSort;
@@ -18,6 +18,7 @@ use rv_model::system_model;
 use crate::{
     datastructures::cfg, disassembler::disassembler, disassembler::disassembler::Inst,
     ir_interface::IRInterface,
+    model_rewriters::test_pass::TestPass,
 };
 
 // ================================================================================
@@ -384,7 +385,7 @@ where
                     .iter()
                     .map(|e| match e {
                         // Either the LHS is a register, returned, pc, etc
-                        Expr::Var(v, _) => v.borrow().name.clone(),
+                        Expr::Var(v, _) => v.name.clone(),
                         // Or memory (for stores)
                         _ => system_model::MEM_VAR.to_string(),
                     })
@@ -503,7 +504,7 @@ where
             Op::Comp(CompOp::Equality),
             vec![
                 Expr::Var(
-                    RefCell::new(system_model::pc_var(self.xlen)),
+                    system_model::pc_var(self.xlen),
                     system_model::bv_type(self.xlen),
                 ),
                 Expr::bv_lit(*entry, self.xlen),
@@ -1055,5 +1056,13 @@ where
             _ => false,
         };
         self.filter_from_spec_map(func_name, sfilter)
+    }
+
+    // =============================================================================================
+    // Passes
+
+    /// Optional post model generation processes via ASTRewriter passes
+    pub fn model_post_gen_process(&mut self) {
+        // self.model = TestPass::rewrite_model(self.model.clone(), &RefCell::new(()));
     }
 }
