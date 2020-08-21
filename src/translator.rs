@@ -241,6 +241,8 @@ where
 
         // Get the function cfg
         let func_cfg = self.get_func_cfg(func_entry);
+        func_cfg.print();
+        func_cfg.print_edges();
 
         // ======= State variables ====================================
         // FIXME: Remove these later; these variables should be predefined in the rv_model library

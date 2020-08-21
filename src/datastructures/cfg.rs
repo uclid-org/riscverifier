@@ -112,6 +112,7 @@ where
         seen_nodes.remove(current_node);
         None
     }
+
     /// Prints the CFG in a more readable format to debugging info
     pub fn print(&self) {
         info!(
@@ -122,6 +123,19 @@ where
             info!("-----> CfgNode entry address: {:#x?} <------", addr);
             for al in cfg_node.into_iter() {
                 info!("{}", al.to_string());
+            }
+        }
+    }
+
+    /// Prints the CFG edges
+    pub fn print_edges(&self) {
+        info!("=========== CFG edges for {} ==========", self.entry_addr);
+        for (addr, cfg_node) in self.nodes() {
+            for succ in cfg_node.exit().successors() {
+                info!("({}, {}),", cfg_node.entry().address(), succ);
+            }
+            if cfg_node.exit().is_ind_jump() {
+                info!("({}, {}),", cfg_node.entry().address(), 0);
             }
         }
     }

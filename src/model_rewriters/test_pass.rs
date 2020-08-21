@@ -11,7 +11,7 @@ impl veriv_ast::ASTRewriter<()> for TestPass {
                 let rw_typ = Type::Int;
                 Expr::Literal(rw_lit, rw_typ)
             },
-            _ => panic!("Expected Expr::Literal."),
+            _ => expr,
         }
     }
 }
