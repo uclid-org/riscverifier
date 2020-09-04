@@ -34,6 +34,31 @@ pub enum Type {
 }
 
 impl Type {
+    pub fn mk_unknown_type() -> Self {
+        Type::Unknown
+    }
+    pub fn mk_bool_type() -> Self {
+        Type::Bool
+    }
+    pub fn mk_int_type() -> Self {
+        Type::Int
+    }
+    pub fn mk_bv_type(w: u64) -> Self {
+        Type::Bv {
+            w
+        }
+    }
+    pub fn mk_array_type(in_typs: Vec<Box<Type>>, out_typ: Box<Type>) -> Self {
+        Type::Array {
+            in_typs,
+            out_typ
+        }
+    }
+    pub fn mk_struct_type(id: String, fields: BTreeMap<String, Box<Type>>, w: u64) -> Self {
+        Type::Struct {
+            id, fields, w
+        }
+    }
     pub fn get_expect_bv_width(&self) -> u64 {
         match self {
             Type::Bv { w } => *w,
