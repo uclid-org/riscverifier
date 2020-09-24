@@ -15,6 +15,11 @@ pub const MEM_VAR_B: &'static str = "mem_b";
 pub const MEM_VAR_H: &'static str = "mem_h";
 pub const MEM_VAR_W: &'static str = "mem_w";
 pub const MEM_VAR_D: &'static str = "mem_d";
+pub const HIT_VAR_B: &'static str = "hit_b";
+pub const HIT_VAR_H: &'static str = "hit_h";
+pub const HIT_VAR_W: &'static str = "hit_w";
+pub const HIT_VAR_D: &'static str = "hit_d";
+pub const HIT_VAR: &'static str = "hit";
 pub const PRIV_VAR: &'static str = "current_priv";
 pub const A0: &'static str = "a0";
 pub const SP: &'static str = "sp";
@@ -65,6 +70,19 @@ pub fn mem_b_var(xlen: u64) -> Var {
     }
 }
 
+/// Helper function that returns the hit memory expression for double type
+pub fn hit_b_var(xlen: u64) -> Var {
+    Var {
+        name: HIT_VAR_B.to_string(),
+        typ: hit_type(xlen),
+    }
+}
+
+/// Helper function that returns the hit memory expression for double type
+pub fn hit_b_expr(xlen: u64) -> Expr {
+    Expr::var(HIT_VAR_B, hit_type(xlen))
+}
+
 /// Helper function that returns the memory expression
 pub fn mem_b_expr(xlen: u64) -> Expr {
     Expr::var(MEM_VAR_B, mem_b_type(xlen))
@@ -84,6 +102,19 @@ pub fn mem_h_var(xlen: u64) -> Var {
         name: MEM_VAR_H.to_string(),
         typ: mem_h_type(xlen),
     }
+}
+
+/// Helper function that returns the hit memory expression for double type
+pub fn hit_h_var(xlen: u64) -> Var {
+    Var {
+        name: HIT_VAR_H.to_string(),
+        typ: hit_type(xlen),
+    }
+}
+
+/// Helper function that returns the hit memory expression for double type
+pub fn hit_h_expr(xlen: u64) -> Expr {
+    Expr::var(HIT_VAR_H, hit_type(xlen))
 }
 
 /// Helper function that returns the memory expression
@@ -108,6 +139,19 @@ pub fn mem_w_var(xlen: u64) -> Var {
     }
 }
 
+/// Helper function that returns the hit memory expression for double type
+pub fn hit_w_var(xlen: u64) -> Var {
+    Var {
+        name: HIT_VAR_W.to_string(),
+        typ: hit_type(xlen),
+    }
+}
+
+/// Helper function that returns the hit memory expression for double type
+pub fn hit_w_expr(xlen: u64) -> Expr {
+    Expr::var(HIT_VAR_W, hit_type(xlen))
+}
+
 /// Helper function that returns the memory expression
 pub fn mem_w_expr(xlen: u64) -> Expr {
     Expr::var(MEM_VAR_W, mem_w_type(xlen))
@@ -129,6 +173,20 @@ pub fn mem_d_var(xlen: u64) -> Var {
     }
 }
 
+/// Helper function that returns the hit memory expression for double type
+pub fn hit_d_var(xlen: u64) -> Var {
+    Var {
+        name: HIT_VAR_D.to_string(),
+        typ: hit_type(xlen),
+    }
+}
+
+/// Helper function that returns the hit memory expression for double type
+pub fn hit_d_expr(xlen: u64) -> Expr {
+    Expr::var(HIT_VAR_D, hit_type(xlen))
+}
+
+
 /// Helper function that returns the memory expression
 pub fn mem_d_expr(xlen: u64) -> Expr {
     Expr::var(MEM_VAR_D, mem_d_type(xlen))
@@ -142,6 +200,27 @@ pub fn mem_d_type(xlen: u64) -> Type {
     }
 }
 
+/// Helper function that returns the hit memory expression for double type
+pub fn hit_var(xlen: u64) -> Var {
+    Var {
+        name: HIT_VAR.to_string(),
+        typ: hit_type(xlen),
+    }
+}
+
+/// Helper function that returns the hit memory expression for double type
+pub fn hit_expr(xlen: u64) -> Expr {
+    Expr::var(HIT_VAR, hit_type(xlen))
+}
+
+/// Hit array type
+/// The array holds a bit that is true if the address has been written to
+pub fn hit_type(xlen: u64) -> Type {
+    Type::Array {
+        in_typs: vec![Box::new(bv_type(xlen))],
+        out_typ: Box::new(Type::Bool),
+    }
+}
 
 /// Privilege state variable
 pub fn priv_var() -> Var {
@@ -170,9 +249,18 @@ pub fn sys_state_vars(xlen: u64) -> HashSet<Var> {
     vec_var.insert(mem_h_var(xlen));
     vec_var.insert(mem_w_var(xlen));
     vec_var.insert(mem_d_var(xlen));
+    vec_var.insert(hit_b_var(xlen));
+    vec_var.insert(hit_h_var(xlen));
+    vec_var.insert(hit_w_var(xlen));
+    vec_var.insert(hit_d_var(xlen));
+    vec_var.insert(hit_var(xlen));
     vec_var.insert(priv_var());
     vec_var
 }
+
+// ========================================================================
+/// # Preconditions
+
 
 // ========================================================================
 /// # RISC-V Instruction Semantics
@@ -564,6 +652,22 @@ pub fn lb_inst(rd: Expr, rs1: Expr, imm: Expr, xlen: u64) -> Stmt {
     let mut stmts = vec![];
     stmts.push(Stmt::Comment(format!("lb {}, {}, {}", rd, rs1, imm)));
     let addr = Expr::op_app(Op::Bv(BVOp::Add), vec![rs1, imm]);
+    stmts.push(Stmt::Assert(
+        Expr::op_app(Op::Bool(BoolOp::Impl), vec![
+            Expr::op_app(Op::ArrayIndex, 
+                vec![
+                    hit_expr(xlen),
+                    addr.clone(),
+                ]
+            ),
+            Expr::op_app(Op::ArrayIndex, 
+                vec![
+                    hit_d_expr(xlen),
+                    addr.clone(),
+                ]
+            ),
+        ])
+    ));
     let ret = Expr::op_app(
         Op::Bv(BVOp::SignExt),
         vec![
@@ -581,6 +685,22 @@ pub fn lh_inst(rd: Expr, rs1: Expr, imm: Expr, xlen: u64) -> Stmt {
     let mut stmts = vec![];
     stmts.push(Stmt::Comment(format!("lh {}, {}, {}", rd, rs1, imm)));
     let addr = Expr::op_app(Op::Bv(BVOp::Add), vec![rs1, imm]);
+    stmts.push(Stmt::Assert(
+        Expr::op_app(Op::Bool(BoolOp::Impl), vec![
+            Expr::op_app(Op::ArrayIndex, 
+                vec![
+                    hit_expr(xlen),
+                    addr.clone(),
+                ]
+            ),
+            Expr::op_app(Op::ArrayIndex, 
+                vec![
+                    hit_d_expr(xlen),
+                    addr.clone(),
+                ]
+            ),
+        ])
+    ));
     let ret = Expr::op_app(
         Op::Bv(BVOp::SignExt),
         vec![
@@ -616,6 +736,22 @@ pub fn lbu_inst(rd: Expr, rs1: Expr, imm: Expr, xlen: u64) -> Stmt {
     let mut stmts = vec![];
     stmts.push(Stmt::Comment(format!("lbu {}, {}, {}", rd, rs1, imm)));
     let addr = Expr::op_app(Op::Bv(BVOp::Add), vec![rs1, imm]);
+    stmts.push(Stmt::Assert(
+        Expr::op_app(Op::Bool(BoolOp::Impl), vec![
+            Expr::op_app(Op::ArrayIndex, 
+                vec![
+                    hit_expr(xlen),
+                    addr.clone(),
+                ]
+            ),
+            Expr::op_app(Op::ArrayIndex, 
+                vec![
+                    hit_d_expr(xlen),
+                    addr.clone(),
+                ]
+            ),
+        ])
+    ));
     let ret = Expr::op_app(
         Op::Bv(BVOp::ZeroExt),
         vec![
@@ -634,6 +770,22 @@ pub fn lhu_inst(rd: Expr, rs1: Expr, imm: Expr, xlen: u64) -> Stmt {
     let mut stmts = vec![];
     stmts.push(Stmt::Comment(format!("lhu {}, {}, {}", rd, rs1, imm)));
     let addr = Expr::op_app(Op::Bv(BVOp::Add), vec![rs1, imm]);
+    stmts.push(Stmt::Assert(
+        Expr::op_app(Op::Bool(BoolOp::Impl), vec![
+            Expr::op_app(Op::ArrayIndex, 
+                vec![
+                    hit_expr(xlen),
+                    addr.clone(),
+                ]
+            ),
+            Expr::op_app(Op::ArrayIndex, 
+                vec![
+                    hit_d_expr(xlen),
+                    addr.clone(),
+                ]
+            ),
+        ])
+    ));
     let ret = Expr::op_app(
         Op::Bv(BVOp::ZeroExt),
         vec![
@@ -807,6 +959,22 @@ pub fn lwu_inst(rd: Expr, rs1: Expr, imm: Expr, xlen: u64) -> Stmt {
     let mut stmts = vec![];
     stmts.push(Stmt::Comment(format!("lwu {}, {}, {}", rd, rs1, imm)));
     let addr = Expr::op_app(Op::Bv(BVOp::Add), vec![rs1, imm]);
+    stmts.push(Stmt::Assert(
+        Expr::op_app(Op::Bool(BoolOp::Impl), vec![
+            Expr::op_app(Op::ArrayIndex, 
+                vec![
+                    hit_expr(xlen),
+                    addr.clone(),
+                ]
+            ),
+            Expr::op_app(Op::ArrayIndex, 
+                vec![
+                    hit_w_expr(xlen),
+                    addr.clone(),
+                ]
+            ),
+        ])
+    ));
     let ret = Expr::op_app(
         Op::Bv(BVOp::ZeroExt),
         vec![
@@ -824,7 +992,23 @@ pub fn ld_inst(rd: Expr, rs1: Expr, imm: Expr, xlen: u64) -> Stmt {
     let mut stmts = vec![];
     stmts.push(Stmt::Comment(format!("ld {}, {}, {}", rd, rs1, imm)));
     let addr = Expr::op_app(Op::Bv(BVOp::Add), vec![rs1, imm]);
-    let ret = load_double(addr, xlen);
+    stmts.push(Stmt::Assert(
+        Expr::op_app(Op::Bool(BoolOp::Impl), vec![
+            Expr::op_app(Op::ArrayIndex, 
+                vec![
+                    hit_expr(xlen),
+                    addr.clone(),
+                ]
+            ),
+            Expr::op_app(Op::ArrayIndex, 
+                vec![
+                    hit_d_expr(xlen),
+                    addr.clone(),
+                ]
+            ),
+        ])
+    ));
+    let ret = load_double(addr.clone(), xlen);
     stmts.push(Stmt::assign(vec![rd], vec![ret]));
     stmts.push(update_pc(xlen));
     Stmt::Block(stmts.iter().map(|x| Box::new(x.clone())).collect())
@@ -928,12 +1112,34 @@ pub fn sb_inst(rs1: Expr, imm: Expr, rs2: Expr, xlen: u64) -> Stmt {
         Op::ArrayIndex,
         vec![
             mem_b_expr(xlen),
-            Expr::op_app(Op::Bv(BVOp::Add), vec![rs1, imm]),
+            Expr::op_app(Op::Bv(BVOp::Add), vec![rs1.clone(), imm.clone()]),
         ],
     );
     stmts.push(Stmt::assign(
         vec![mem_indexed],
         vec![Expr::op_app(Op::Bv(BVOp::Slice { l: 7, r: 0 }), vec![rs2])],
+    ));
+    let hit_indexed = Expr::op_app(
+        Op::ArrayIndex,
+        vec![
+            hit_expr(xlen),
+            Expr::op_app(Op::Bv(BVOp::Add), vec![rs1.clone(), imm.clone()]),
+        ],
+    );
+    stmts.push(Stmt::assign(
+        vec![hit_indexed],
+        vec![Expr::bool_lit(true)]
+    ));
+    let hit_b_indexed = Expr::op_app(
+        Op::ArrayIndex,
+        vec![
+            hit_b_expr(xlen),
+            Expr::op_app(Op::Bv(BVOp::Add), vec![rs1.clone(), imm.clone()]),
+        ],
+    );
+    stmts.push(Stmt::assign(
+        vec![hit_b_indexed],
+        vec![Expr::bool_lit(true)]
     ));
     stmts.push(update_pc(xlen));
     Stmt::Block(stmts.iter().map(|x| Box::new(x.clone())).collect())
@@ -957,6 +1163,28 @@ pub fn sh_inst(rs1: Expr, imm: Expr, rs2: Expr, xlen: u64) -> Stmt {
             vec![rs2.clone()],
         )],
     ));
+    let hit_indexed = Expr::op_app(
+        Op::ArrayIndex,
+        vec![
+            hit_expr(xlen),
+            Expr::op_app(Op::Bv(BVOp::Add), vec![rs1.clone(), imm.clone()]),
+        ],
+    );
+    stmts.push(Stmt::assign(
+        vec![hit_indexed],
+        vec![Expr::bool_lit(true)]
+    ));
+    let hit_h_indexed = Expr::op_app(
+        Op::ArrayIndex,
+        vec![
+            hit_h_expr(xlen),
+            Expr::op_app(Op::Bv(BVOp::Add), vec![rs1.clone(), imm.clone()]),
+        ],
+    );
+    stmts.push(Stmt::assign(
+        vec![hit_h_indexed],
+        vec![Expr::bool_lit(true)]
+    ));
     stmts.push(update_pc(xlen));
     Stmt::Block(stmts.iter().map(|x| Box::new(x.clone())).collect())
 }
@@ -979,6 +1207,28 @@ pub fn sw_inst(rs1: Expr, imm: Expr, rs2: Expr, xlen: u64) -> Stmt {
             vec![rs2.clone()],
         )],
     ));
+    let hit_indexed = Expr::op_app(
+        Op::ArrayIndex,
+        vec![
+            hit_expr(xlen),
+            Expr::op_app(Op::Bv(BVOp::Add), vec![rs1.clone(), imm.clone()]),
+        ],
+    );
+    stmts.push(Stmt::assign(
+        vec![hit_indexed],
+        vec![Expr::bool_lit(true)]
+    ));
+    let hit_w_indexed = Expr::op_app(
+        Op::ArrayIndex,
+        vec![
+            hit_w_expr(xlen),
+            Expr::op_app(Op::Bv(BVOp::Add), vec![rs1.clone(), imm.clone()]),
+        ],
+    );
+    stmts.push(Stmt::assign(
+        vec![hit_w_indexed],
+        vec![Expr::bool_lit(true)]
+    ));
     stmts.push(update_pc(xlen));
     Stmt::Block(stmts.iter().map(|x| Box::new(x.clone())).collect())
 }
@@ -1000,6 +1250,28 @@ pub fn sd_inst(rs1: Expr, imm: Expr, rs2: Expr, xlen: u64) -> Stmt {
             Op::Bv(BVOp::Slice { l: 63, r: 0 }),
             vec![rs2.clone()],
         )],
+    ));
+    let hit_indexed = Expr::op_app(
+        Op::ArrayIndex,
+        vec![
+            hit_expr(xlen),
+            Expr::op_app(Op::Bv(BVOp::Add), vec![rs1.clone(), imm.clone()]),
+        ],
+    );
+    stmts.push(Stmt::assign(
+        vec![hit_indexed],
+        vec![Expr::bool_lit(true)]
+    ));
+    let hit_d_indexed = Expr::op_app(
+        Op::ArrayIndex,
+        vec![
+            hit_d_expr(xlen),
+            Expr::op_app(Op::Bv(BVOp::Add), vec![rs1.clone(), imm.clone()]),
+        ],
+    );
+    stmts.push(Stmt::assign(
+        vec![hit_d_indexed],
+        vec![Expr::bool_lit(true)]
     ));
     stmts.push(update_pc(xlen));
     Stmt::Block(stmts.iter().map(|x| Box::new(x.clone())).collect())

@@ -537,6 +537,7 @@ impl IRInterface for Uclid5Interface {
     /// Statements to string
     fn stmt_to_string(stmt: &Stmt, xlen: &u64) -> String {
         match stmt {
+            Stmt::Assert(expr) => Self::assert_to_string(&expr, xlen),
             Stmt::Assume(expr) => Self::assume_to_string(&expr, xlen),
             Stmt::FuncCall(fc) => Self::func_call_to_string(&fc, xlen),
             Stmt::Assign(assign) => Self::assign_to_string(&assign, xlen),

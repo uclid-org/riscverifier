@@ -337,6 +337,7 @@ pub trait ASTRewriter<C> {
 #[derive(Clone)]
 pub enum Stmt {
     Assume(Expr),
+    Assert(Expr),
     FuncCall(FuncCall),
     Assign(Assign),
     IfThenElse(IfThenElse),
