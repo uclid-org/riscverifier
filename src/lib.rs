@@ -145,6 +145,7 @@ pub fn process_commands() {
 // ===========================================================================================
 /// # Command Line Interface
 
+/// Returns options App struct for the VERI-V tool
 fn cl_options<'t, 's>() -> App<'t, 's> {
     App::new("RISCVerifier")
         .version("1.0")
@@ -226,6 +227,13 @@ fn cl_options<'t, 's>() -> App<'t, 's> {
 // ====================================================================================================
 /// # Specifications
 
+/// Returns a map from function names to a vector of specifications
+///
+/// # Arguments
+///
+/// * `spec_files` - String of filenames containing specifications
+///
+/// * `dwarf_ctx` - DWARF context containing debugging information from the binary
 pub fn process_specs(
     spec_files: &Vec<&str>,
     dwarf_ctx: &DwarfCtx,
@@ -270,9 +278,11 @@ fn sl_bexpr_rewrite_passes(
         bexpr,
         &RefCell::new((dwarf_ctx, fname, &mut HashMap::new())),
     );
+
     // Rewrite all quantified variable names. Identifiers that are global variables are
     // replaced with a function application and prefix that calls an alias.
     rw_bexpr = RenameGlobals::rewrite_bexpr(rw_bexpr, &RefCell::new(dwarf_ctx));
+
     // Return rewritten bexpr
     rw_bexpr
 }
