@@ -1178,10 +1178,15 @@ impl ConstantPropagator {
          }
     }
 
+    /// Replaces variables with contants (via constant propagation map) and returns the constant folded expression
+    fn try_make_constant(expr: Expr, ctx: &RefCell<&mut HashMap<String, u64>>) -> Expr {
+        let constified_expr = Self::constified_expr(expr, ctx);
+        Self::constant_fold(constified_expr)
+    }
+
     /// Updates the constant map
     fn constant_propagate(id: String, expr: Expr, ctx: &RefCell<&mut HashMap<String, u64>>) -> Expr {
-        let constified_expr = Self::constified_expr(expr, ctx);
-        let folded_expr = Self::constant_fold(constified_expr);
+        let folded_expr = Self::try_make_constant(expr, ctx);
         match folded_expr {
             Expr::Literal(_, _) => {
                 let mut context = ctx.borrow_mut();
@@ -1199,9 +1204,30 @@ impl ASTRewriter<&mut HashMap<String, u64>> for ConstantPropagator {
         let mut rw_rhss: Vec<Expr> = vec![];
         for (l, r) in lhs.into_iter().zip(rhs) {
             let (rw_lhs, rw_rhs) = match &l {
+                // when the LHS is just a variable, constant propagate the RHS to the LHS variable
                 Expr::Var(var, _) => {
                     let rw_r = Self::constant_propagate(var.name.to_string(), r, ctx);
                     (l, rw_r)
+                }
+                // when the LHS is an array access, fold both the RHS and LHS (no constant propagation)
+                Expr::OpApp(opapp, _) => {
+                    let OpApp { op, operands: _ } = &opapp;
+                    match op {
+                        // check it's an array index
+                        Op::ArrayIndex => {
+                            match opapp.get_array_index() {
+                                Some(index) => {
+                                    let folded_index = Self::try_make_constant(index.clone(), ctx);
+                                    let array = opapp.get_array_expr().expect("Left hand side should be an array.");
+                                    let rw_l = Expr::op_app(Op::ArrayIndex, vec![array.clone(), folded_index]);
+                                    let rw_r = Self::try_make_constant(r, ctx);
+                                    (rw_l, rw_r)
+                                }
+                                None => panic!("Left hand side of an assignment should be an array."),
+                            }
+                        }
+                        _ => (l, r)
+                    } 
                 }
                 _ => (l, r)
             };
@@ -1212,17 +1238,27 @@ impl ASTRewriter<&mut HashMap<String, u64>> for ConstantPropagator {
     }
 }
 
-// /// Intended for abstracting memory accesses whose addresses are constant, we abstract them as separate variables
-// /// 
-// /// Procedure:
-// ///     1. Constant propagation for all variables
-// ///     2. If a memory access has a constant address AND it is one of the global variable addresses,
-// ///        then replace the memory access with a fresh variable corresponding to that global. Any
-// ///        stores and load to that address will use this fresh variable.
-// ///
-// /// NOTE: This assumes that all memory address computations are within thier own basic block
-// struct DataMemoryAbstractor {}
-// impl ASTRewriter<HashMap<String, u64>> for DataMemoryAbstractor {
+/// Intended for abstracting memory accesses whose addresses are constant, we abstract them as separate variables
+/// 
+/// Procedure:
+///     1. Constant propagation for all variables
+///     2. If a memory access has a constant address AND it is one of the global variable addresses,
+///        then replace the memory access with a fresh variable corresponding to that global. Any
+///        stores and load to that address will use this fresh variable.
+///
+/// NOTE: This assumes that all memory address computations are within thier own basic block
+struct DataMemoryAbstractor {}
+impl ASTRewriter<HashMap<String, u64>> for DataMemoryAbstractor {
+    // / Rewrite all memory assigns to a constant address to the corresponding abstracted variables
+    // fn rewrite_assign(a: Assign, _ctx: &RefCell<C>) -> Assign {
+    //     a
+    // }
 
-// }
+    // /// Rewrite all accesses to a contant address to the corressponding abstracted variable
+    // fn rewrite_opapp(opapp: OpApp, _ctx: &RefCell<C>) -> OpApp {
+    //     match opapp {
+    //         _ => 
+    //     }
+    // }
+}
 

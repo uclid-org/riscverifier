@@ -293,6 +293,24 @@ pub struct OpApp {
     pub operands: Vec<Expr>,
 }
 
+impl OpApp {
+    /// Returns the array variable of the array access
+    pub fn get_array_expr(&self) -> Option<&Expr> {
+        match self.op {
+            Op::ArrayIndex => self.operands.get(0),
+            _ => None,
+        }
+    }
+
+    /// Returns the array index of the array access
+    pub fn get_array_index(&self) -> Option<&Expr> {
+        match self.op {
+            Op::ArrayIndex => self.operands.get(1),
+            _ => None,
+        }
+    }
+}
+
 impl fmt::Display for OpApp {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         let operands = &self.operands.iter().fold("".to_string(), |acc, operand| {
