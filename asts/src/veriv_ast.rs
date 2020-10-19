@@ -124,6 +124,43 @@ impl Expr {
         }
     }
 
+    /// Returns whether the expression is a literal
+    pub fn is_lit(&self) -> bool {
+        match self {
+            Self::Literal(_, _) => true, 
+            _ => false,
+        }
+    }
+
+    /// Returns the literal inside Expr::Literal
+    pub fn get_lit(&self) -> Option<&Literal> {
+        match self {
+            Self::Literal(lit, _) => Some(lit),
+            _ => None,
+        }
+    }
+
+    /// Returns the value of the literal
+    /// Boolean values are encoded as 0 (false) and 1 (true)
+    pub fn get_lit_value(&self) -> Option<u64> {
+        let lit_opt = Self::get_lit(self);
+        lit_opt.map(|lit| {
+            match lit {
+                Literal::Bv { val, width: _ } => *val,
+                Literal::Bool { val } => if *val { 1 } else { 0 },
+                Literal::Int { val } => *val,
+            }
+        })
+    }
+
+    /// Returns the bv width for bv literals
+    pub fn get_expect_bv_width(&self) -> u64 {
+        match self {
+            Expr::Literal(lit, _) => lit.get_expect_bv_width(),
+            _ => panic!("Expression is not bv type."),
+        }
+    }
+
     /// Returns a bitvector literal of value `val` and width `width`.
     pub fn bv_lit(val: u64, width: u64) -> Self {
         Expr::Literal(Literal::Bv { val, width }, Type::Bv { w: width })
@@ -202,7 +239,16 @@ impl fmt::Display for Expr {
 pub enum Literal {
     Bv { val: u64, width: u64 },
     Bool { val: bool },
-    Int { val: u64 },
+    Int { val: u64 },   // TODO: Change this to i64
+}
+
+impl Literal {
+    fn get_expect_bv_width(&self) -> u64 {
+        match self {
+            Self::Bv { val: _, width } => *width,
+            _ => panic!("Tried to get bv width from non-bv literal.")
+        }
+    }
 }
 
 impl fmt::Display for Literal {
@@ -326,144 +372,168 @@ impl fmt::Display for FuncApp {
 }
 
 // =======================================================
-/// ## AST Expression Rewriter
+/// ## AST Expression Visitor
 
 pub trait ASTRewriter<C> {
+    fn rewrite_stmt(stmt: Stmt, _ctx: &RefCell<C>) -> Stmt { stmt }
+    fn rewrite_stmt_assume(stmt: Stmt, _ctx: &RefCell<C>) -> Stmt { stmt }
+    fn rewrite_funccall(fc: FuncCall, _ctx: &RefCell<C>) -> FuncCall { fc }
+    fn rewrite_assign(a: Assign, _ctx: &RefCell<C>) -> Assign { a }
+    fn rewrite_ite(ite: IfThenElse, _ctx: &RefCell<C>) -> IfThenElse { ite }
+    fn rewrite_stmt_block(blk: Stmt, _ctx: &RefCell<C>) -> Stmt { blk }
+
+    fn rewrite_type(typ: Type, _ctx: &RefCell<C>) -> Type { typ }
+    
+    fn rewrite_expr(expr: Expr, _ctx: &RefCell<C>) -> Expr { expr }
+    fn rewrite_lit(lit: Literal, _ctx: &RefCell<C>) -> Literal { lit }
+    fn rewrite_var(var: Var, _ctx: &RefCell<C>) -> Var { var }
+    fn rewrite_opapp(opapp: OpApp, _ctx: &RefCell<C>) -> OpApp { opapp }
+    fn rewrite_op(op: Op, _ctx: &RefCell<C>) -> Op { op }
+    fn rewrite_funcapp(fapp: FuncApp, _ctx: &RefCell<C>) -> FuncApp { fapp }
+
     // Statement rewriters
-    fn rewrite_stmt(stmt: Stmt, ctx: &RefCell<C>) -> Stmt {
-        match stmt {
-            Stmt::Assume(_) => Self::rewrite_stmt_assume(stmt, ctx),
-            Stmt::FuncCall(_) => Self::rewrite_stmt_funccall(stmt, ctx),
-            Stmt::Assign(_) => Self::rewrite_stmt_assign(stmt, ctx),
-            Stmt::IfThenElse(_) => Self::rewrite_stmt_ifthenelse(stmt, ctx),
-            Stmt::Block(_) => Self::rewrite_stmt_block(stmt, ctx),
-            Stmt::Comment(_) => stmt, 
-        }
+    fn visit_stmt(stmt: Stmt, ctx: &RefCell<C>) -> Stmt {
+        let rw_stmt = match stmt {
+            Stmt::Assume(_) => Self::visit_stmt_assume(stmt, ctx),
+            Stmt::FuncCall(_) => Self::visit_stmt_funccall(stmt, ctx),
+            Stmt::Assign(_) => Self::visit_stmt_assign(stmt, ctx),
+            Stmt::IfThenElse(_) => Self::visit_stmt_ifthenelse(stmt, ctx),
+            Stmt::Block(_) => Self::visit_stmt_block(stmt, ctx),
+            Stmt::Comment(_) => stmt,
+        };
+        Self::rewrite_stmt(rw_stmt, ctx)
     }
-    fn rewrite_stmt_assume(stmt: Stmt, ctx: &RefCell<C>) -> Stmt {
-        match stmt {
-            Stmt::Assume(e) => {
-                Stmt::Assume(Self::rewrite_expr(e, ctx))
-            },
+    fn visit_stmt_assume(stmt: Stmt, ctx: &RefCell<C>) -> Stmt {
+        let rw_stmt = match stmt {
+            Stmt::Assume(e) => Stmt::Assume(Self::visit_expr(e, ctx)),
             _ => panic!("Implementation error; Expected assume statement."),
-        }
+        };
+        Self::rewrite_stmt_assume(rw_stmt, ctx)
     }
-    fn rewrite_expr(expr: Expr, ctx: &RefCell<C>) -> Expr {
-        match expr {
-            Expr::Literal(_, _) => Self::rewrite_expr_lit(expr, ctx),
-            Expr::Var(_, _) => Self::rewrite_expr_var(expr, ctx),
-            Expr::OpApp(_, _) => Self::rewrite_expr_opapp(expr, ctx),
-            Expr::FuncApp(_, _) => Self::rewrite_expr_funcapp(expr, ctx),
-        }
+    fn visit_expr(expr: Expr, ctx: &RefCell<C>) -> Expr {
+        let rw_expr = match expr {
+            Expr::Literal(_, _) => Self::visit_expr_lit(expr, ctx),
+            Expr::Var(_, _) => Self::visit_expr_var(expr, ctx),
+            Expr::OpApp(_, _) => Self::visit_expr_opapp(expr, ctx),
+            Expr::FuncApp(_, _) => Self::visit_expr_funcapp(expr, ctx),
+        };
+        Self::rewrite_expr(rw_expr, ctx)
     }
-    fn rewrite_type(typ: Type, _ctx: &RefCell<C>) -> Type {
-        typ
+    fn visit_type(typ: Type, ctx: &RefCell<C>) -> Type {
+        Self::rewrite_type(typ, ctx)
     }
-    fn rewrite_expr_lit(expr: Expr, ctx: &RefCell<C>) -> Expr {
+    fn visit_expr_lit(expr: Expr, ctx: &RefCell<C>) -> Expr {
         match expr {
             Expr::Literal(lit, typ) => {
-                let rw_lit = Self::rewrite_lit(lit, ctx);
-                let rw_typ = Self::rewrite_type(typ, ctx);
+                let rw_lit = Self::visit_lit(lit, ctx);
+                let rw_typ = Self::visit_type(typ, ctx);
                 Expr::Literal(rw_lit, rw_typ)
             }
             _ => panic!("Implementation error; Expected literal."),
         }
     }
-    fn rewrite_lit(lit: Literal, _ctx: &RefCell<C>) -> Literal {
-        lit
+    fn visit_lit(lit: Literal, ctx: &RefCell<C>) -> Literal {
+        Self::rewrite_lit(lit, ctx)
     }
-    fn rewrite_expr_var(expr: Expr, ctx: &RefCell<C>) -> Expr {
+    fn visit_expr_var(expr: Expr, ctx: &RefCell<C>) -> Expr {
         match expr {
             Expr::Var(var, typ) => {
-                let rw_var = Self::rewrite_var(var, ctx);
-                let rw_typ = Self::rewrite_type(typ, ctx);
+                let rw_var = Self::visit_var(var, ctx);
+                let rw_typ = Self::visit_type(typ, ctx);
                 Expr::Var(rw_var, rw_typ)
             }
-            _ => panic!("Imeplementation error; Expected var."),
+            _ => panic!("Implementation error; Expected var."),
         }
+
     }
-    fn rewrite_var(var: Var, _ctx: &RefCell<C>) -> Var {
-        var
+    fn visit_var(var: Var, ctx: &RefCell<C>) -> Var {
+        Self::rewrite_var(var, ctx)
     }
-    fn rewrite_expr_opapp(expr: Expr, ctx: &RefCell<C>) -> Expr {
+    fn visit_expr_opapp(expr: Expr, ctx: &RefCell<C>) -> Expr {
         match expr {
             Expr::OpApp(opapp, typ) => {
-                let rw_opapp = Self::rewrite_opapp(opapp, ctx);
-                let rw_typ = Self::rewrite_type(typ, ctx);
+                let rw_opapp = Self::visit_opapp(opapp, ctx);
+                let rw_typ = Self::visit_type(typ, ctx);
                 Expr::OpApp(rw_opapp, rw_typ)
             },
             _ => panic!("Implementation error; Expected opapp expr."),
-        } 
+        }
     }
-    fn rewrite_opapp(opapp: OpApp, ctx: &RefCell<C>) -> OpApp {
+    fn visit_opapp(opapp: OpApp, ctx: &RefCell<C>) -> OpApp {
         let OpApp { op, operands } = opapp;
-        let rw_op = Self::rewrite_op(op, ctx);
-        let rw_operands = operands.into_iter().map(|operand| Self::rewrite_expr(operand, ctx)).collect::<Vec<_>>();
-        OpApp { op: rw_op, operands: rw_operands }
+        let rw_op = Self::visit_op(op, ctx);
+        let rw_operands = operands.into_iter().map(|operand| Self::visit_expr(operand, ctx)).collect::<Vec<_>>();
+        let rw_opapp = OpApp { op: rw_op, operands: rw_operands };
+        Self::rewrite_opapp(rw_opapp, ctx)
     }
-    fn rewrite_op(op: Op, _ctx: &RefCell<C>) -> Op {
-        op
+    fn visit_op(op: Op, ctx: &RefCell<C>) -> Op {
+        Self::rewrite_op(op, ctx)
     }
-    fn rewrite_expr_funcapp(expr: Expr, ctx: &RefCell<C>) -> Expr {
+    fn visit_expr_funcapp(expr: Expr, ctx: &RefCell<C>) -> Expr {
         match expr {
             Expr::FuncApp(fapp, typ) => {
-                let rw_fapp = Self::rewrite_fapp(fapp, ctx);
-                let rw_typ = Self::rewrite_type(typ, ctx);
+                let rw_fapp = Self::visit_fapp(fapp, ctx);
+                let rw_typ = Self::visit_type(typ, ctx);
                 Expr::FuncApp(rw_fapp, rw_typ)
             }
             _ => panic!("Implementation error; Funcapp expected."),
         }
     }
-    fn rewrite_fapp(fapp: FuncApp, ctx: &RefCell<C>) -> FuncApp {
+    fn visit_fapp(fapp: FuncApp, ctx: &RefCell<C>) -> FuncApp {
         let FuncApp { func_name, operands } = fapp;
-        let rw_operands = operands.into_iter().map(|operand| Self::rewrite_expr(operand, ctx)).collect::<Vec<_>>();
-        FuncApp { func_name: func_name.clone(), operands: rw_operands }
+        let rw_operands = operands.into_iter().map(|operand| Self::visit_expr(operand, ctx)).collect::<Vec<_>>();
+        let rw_fapp = FuncApp { func_name: func_name.clone(), operands: rw_operands };
+        Self::rewrite_funcapp(rw_fapp, ctx)
     }
-    fn rewrite_stmt_funccall(stmt: Stmt, ctx: &RefCell<C>) -> Stmt {
+    fn visit_stmt_funccall(stmt: Stmt, ctx: &RefCell<C>) -> Stmt {
         match stmt {
-            Stmt::FuncCall(fc) => Stmt::FuncCall(Self::rewrite_funccall(fc, ctx)),
+            Stmt::FuncCall(fc) => Stmt::FuncCall(Self::visit_funccall(fc, ctx)),
             _ => panic!("Implementation error; Expected FuncCall."),
         }
     }
-    fn rewrite_funccall(fc: FuncCall, ctx: &RefCell<C>) -> FuncCall {
+    fn visit_funccall(fc: FuncCall, ctx: &RefCell<C>) -> FuncCall {
         let FuncCall { func_name, lhs, operands } = fc;
-        let rw_lhs = lhs.into_iter().map(|e| Self::rewrite_expr(e, ctx)).collect::<Vec<_>>();
-        let rw_operands = operands.into_iter().map(|e| Self::rewrite_expr(e, ctx)).collect::<Vec<_>>();
-        FuncCall { func_name: func_name.clone(), lhs: rw_lhs, operands: rw_operands }
+        let rw_lhs = lhs.into_iter().map(|e| Self::visit_expr(e, ctx)).collect::<Vec<_>>();
+        let rw_operands = operands.into_iter().map(|e| Self::visit_expr(e, ctx)).collect::<Vec<_>>();
+        let rw_funccall = FuncCall { func_name: func_name.clone(), lhs: rw_lhs, operands: rw_operands };
+        Self::rewrite_funccall(rw_funccall, ctx)
     }
-    fn rewrite_stmt_assign(stmt: Stmt, ctx: &RefCell<C>) -> Stmt {
+    fn visit_stmt_assign(stmt: Stmt, ctx: &RefCell<C>) -> Stmt {
         match stmt {
-            Stmt::Assign(a) => Stmt::Assign(Self::rewrite_assign(a, ctx)),
+            Stmt::Assign(a) => Stmt::Assign(Self::visit_assign(a, ctx)),
             _ => panic!("Implementation error; Expected assign."),
         }
     }
-    fn rewrite_assign(a: Assign, ctx: &RefCell<C>) -> Assign {
+    fn visit_assign(a: Assign, ctx: &RefCell<C>) -> Assign {
         let Assign { lhs, rhs } = a;
-        let rw_lhs = lhs.into_iter().map(|e| Self::rewrite_expr(e, ctx)).collect::<Vec<_>>();
-        let rw_rhs = rhs.into_iter().map(|e| Self::rewrite_expr(e, ctx)).collect::<Vec<_>>();
-        Assign { lhs: rw_lhs, rhs: rw_rhs }
+        let rw_lhs = lhs.into_iter().map(|e| Self::visit_expr(e, ctx)).collect::<Vec<_>>();
+        let rw_rhs = rhs.into_iter().map(|e| Self::visit_expr(e, ctx)).collect::<Vec<_>>();
+        let rw_assign = Assign { lhs: rw_lhs, rhs: rw_rhs };
+        Self::rewrite_assign(rw_assign, ctx)
     }
-    fn rewrite_stmt_ifthenelse(stmt: Stmt, ctx: &RefCell<C>) -> Stmt {
+    fn visit_stmt_ifthenelse(stmt: Stmt, ctx: &RefCell<C>) -> Stmt {
         match stmt {
-            Stmt::IfThenElse(ite) => Stmt::IfThenElse(Self::rewrite_ite(ite, ctx)),
+            Stmt::IfThenElse(ite) => Stmt::IfThenElse(Self::visit_ite(ite, ctx)),
             _ => panic!("Implementation error; Expected ITE."),
         }
     }
-    fn rewrite_ite(ite: IfThenElse, ctx: &RefCell<C>) -> IfThenElse {
+    fn visit_ite(ite: IfThenElse, ctx: &RefCell<C>) -> IfThenElse {
         let IfThenElse { cond, then_stmt, else_stmt } = ite;
-        let rw_cond = Self::rewrite_expr(cond, ctx);
-        let rw_thn = Box::new(Self::rewrite_stmt(*then_stmt, ctx));
-        let rw_els = else_stmt.map(|stmt| Box::new(Self::rewrite_stmt(*stmt, ctx)));
-        IfThenElse { cond: rw_cond, then_stmt: rw_thn , else_stmt: rw_els }
+        let rw_cond = Self::visit_expr(cond, ctx);
+        let rw_thn = Box::new(Self::visit_stmt(*then_stmt, ctx));
+        let rw_els = else_stmt.map(|stmt| Box::new(Self::visit_stmt(*stmt, ctx)));
+        let rw_ite = IfThenElse { cond: rw_cond, then_stmt: rw_thn , else_stmt: rw_els };
+        Self::rewrite_ite(rw_ite, ctx)
     }
-    fn rewrite_stmt_block(stmt: Stmt, ctx: &RefCell<C>) -> Stmt {
-        match stmt {
+    fn visit_stmt_block(stmt: Stmt, ctx: &RefCell<C>) -> Stmt {
+        let rw_stmt = match stmt {
             Stmt::Block(stmts) => {
-                let rw_stmts = stmts.into_iter().map(|box_stmt| Box::new(Self::rewrite_stmt(*box_stmt, ctx))).collect::<Vec<_>>();
+                let rw_stmts = stmts.into_iter().map(|box_stmt| Box::new(Self::visit_stmt(*box_stmt, ctx))).collect::<Vec<_>>();
                 Stmt::Block(rw_stmts)
             },
             _ => panic!("Implementation error; Expected block."),
-        }
+        };
+        Self::rewrite_stmt_block(rw_stmt, ctx)
     }
 }
 

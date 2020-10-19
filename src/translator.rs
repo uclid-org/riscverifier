@@ -4,6 +4,7 @@ use std::{
     collections::{BTreeMap, HashMap},
     marker::PhantomData,
     rc::Rc,
+    cell::RefCell,
 };
 
 use topological_sort::TopologicalSort;
@@ -675,7 +676,9 @@ where
             // stmt_vec.push(Box::new(self.al_to_ir(&al)));
             stmt_vec.push(Box::new(self.al_to_ir_stmt(&al)));
         }
-        Stmt::Block(stmt_vec)
+        let blk = Stmt::Block(stmt_vec);
+        ConstantPropagator::visit_stmt(blk, &RefCell::new(&mut HashMap::new()))
+        // blk
     }
 
     /// Returns the instruction / assembly line (al) in the VERI-V IR
@@ -1063,3 +1066,163 @@ where
         self.filter_from_spec_map(func_name, sfilter)
     }
 }
+
+// ================================================================================
+/// # VERI-V AST Rewriters
+
+/// Constant propagation rewriter
+struct ConstantPropagator;
+impl ConstantPropagator {
+    /// Returns a mask with 1s from the l-th bit to the r-th bit
+    fn mask(l: u64, r: u64) -> u64 {
+        let mut m = 0;
+        for i in 0..63 {
+            if r <= i && i <= l {
+                m |= 1 << i
+            }
+        }
+        m
+    }
+
+    /// Tries to evaluate the value of expression
+    fn constant_fold(expr: Expr) -> Expr {
+        if let Expr::OpApp(opapp, typ) = expr {
+            let OpApp { op, operands } = opapp;
+            let rw_operands = operands.into_iter().map(|operand| Self::constant_fold(operand)).collect::<Vec<_>>();
+            let oper1 = rw_operands.get(0).unwrap();
+            let oper2_opt = rw_operands.get(1);
+            // If the operands exist, then they should be literals
+            if !(oper1.is_lit() && oper2_opt.map_or(true, |oper| oper.is_lit())) {
+                return Expr::OpApp(OpApp { op, operands: rw_operands }, typ);
+            }
+            let oper1_val: u64 = oper1.get_lit_value().unwrap();
+            let oper2_val_opt: Option<u64> = oper2_opt.map(|oper| oper.get_lit_value().unwrap());
+            match op {
+                Op::Comp(cop) => {
+                    let oper2_val = oper2_val_opt.expect(&format!("Second argument missing for constant folding {:?}.", cop));
+                    match cop {
+                        CompOp::Equality => Expr::bool_lit(oper1_val == oper2_val),
+                        CompOp::Inequality => Expr::bool_lit(oper1_val != oper2_val),
+                        // TODO: Check if this cast does signed comparison
+                        CompOp::Lt => Expr::bool_lit((oper1_val as i64) < (oper2_val as i64)),  // <
+                        CompOp::Le => Expr::bool_lit(oper1_val as i64 <= oper2_val as i64),  // <=
+                        CompOp::Gt => Expr::bool_lit(oper1_val as i64 > oper2_val as i64),  // >
+                        CompOp::Ge => Expr::bool_lit(oper1_val as i64 >= oper2_val as i64),  // >=
+                        CompOp::Ltu => Expr::bool_lit(oper1_val < oper2_val), // <_u (unsigned)
+                        CompOp::Leu => Expr::bool_lit(oper1_val <= oper2_val), // <=_u
+                        CompOp::Gtu => Expr::bool_lit(oper1_val > oper2_val), // >_u
+                        CompOp::Geu => Expr::bool_lit(oper1_val >= oper2_val), // >=_u
+                    }
+                },
+                Op::Bv(bvop) => {
+                    match bvop {
+                        BVOp::Add => Expr::bv_lit(oper1_val + oper2_val_opt.unwrap(), oper1.get_expect_bv_width()),
+                        BVOp::Sub => Expr::bv_lit(oper1_val - oper2_val_opt.unwrap(), oper1.get_expect_bv_width()),
+                        BVOp::Mul => Expr::bv_lit(oper1_val * oper2_val_opt.unwrap(), oper1.get_expect_bv_width()),
+                        BVOp::And => Expr::bv_lit(oper1_val & oper2_val_opt.unwrap(), oper1.get_expect_bv_width()),
+                        BVOp::Or => Expr::bv_lit(oper1_val | oper2_val_opt.unwrap(), oper1.get_expect_bv_width()),
+                        BVOp::Xor => Expr::bv_lit(oper1_val ^ oper2_val_opt.unwrap(), oper1.get_expect_bv_width()),
+                        BVOp::SignExt => Expr::bv_lit(oper1_val, oper1.get_expect_bv_width() + oper2_val_opt.unwrap()), // TODO: Double check; value should be signed 64
+                        BVOp::ZeroExt => Expr::bv_lit(oper1_val, oper1.get_expect_bv_width() + oper2_val_opt.unwrap()),
+                        BVOp::LeftShift => Expr::bv_lit(oper1_val << oper2_val_opt.unwrap(), oper1.get_expect_bv_width()),
+                        BVOp::RightShift => Expr::bv_lit(((oper1_val as i64) >> oper2_val_opt.unwrap()) as u64, oper1.get_expect_bv_width()),
+                        BVOp::ARightShift => Expr::bv_lit(oper1_val >> oper2_val_opt.unwrap(), oper1.get_expect_bv_width()),
+                        BVOp::Concat => Expr::OpApp(OpApp { op: Op::Bv(bvop), operands: rw_operands }, typ), // TODO: Implement
+                        BVOp::Slice { l, r } => Expr::bv_lit(oper1_val & Self::mask(l, r), oper1.get_expect_bv_width()),
+                    }
+                },
+                Op::Bool(bop) => {
+                    match bop {
+                        BoolOp::Conj => Expr::bool_lit(oper1_val + oper2_val_opt.unwrap() == 2),
+                        BoolOp::Disj => Expr::bool_lit(oper1_val + oper2_val_opt.unwrap() > 0),
+                        BoolOp::Iff => Expr::bool_lit(oper1_val == oper2_val_opt.unwrap()),
+                        BoolOp::Impl => Expr::bool_lit(oper1_val <= oper2_val_opt.unwrap()),
+                        BoolOp::Neg => Expr::bool_lit(if oper1_val == 1 { false } else { true }),
+                    }
+                },
+                _ => Expr::OpApp(OpApp { op, operands: rw_operands } , typ),
+            }
+        } else {
+            expr
+        }
+    }
+
+    /// Replaces all variables with constants
+    fn constified_expr(expr: Expr, ctx: &RefCell<&mut HashMap<String, u64>>) -> Expr {
+         match expr {
+            Expr::Literal(lit, typ) => Expr::Literal(lit, typ),
+            Expr::Var(var, vtyp) => {
+                let Var { name, typ } = &var;
+                match ctx.borrow().get(name) {
+                    Some(val) => {
+                        match typ {
+                            Type::Bv { w } => Expr::bv_lit(*val, *w),
+                            Type::Bool => Expr::bool_lit(if *val == 1 { true } else { false }),
+                            Type::Int => Expr::int_lit(*val),
+                            _ => Expr::Var(var, vtyp),
+                        }
+                    }
+                    None => Expr::Var(var, vtyp)
+                }
+            }
+            Expr::OpApp(opapp, _) => {
+                let OpApp { op, operands } = opapp;
+                let rw_operands = operands.into_iter().map(|expr| Self::constified_expr(expr, ctx)).collect::<Vec<_>>();
+                Expr::op_app(op, rw_operands)
+            }
+            Expr::FuncApp(fapp, typ) => {
+                let FuncApp { func_name, operands } = fapp;
+                let rw_operands = operands.into_iter().map(|expr| Self::constified_expr(expr, ctx)).collect::<Vec<_>>();
+                Expr::func_app(func_name, rw_operands, typ)
+            }
+         }
+    }
+
+    /// Updates the constant map
+    fn constant_propagate(id: String, expr: Expr, ctx: &RefCell<&mut HashMap<String, u64>>) -> Expr {
+        let constified_expr = Self::constified_expr(expr, ctx);
+        let folded_expr = Self::constant_fold(constified_expr);
+        match folded_expr {
+            Expr::Literal(_, _) => {
+                let mut context = ctx.borrow_mut();
+                context.insert(id, folded_expr.get_lit_value().unwrap());
+            },
+            _ => (),
+        };
+        folded_expr
+    }
+}
+impl ASTRewriter<&mut HashMap<String, u64>> for ConstantPropagator {
+    fn rewrite_assign(a: Assign, ctx: &RefCell<&mut HashMap<String, u64>>) -> Assign {
+        let Assign { lhs, rhs } = a;
+        let mut rw_lhss: Vec<Expr> = vec![];
+        let mut rw_rhss: Vec<Expr> = vec![];
+        for (l, r) in lhs.into_iter().zip(rhs) {
+            let (rw_lhs, rw_rhs) = match &l {
+                Expr::Var(var, _) => {
+                    let rw_r = Self::constant_propagate(var.name.to_string(), r, ctx);
+                    (l, rw_r)
+                }
+                _ => (l, r)
+            };
+            rw_lhss.push(rw_lhs);
+            rw_rhss.push(rw_rhs);
+        }
+        Assign { lhs: rw_lhss, rhs: rw_rhss }
+    }
+}
+
+// /// Intended for abstracting memory accesses whose addresses are constant, we abstract them as separate variables
+// /// 
+// /// Procedure:
+// ///     1. Constant propagation for all variables
+// ///     2. If a memory access has a constant address AND it is one of the global variable addresses,
+// ///        then replace the memory access with a fresh variable corresponding to that global. Any
+// ///        stores and load to that address will use this fresh variable.
+// ///
+// /// NOTE: This assumes that all memory address computations are within thier own basic block
+// struct DataMemoryAbstractor {}
+// impl ASTRewriter<HashMap<String, u64>> for DataMemoryAbstractor {
+
+// }
+
