@@ -12,6 +12,7 @@ extern crate pest_derive;
 extern crate asts;
 extern crate dwarf_ctx;
 extern crate rv_model;
+extern crate utils;
 
 extern crate topological_sort;
 
@@ -32,7 +33,7 @@ use spec_template_generator::SpecTemplateGenerator;
 
 pub mod ir_interface;
 
-pub mod utils;
+// pub mod utils;
 
 use std::{
     cell::RefCell,
@@ -51,13 +52,15 @@ use asts::spec_lang::{sl_ast, sl_ast::ASTRewriter, sl_parser};
 
 use rv_model::system_model;
 
+use utils::{constants, helpers};
+
 // ================================================================================================
 /// # RICS-V Translator Main Function
 
 /// Process the commands given to the tool
 pub fn process_commands() {
     let matches = cl_options().get_matches();
-    let xlen = utils::dec_str_to_u64(matches.value_of("xlen").unwrap_or("64"))
+    let xlen = helpers::dec_str_to_u64(matches.value_of("xlen").unwrap_or("64"))
         .expect("[main] Unable to parse numberic xlen.");
     if xlen != 64 {
         warn!("uclidinterface is hard-coded with 64 bit dependent definitions.");
@@ -351,28 +354,28 @@ impl sl_ast::ASTRewriter<(&DwarfCtx, &str, &mut HashMap<String, sl_ast::VType>)>
         // Check if it's a system variable
         let xlen = dwarf_ctx.xlen;
         typ_opt = match &var_id[..] {
-            system_model::PC_VAR => {
+            constants::PC_VAR => {
                 Some(sl_ast::VType::from_ast_type(&system_model::pc_type(xlen)))
             }
-            system_model::RETURNED_FLAG => {
+            constants::RETURNED_FLAG => {
                 Some(sl_ast::VType::from_ast_type(&system_model::returned_type()))
             }
-            system_model::PRIV_VAR => {
+            constants::PRIV_VAR => {
                 Some(sl_ast::VType::from_ast_type(&system_model::priv_type()))
             }
-            system_model::MEM_VAR_B => Some(sl_ast::VType::from_ast_type(
+            constants::MEM_VAR_B => Some(sl_ast::VType::from_ast_type(
                 &system_model::mem_b_type(xlen),
             )),
-            system_model::MEM_VAR_H => Some(sl_ast::VType::from_ast_type(
+            constants::MEM_VAR_H => Some(sl_ast::VType::from_ast_type(
                 &system_model::mem_h_type(xlen),
             )),
-            system_model::MEM_VAR_W => Some(sl_ast::VType::from_ast_type(
+            constants::MEM_VAR_W => Some(sl_ast::VType::from_ast_type(
                 &system_model::mem_w_type(xlen),
             )),
-            system_model::MEM_VAR_D => Some(sl_ast::VType::from_ast_type(
+            constants::MEM_VAR_D => Some(sl_ast::VType::from_ast_type(
                 &system_model::mem_d_type(xlen),
             )),
-            system_model::A0 | system_model::SP | system_model::RA => {
+            constants::A0 | constants::SP | constants::RA => {
                 Some(sl_ast::VType::from_ast_type(&system_model::bv_type(xlen)))
             }
             _ => None,
@@ -535,7 +538,7 @@ fn from_dwarf_type(dtd: &DwarfTypeDefn) -> sl_ast::VType {
         | DwarfTypeDefn::Pointer {
             value_typ: _,
             bytes,
-        } => sl_ast::VType::Bv((bytes * system_model::BYTE_SIZE) as u16),
+        } => sl_ast::VType::Bv((bytes * constants::BYTE_SIZE) as u16),
         DwarfTypeDefn::Array {
             in_typ,
             out_typ,
@@ -554,7 +557,7 @@ fn from_dwarf_type(dtd: &DwarfTypeDefn) -> sl_ast::VType {
                     (field_name, Box::new(field_type))
                 })
                 .collect::<HashMap<String, Box<sl_ast::VType>>>();
-            let size = bytes * system_model::BYTE_SIZE;
+            let size = bytes * constants::BYTE_SIZE;
             sl_ast::VType::Struct { id, fields, size }
         }
     }

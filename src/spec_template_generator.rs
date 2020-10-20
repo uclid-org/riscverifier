@@ -2,7 +2,7 @@ use std::collections::HashSet;
 
 use dwarf_ctx::dwarfreader::{DwarfCtx, DwarfTypeDefn, DwarfVar};
 
-use rv_model::system_model::BYTE_SIZE;
+use utils::constants::BYTE_SIZE;
 
 /// Simple specification template generator
 pub struct SpecTemplateGenerator;

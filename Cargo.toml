@@ -8,6 +8,7 @@ edition = "2018"
 asts = { path = "asts" }
 dwarf_ctx = { path = "dwarf_ctx" }
 rv_model = { path="rv_model" }
+utils = { path="utils" }
 
 clap = "2.33.0"
 object = "0.15"

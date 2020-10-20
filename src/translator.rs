@@ -15,6 +15,8 @@ use dwarf_ctx::dwarfreader::{DwarfCtx, DwarfTypeDefn};
 
 use rv_model::system_model;
 
+use utils::constants;
+
 use crate::{
     datastructures::cfg, disassembler::disassembler, disassembler::disassembler::Inst,
     ir_interface::IRInterface,
@@ -146,7 +148,7 @@ where
     fn to_ir_type(dtd: &DwarfTypeDefn) -> Type {
         match dtd {
             DwarfTypeDefn::Primitive { bytes } => Type::Bv {
-                w: bytes * system_model::BYTE_SIZE,
+                w: bytes * constants::BYTE_SIZE,
             },
             DwarfTypeDefn::Array {
                 in_typ,
@@ -164,13 +166,13 @@ where
                         (id.clone(), Box::new(Self::to_ir_type(&struct_field.typ)))
                     })
                     .collect::<BTreeMap<String, Box<Type>>>(),
-                w: bytes * system_model::BYTE_SIZE,
+                w: bytes * constants::BYTE_SIZE,
             },
             DwarfTypeDefn::Pointer {
                 value_typ: _,
                 bytes,
             } => Type::Bv {
-                w: bytes * system_model::BYTE_SIZE,
+                w: bytes * constants::BYTE_SIZE,
             },
         }
     }
@@ -252,9 +254,17 @@ where
             .nodes()
             .iter()
             .map(|(addr, bb)| {
+                // Generate basic blocks
                 let bb_proc_name = self.bb_proc_name(*addr);
                 let body = self.cfg_node_to_block(bb);
-                let mod_set = self.infer_mod_set(&body);
+                
+                // Passes to abstract memory
+                let mut processed_body = ConstantPropagator::visit_stmt(body, &RefCell::new(&mut HashMap::new()));
+                let mut abs_var_names = HashSet::new();
+                processed_body = DataMemoryAbstractor::visit_stmt(processed_body, &RefCell::new(&mut abs_var_names));
+                self.model.add_vars(&abs_var_names);
+                
+                let mod_set = self.infer_mod_set(&processed_body);
                 FuncModel::new(
                     &bb_proc_name,
                     *addr,
@@ -264,7 +274,7 @@ where
                     None,
                     None,
                     Some(mod_set),
-                    body,
+                    processed_body,
                     true,
                 )
             })
@@ -362,8 +372,8 @@ where
     /// Returns the inferred modifies set
     fn infer_mod_set(&self, stmt: &Stmt) -> HashSet<String> {
         let mut mod_set = HashSet::new();
-        mod_set.insert(system_model::PC_VAR.to_string());
-        mod_set.insert(system_model::RETURNED_FLAG.to_string());
+        mod_set.insert(constants::PC_VAR.to_string());
+        mod_set.insert(constants::RETURNED_FLAG.to_string());
         match stmt {
             Stmt::FuncCall(fc) => {
                 // Add modifies set if it's a function call
@@ -449,7 +459,7 @@ where
             // Function call
             // If the instruction is a jump and the target is
             // another function's entry address, then make a call to it.
-            if cfg_node.exit().op() == disassembler::JAL {
+            if cfg_node.exit().op() == constants::JAL {
                 let target_addr = cfg_node
                     .exit()
                     .imm()
@@ -482,7 +492,7 @@ where
                     // Reset the returned variable for the caller
                     then_stmts.push(Box::new(Stmt::assign(
                         vec![Expr::var(
-                            system_model::RETURNED_FLAG,
+                            constants::RETURNED_FLAG,
                             system_model::bv_type(1),
                         )],
                         vec![Expr::bv_lit(0, 1)],
@@ -495,7 +505,7 @@ where
         }
         stmts_vec.push(Box::new(Stmt::assign(
             vec![Expr::var(
-                system_model::RETURNED_FLAG,
+                constants::RETURNED_FLAG,
                 system_model::bv_type(1),
             )],
             vec![Expr::bv_lit(1, 1)],
@@ -519,7 +529,7 @@ where
         let if_returned_guard = Expr::op_app(
             Op::Comp(CompOp::Equality),
             vec![
-                Expr::var(system_model::RETURNED_FLAG, system_model::bv_type(1)),
+                Expr::var(constants::RETURNED_FLAG, system_model::bv_type(1)),
                 Expr::bv_lit(0, 1),
             ],
         );
@@ -656,7 +666,7 @@ where
                 if al.function_name() != func_name {
                     continue;
                 }
-                if al.op() == disassembler::JAL {
+                if al.op() == constants::JAL {
                     callee_addrs.push((al.imm().unwrap().get_imm_val() as u64, al.address()));
                 }
             }
@@ -676,9 +686,7 @@ where
             // stmt_vec.push(Box::new(self.al_to_ir(&al)));
             stmt_vec.push(Box::new(self.al_to_ir_stmt(&al)));
         }
-        let blk = Stmt::Block(stmt_vec);
-        ConstantPropagator::visit_stmt(blk, &RefCell::new(&mut HashMap::new()))
-        // blk
+        Stmt::Block(stmt_vec)
     }
 
     /// Returns the instruction / assembly line (al) in the VERI-V IR
@@ -1128,7 +1136,7 @@ impl ConstantPropagator {
                         BVOp::RightShift => Expr::bv_lit(((oper1_val as i64) >> oper2_val_opt.unwrap()) as u64, oper1.get_expect_bv_width()),
                         BVOp::ARightShift => Expr::bv_lit(oper1_val >> oper2_val_opt.unwrap(), oper1.get_expect_bv_width()),
                         BVOp::Concat => Expr::OpApp(OpApp { op: Op::Bv(bvop), operands: rw_operands }, typ), // TODO: Implement
-                        BVOp::Slice { l, r } => Expr::bv_lit(oper1_val & Self::mask(l, r), oper1.get_expect_bv_width()),
+                        BVOp::Slice { l, r } => Expr::bv_lit(oper1_val & Self::mask(l, r), l-r+1),
                     }
                 },
                 Op::Bool(bop) => {
@@ -1197,6 +1205,7 @@ impl ConstantPropagator {
         folded_expr
     }
 }
+
 impl ASTRewriter<&mut HashMap<String, u64>> for ConstantPropagator {
     fn rewrite_assign(a: Assign, ctx: &RefCell<&mut HashMap<String, u64>>) -> Assign {
         let Assign { lhs, rhs } = a;
@@ -1247,18 +1256,37 @@ impl ASTRewriter<&mut HashMap<String, u64>> for ConstantPropagator {
 ///        stores and load to that address will use this fresh variable.
 ///
 /// NOTE: This assumes that all memory address computations are within thier own basic block
-struct DataMemoryAbstractor {}
-impl ASTRewriter<HashMap<String, u64>> for DataMemoryAbstractor {
-    // / Rewrite all memory assigns to a constant address to the corresponding abstracted variables
-    // fn rewrite_assign(a: Assign, _ctx: &RefCell<C>) -> Assign {
-    //     a
-    // }
-
-    // /// Rewrite all accesses to a contant address to the corressponding abstracted variable
-    // fn rewrite_opapp(opapp: OpApp, _ctx: &RefCell<C>) -> OpApp {
-    //     match opapp {
-    //         _ => 
-    //     }
-    // }
+struct DataMemoryAbstractor;
+impl DataMemoryAbstractor {
+    /// Replaced variable name
+    fn abs_access_name(addr: &u64) -> String {
+        format!("mem_access_{}", addr)
+    }
+}
+impl ASTRewriter<&mut HashSet<Var>> for DataMemoryAbstractor {
+    /// Rewrite all accesses to a contant address to the corressponding abstracted variable
+    fn rewrite_expr(expr: Expr, ctx: &RefCell<&mut HashSet<Var>>) -> Expr {
+        match &expr.get_array_index() {
+            Some(index) => {
+                // If the array access is a literal, then it should be a data variable
+                if index.is_lit() {
+                    // add variable to set
+                    let w = match &expr.get_array_expr().expect("Expected array variable.").get_var_name()[..] {
+                        constants::MEM_VAR_B => constants::BYTE_SIZE,
+                        constants::MEM_VAR_H => constants::BYTE_SIZE*2,
+                        constants::MEM_VAR_W => constants::BYTE_SIZE*4,
+                        constants::MEM_VAR_D => constants::BYTE_SIZE*8,
+                        _ => panic!("Expected byte, half, word, or double memory variable."),
+                    };
+                    let abs_var_name = Self::abs_access_name(&index.get_lit_value().unwrap());
+                    ctx.borrow_mut().insert(Var { name: abs_var_name.clone(), typ: Type::Bv { w }});
+                    Expr::var(&abs_var_name, expr.typ().clone())
+                } else {
+                    expr
+                }
+            }
+            None => expr
+        }
+    }
 }
 

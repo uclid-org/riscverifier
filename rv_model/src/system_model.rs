@@ -1,24 +1,6 @@
 use std::collections::HashSet;
 use asts::veriv_ast::*;
-
-// ========================================================================
-/// # Constants
-
-/// ## Size constants
-pub const BYTE_SIZE: u64 = 8;   // There are 8 bits in a byte
-pub const INST_LENGTH_IN_BYTES: u64 = 4; // Instructions are 4 bytes long
-
-/// ## System variable names
-pub const PC_VAR: &'static str = "pc";
-pub const RETURNED_FLAG: &'static str = "returned";
-pub const MEM_VAR_B: &'static str = "mem_b";
-pub const MEM_VAR_H: &'static str = "mem_h";
-pub const MEM_VAR_W: &'static str = "mem_w";
-pub const MEM_VAR_D: &'static str = "mem_d";
-pub const PRIV_VAR: &'static str = "current_priv";
-pub const A0: &'static str = "a0";
-pub const SP: &'static str = "sp";
-pub const RA: &'static str = "ra";
+use utils::constants::*;
 
 // ========================================================================
 /// # State variables

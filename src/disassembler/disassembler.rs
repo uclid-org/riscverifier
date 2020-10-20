@@ -12,26 +12,7 @@ use std::io::prelude::*;
 use std::process::Command;
 use std::rc::Rc;
 
-use rv_model::system_model::INST_LENGTH_IN_BYTES;
-
-use crate::utils;
-
-/// FIXME: Create static strings for all instructions below
-pub const BEQ: &'static str = "beq";
-pub const BNE: &'static str = "bne";
-pub const BLT: &'static str = "blt";
-pub const BGE: &'static str = "bge";
-pub const BEQZ: &'static str = "beqz";
-pub const BLTU: &'static str = "bltu";
-pub const JAL: &'static str = "jal";
-pub const JALR: &'static str = "jalr";
-pub const MRET: &'static str = "mret";
-pub const FENCE: &'static str = "fence";
-pub const SFENCE_VMA: &'static str = "sfence.vma";
-pub const FENCE_I: &'static str = "fence.i";
-pub const DIR_JUMP_OPS: [&'static str; 7] = [BEQ, BNE, BLT, BGE, BEQZ, BLTU, JAL];
-pub const JUMP_OPS: [&'static str; 9] = [BEQ, BNE, BLT, BGE, BEQZ, BLTU, JAL, JALR, MRET];
-pub const IGNORED_INSTS: [&'static str; 3] = [FENCE, SFENCE_VMA, FENCE_I];
+use utils::{helpers, constants::*};
 
 #[derive(Parser)]
 #[grammar = "pest/objectdump.pest"]
@@ -87,7 +68,7 @@ impl<'a> Disassembler<'a> {
                     let mut al_iter = result.next().unwrap().into_inner();
                     let addr_str = al_iter.next().unwrap().as_str();
                     // Unmangle address
-                    let addr = utils::hex_str_to_u64(addr_str)
+                    let addr = helpers::hex_str_to_u64(addr_str)
                         .expect(&format!("Invalid assembly line address {}.", addr_str));
                     assert!(
                         processed.get(&addr).is_none(),
@@ -102,7 +83,7 @@ impl<'a> Disassembler<'a> {
                     // Unmangle function offset
                     let offset_str = al_iter_inner.as_str().trim_start_matches("0x");
                     // FIXME: Default 0 if we can't parse it
-                    let offset = utils::hex_str_to_u64(offset_str).unwrap_or_else(|_| 0);
+                    let offset = helpers::hex_str_to_u64(offset_str).unwrap_or_else(|_| 0);
                     // Unmangle op code
                     let op_code = al_iter.next().unwrap().into_inner().as_str().to_string();
                     if IGNORED_INSTS.contains(&&op_code[..]) {
@@ -114,16 +95,16 @@ impl<'a> Disassembler<'a> {
                         let operand_value = operand_iter.into_inner().next().unwrap();
                         match operand_value.as_rule() {
                                 Rule::decimal | Rule::neg_decimal => {
-                                    let imm = InstOperand::Immediate(utils::dec_str_to_i64(operand_value.as_str()).expect("[get_binary_object_dump] Unable to parse instruction argument as decimal."));
+                                    let imm = InstOperand::Immediate(helpers::dec_str_to_i64(operand_value.as_str()).expect("[get_binary_object_dump] Unable to parse instruction argument as decimal."));
                                     ops.push(imm);
                                 }
                                 Rule::hexidecimal => {
                                     let without_prefix_hex = operand_value.as_str().trim_start_matches("0x");
-                                    let imm = InstOperand::Immediate(utils::hex_str_to_i64(without_prefix_hex).expect("[get_binary_object_dump] Unable to parse instruction argument as hexidecimal."));
+                                    let imm = InstOperand::Immediate(helpers::hex_str_to_i64(without_prefix_hex).expect("[get_binary_object_dump] Unable to parse instruction argument as hexidecimal."));
                                     ops.push(imm);
                                 }
                                 Rule::absolute_addr => {
-                                    let imm = InstOperand::Immediate(utils::hex_str_to_i64(operand_value.as_str()).expect("[get_binary_object_dump] Unable to parse instruction argument as hexidecimal (without prefix)."));
+                                    let imm = InstOperand::Immediate(helpers::hex_str_to_i64(operand_value.as_str()).expect("[get_binary_object_dump] Unable to parse instruction argument as hexidecimal (without prefix)."));
                                     ops.push(imm);
                                 }
                                 Rule::ident => {
@@ -132,7 +113,7 @@ impl<'a> Disassembler<'a> {
                                 }
                                 Rule::offset_operand => {
                                     let mut offset_operand_iter = operand_value.into_inner();
-                                    let offset = utils::dec_str_to_i64(offset_operand_iter.next().unwrap().as_str()).expect("[get_binary_object_dump] Unable to parse offset in instruction arugment");
+                                    let offset = helpers::dec_str_to_i64(offset_operand_iter.next().unwrap().as_str()).expect("[get_binary_object_dump] Unable to parse offset in instruction arugment");
                                     let reg = InstOperand::Register(offset_operand_iter.as_str().to_string(), Some(offset));
                                     ops.push(reg);
                                 }

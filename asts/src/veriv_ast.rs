@@ -161,6 +161,22 @@ impl Expr {
         }
     }
 
+    /// Returns the array variable expression if it is an array access
+    pub fn get_array_expr(&self) -> Option<&Expr> {
+        match self {
+            Expr::OpApp(opapp, _) => opapp.get_array_expr(),
+            _ => None,
+        }
+    }
+
+    /// Returns the array index of the array access
+    pub fn get_array_index(&self) -> Option<&Expr> {
+        match self {
+            Expr::OpApp(opapp, _) => opapp.get_array_index(),
+            _ => None
+        }
+    }
+
     /// Returns a bitvector literal of value `val` and width `width`.
     pub fn bv_lit(val: u64, width: u64) -> Self {
         Expr::Literal(Literal::Bv { val, width }, Type::Bv { w: width })
