@@ -813,8 +813,11 @@ impl SpecLangASTInterface for Uclid5Interface {
     /// VExpr translation functions
     fn vexpr_bv_to_string(value: &u64, typ: &sl_ast::VType) -> String {
         match typ {
+            // normal bv literal value
             sl_ast::VType::Bv(width) => format!("{}bv{}", value, width),
-            _ => panic!("Should be bv typed."),
+            // array as bitvector literal
+            sl_ast::VType::Array { in_type, out_type:_ } => format!("{}bv{}", value, in_type.get_bv_width()),
+            _ => panic!("Should be bv typed but is {:?}.", typ),
         }
     }
 
@@ -872,7 +875,7 @@ impl SpecLangASTInterface for Uclid5Interface {
                         } => *size / BYTE_SIZE,
                         _ => panic!("Expected BV type (op: {:#?}, exprs: {:#?}).", op, exprs),
                     },
-                    _ => panic!("Expected array type."),
+                    _ => panic!("Expected array type for {:#?} but found {:#?}.", &exprs[0], &exprs[0].typ()),
                 };
                 match &arr[..] {
                     "mem" => format!("{}[{}]", arr, index),
@@ -909,7 +912,7 @@ impl SpecLangASTInterface for Uclid5Interface {
                 };
                 match bytes {
                     1 | 2 | 4 | 8 => format!("deref_{}(mem_{}, {})", bytes, mem_suffix, expr_str),
-                    _ => panic!("VERI-V does not support dereferencing values that are not 1, 2, 4, or 8 bytes."),
+                    _ => panic!("Cannot dereference values that are not 1, 2, 4, or 8 bytes."),
                 }
             }
             sl_ast::ValueOp::Concat => {

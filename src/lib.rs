@@ -277,14 +277,17 @@ fn sl_bexpr_rewrite_passes(
 ) -> sl_ast::BExpr {
     // Type inference pass. Before the initial pass, we expect the specficiation
     // AST to have Unknown types for all VExpr.
-    let mut rw_bexpr = VExprTypeInference::rewrite_bexpr(
+    let mut rw_bexpr = VExprTypeInference::visit_bexpr(
         bexpr,
         &RefCell::new((dwarf_ctx, fname, &mut HashMap::new())),
     );
 
     // Rewrite all quantified variable names. Identifiers that are global variables are
     // replaced with a function application and prefix that calls an alias.
-    rw_bexpr = RenameGlobals::rewrite_bexpr(rw_bexpr, &RefCell::new(dwarf_ctx));
+    rw_bexpr = RenameGlobals::visit_bexpr(rw_bexpr, &RefCell::new(dwarf_ctx));
+
+    // Constant folding on the expressions
+    rw_bexpr = ConstantFolder::visit_bexpr(rw_bexpr, &RefCell::new(dwarf_ctx));
 
     // Return rewritten bexpr
     rw_bexpr
@@ -295,13 +298,17 @@ fn sl_bexpr_rewrite_passes(
 
 /// AST pass that renames the identifiers for global variables from
 /// Identifiers `name` to FuncApp `global_var_name()`.
-struct RenameGlobals {}
+struct RenameGlobals;
 impl sl_ast::ASTRewriter<&DwarfCtx> for RenameGlobals {
     fn rewrite_vexpr_ident(ident: sl_ast::VExpr, context: &RefCell<&DwarfCtx>) -> sl_ast::VExpr {
         if is_global(&ident, &*context.borrow()) {
             match ident {
                 sl_ast::VExpr::Ident(name, typ) => {
-                    sl_ast::VExpr::FuncApp(format!("global_var_{}", name), vec![], typ)
+                    let global_addr = context.borrow().global_var(&name).expect("Could not find global variable").memory_addr;
+                    // println!("global {} is at address {:#?}.", name, address);
+                    // println!("nmae {:#?}, typ {:#?}", name, typ );
+                    // sl_ast::VExpr::FuncApp(format!("global_var_{}", name), vec![], typ)
+                    sl_ast::VExpr::Bv { value: global_addr, typ }
                 }
                 _ => panic!("Expected identifier."),
             }
@@ -312,7 +319,10 @@ impl sl_ast::ASTRewriter<&DwarfCtx> for RenameGlobals {
 }
 
 /// AST pass that automatically infers and rewrites the type of the VExpr
-struct VExprTypeInference {}
+/// In addition to inferring the type, it automatically injects dereferences
+/// if the expression refers to a global variable and is a primitive (no dereferences
+/// for non-primitives because they can be large). 
+struct VExprTypeInference;
 impl sl_ast::ASTRewriter<(&DwarfCtx, &str, &mut HashMap<String, sl_ast::VType>)>
     for VExprTypeInference
 {
@@ -375,6 +385,7 @@ impl sl_ast::ASTRewriter<(&DwarfCtx, &str, &mut HashMap<String, sl_ast::VType>)>
             constants::MEM_VAR_D => Some(sl_ast::VType::from_ast_type(
                 &system_model::mem_d_type(xlen),
             )),
+            // TODO: Should include all registers, not just these
             constants::A0 | constants::SP | constants::RA => {
                 Some(sl_ast::VType::from_ast_type(&system_model::bv_type(xlen)))
             }
@@ -398,7 +409,7 @@ impl sl_ast::ASTRewriter<(&DwarfCtx, &str, &mut HashMap<String, sl_ast::VType>)>
         });
 
         // Global variable
-        // NOTE: formals takes shadow precedence over globals
+        // NOTE: formals takes shadow precedence over globals as usual
         let mut is_global = false;
         if typ_opt.is_none() {
             let dt_res = dwarf_ctx.global_var_type(&var_id);
@@ -433,7 +444,7 @@ impl sl_ast::ASTRewriter<(&DwarfCtx, &str, &mut HashMap<String, sl_ast::VType>)>
                 _ => global_addr,
             }
         } else {
-            // FIXME: formals are all xlen for now
+            // FIXME: formal arguments all have xlen bit width (for now)
             sl_ast::VExpr::Ident(var_id.to_string(), sl_ast::VType::Bv(dwarf_ctx.xlen as u16))
         }
     }
@@ -445,8 +456,8 @@ impl sl_ast::ASTRewriter<(&DwarfCtx, &str, &mut HashMap<String, sl_ast::VType>)>
     ) -> sl_ast::VExpr {
         match opapp {
             sl_ast::VExpr::OpApp(op, exprs, _) => {
-                let rw_op = Self::rewrite_vexpr_valueop(op, context);
-                let rw_exprs = Self::rewrite_vexprs(exprs, context);
+                let rw_op = Self::visit_vexpr_valueop(op, context);
+                let rw_exprs = Self::visit_vexprs(exprs, context);
                 let rw_typ = sl_ast::VType::infer_op_type(&rw_op, &rw_exprs);
 
                 match &rw_op {
@@ -519,12 +530,70 @@ impl sl_ast::ASTRewriter<(&DwarfCtx, &str, &mut HashMap<String, sl_ast::VType>)>
         match funcapp {
             sl_ast::VExpr::FuncApp(fid, exprs, _) => {
                 let rw_fid = Self::rewrite_vexpr_funcid(fid, context);
-                let rw_exprs = Self::rewrite_vexprs(exprs, context);
+                let rw_exprs = exprs.into_iter().map(|expr| Self::visit_vexpr(expr, context)).collect::<Vec<_>>();
                 let rw_typ = sl_ast::VType::infer_func_app_type(&rw_fid, &rw_exprs);
                 sl_ast::VExpr::FuncApp(rw_fid, rw_exprs, rw_typ)
             }
             _ => panic!("Implementation error; expected `VExpr::FuncApp`."),
         }
+    }
+}
+
+/// AST pass that 
+struct ConstantFolder;
+impl ConstantFolder {
+    fn constant_fold(vexpr: sl_ast::VExpr, ctx: &RefCell<&DwarfCtx>) -> sl_ast::VExpr {
+        match vexpr {
+            sl_ast::VExpr::OpApp(value_op, operands, typ) => {
+                let rw_operands = operands.into_iter().map(|operand| Self::constant_fold(operand, ctx)).collect::<Vec<_>>();
+                let oper1 = rw_operands.get(0).unwrap();
+                let oper2_opt = rw_operands.get(1);    // second operand only appears in some operations
+                if !(oper1.is_lit() && oper2_opt.map_or(true, |oper| oper.is_lit())) {
+                    return sl_ast::VExpr::OpApp(value_op, rw_operands, typ);
+                }
+                let oper1_val: u64 = oper1.get_lit_value().expect("Expected at least one operand.");
+                let oper2_val_opt: Option<u64> = oper2_opt.map(|oper| oper.get_lit_value().unwrap());
+                match value_op {
+                    sl_ast::ValueOp::Add => sl_ast::VExpr::Bv { value: oper1_val + oper2_val_opt.unwrap(), typ: oper1.typ().clone() },
+                    sl_ast::ValueOp::Sub => sl_ast::VExpr::Bv { value: oper1_val - oper2_val_opt.unwrap(), typ: oper1.typ().clone() },
+                    sl_ast::ValueOp::Div => sl_ast::VExpr::Bv { value: oper1_val / oper2_val_opt.unwrap(), typ: oper1.typ().clone() },
+                    sl_ast::ValueOp::Mul => sl_ast::VExpr::Bv { value: oper1_val * oper2_val_opt.unwrap(), typ: oper1.typ().clone() },
+                    sl_ast::ValueOp::BvXor => sl_ast::VExpr::Bv { value: oper1_val ^ oper2_val_opt.unwrap(), typ: oper1.typ().clone() },
+                    sl_ast::ValueOp::BvOr => sl_ast::VExpr::Bv { value: oper1_val | oper2_val_opt.unwrap(), typ: oper1.typ().clone() },
+                    sl_ast::ValueOp::BvAnd => sl_ast::VExpr::Bv { value: oper1_val & oper2_val_opt.unwrap(), typ: oper1.typ().clone() },
+                    sl_ast::ValueOp::RightShift => sl_ast::VExpr::Bv { value: ((oper1_val as i64) >> oper2_val_opt.unwrap()) as u64, typ: oper1.typ().clone() },
+                    sl_ast::ValueOp::URightShift => sl_ast::VExpr::Bv { value: oper1_val >> oper2_val_opt.unwrap(), typ: oper1.typ().clone() },
+                    sl_ast::ValueOp::LeftShift => sl_ast::VExpr::Bv { value: oper1_val << oper2_val_opt.unwrap(), typ: oper1.typ().clone() },
+                    sl_ast::ValueOp::Slice { lo, hi } => {
+                        let typ = sl_ast::VType::Bv(oper1.typ().get_bv_width() + oper2_opt.unwrap().typ().get_bv_width());
+                        sl_ast::VExpr::Bv { value: oper1_val & helpers::mask(hi as u64, lo as u64), typ }
+                    }
+                    sl_ast::ValueOp::ArrayIndex => {
+                        let out_typ_bytes = oper1.typ().get_array_out_type_size() / constants::BYTE_SIZE;
+                        let index = oper2_val_opt.expect("Expected two arguments for array index.");
+                        let base_addr = oper1.get_lit_value().expect("Array should be bv lit now from rename globals pass.");
+                        sl_ast::VExpr::Bv { value: base_addr + out_typ_bytes*index, typ: oper1.typ().get_array_out_type().clone() }
+                    },
+                    sl_ast::ValueOp::Deref => {
+                        if oper1.is_lit() {
+                            sl_ast::VExpr::Ident(helpers::abs_access_name(&oper1.get_lit_value().unwrap()), typ)
+                        } else {
+                            sl_ast::VExpr::OpApp(value_op, rw_operands, typ)
+                        }
+                    },
+                    // TODO: Implement remaining
+                    sl_ast::ValueOp::Concat => sl_ast::VExpr::OpApp(value_op, rw_operands, typ),
+                    sl_ast::ValueOp::GetField => sl_ast::VExpr::OpApp(value_op, rw_operands, typ),
+                }
+            }
+            _ => vexpr
+        }
+    }
+}
+
+impl sl_ast::ASTRewriter<&DwarfCtx> for ConstantFolder {
+    fn rewrite_vexpr(opapp: sl_ast::VExpr, ctx: &RefCell<&DwarfCtx>) -> sl_ast::VExpr {
+        Self::constant_fold(opapp, ctx)
     }
 }
 

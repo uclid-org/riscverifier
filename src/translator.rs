@@ -15,7 +15,7 @@ use dwarf_ctx::dwarfreader::{DwarfCtx, DwarfTypeDefn};
 
 use rv_model::system_model;
 
-use utils::constants;
+use utils::{constants, helpers};
 
 use crate::{
     datastructures::cfg, disassembler::disassembler, disassembler::disassembler::Inst,
@@ -1081,24 +1081,13 @@ where
 /// Constant propagation rewriter
 struct ConstantPropagator;
 impl ConstantPropagator {
-    /// Returns a mask with 1s from the l-th bit to the r-th bit
-    fn mask(l: u64, r: u64) -> u64 {
-        let mut m = 0;
-        for i in 0..63 {
-            if r <= i && i <= l {
-                m |= 1 << i
-            }
-        }
-        m
-    }
-
     /// Tries to evaluate the value of expression
     fn constant_fold(expr: Expr) -> Expr {
         if let Expr::OpApp(opapp, typ) = expr {
             let OpApp { op, operands } = opapp;
             let rw_operands = operands.into_iter().map(|operand| Self::constant_fold(operand)).collect::<Vec<_>>();
             let oper1 = rw_operands.get(0).unwrap();
-            let oper2_opt = rw_operands.get(1);
+            let oper2_opt = rw_operands.get(1); // second operand only appears in some operations
             // If the operands exist, then they should be literals
             if !(oper1.is_lit() && oper2_opt.map_or(true, |oper| oper.is_lit())) {
                 return Expr::OpApp(OpApp { op, operands: rw_operands }, typ);
@@ -1135,8 +1124,9 @@ impl ConstantPropagator {
                         BVOp::LeftShift => Expr::bv_lit(oper1_val << oper2_val_opt.unwrap(), oper1.get_expect_bv_width()),
                         BVOp::RightShift => Expr::bv_lit(((oper1_val as i64) >> oper2_val_opt.unwrap()) as u64, oper1.get_expect_bv_width()),
                         BVOp::ARightShift => Expr::bv_lit(oper1_val >> oper2_val_opt.unwrap(), oper1.get_expect_bv_width()),
-                        BVOp::Concat => Expr::OpApp(OpApp { op: Op::Bv(bvop), operands: rw_operands }, typ), // TODO: Implement
-                        BVOp::Slice { l, r } => Expr::bv_lit(oper1_val & Self::mask(l, r), l-r+1),
+                        // TODO: Implement concat, this just returns the original expression
+                        BVOp::Concat => Expr::OpApp(OpApp { op: Op::Bv(bvop), operands: rw_operands }, typ),
+                        BVOp::Slice { l, r } => Expr::bv_lit(oper1_val & helpers::mask(l, r), l-r+1),
                     }
                 },
                 Op::Bool(bop) => {
@@ -1207,6 +1197,19 @@ impl ConstantPropagator {
 }
 
 impl ASTRewriter<&mut HashMap<String, u64>> for ConstantPropagator {
+    // Ignore the ITEs (there are only one level ITEs, don't constant propagate here)
+    // and conservatively clear the map
+    fn visit_stmt_ifthenelse(stmt: Stmt, ctx: &RefCell<&mut HashMap<String, u64>>) -> Stmt {
+        match &stmt {
+            Stmt::IfThenElse(_) => {
+                ctx.borrow_mut().clear();
+                stmt
+            },
+            _ => panic!("Implementation error; Expected ITE."),
+        }
+    }
+
+    // Propagate all sequential assignments
     fn rewrite_assign(a: Assign, ctx: &RefCell<&mut HashMap<String, u64>>) -> Assign {
         let Assign { lhs, rhs } = a;
         let mut rw_lhss: Vec<Expr> = vec![];
@@ -1257,12 +1260,6 @@ impl ASTRewriter<&mut HashMap<String, u64>> for ConstantPropagator {
 ///
 /// NOTE: This assumes that all memory address computations are within thier own basic block
 struct DataMemoryAbstractor;
-impl DataMemoryAbstractor {
-    /// Replaced variable name
-    fn abs_access_name(addr: &u64) -> String {
-        format!("mem_access_{}", addr)
-    }
-}
 impl ASTRewriter<&mut HashSet<Var>> for DataMemoryAbstractor {
     /// Rewrite all accesses to a contant address to the corressponding abstracted variable
     fn rewrite_expr(expr: Expr, ctx: &RefCell<&mut HashSet<Var>>) -> Expr {
@@ -1278,7 +1275,7 @@ impl ASTRewriter<&mut HashSet<Var>> for DataMemoryAbstractor {
                         constants::MEM_VAR_D => constants::BYTE_SIZE*8,
                         _ => panic!("Expected byte, half, word, or double memory variable."),
                     };
-                    let abs_var_name = Self::abs_access_name(&index.get_lit_value().unwrap());
+                    let abs_var_name = helpers::abs_access_name(&index.get_lit_value().unwrap());
                     ctx.borrow_mut().insert(Var { name: abs_var_name.clone(), typ: Type::Bv { w }});
                     Expr::var(&abs_var_name, expr.typ().clone())
                 } else {
