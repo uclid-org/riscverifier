@@ -305,9 +305,6 @@ impl sl_ast::ASTRewriter<&DwarfCtx> for RenameGlobals {
             match ident {
                 sl_ast::VExpr::Ident(name, typ) => {
                     let global_addr = context.borrow().global_var(&name).expect("Could not find global variable").memory_addr;
-                    // println!("global {} is at address {:#?}.", name, address);
-                    // println!("nmae {:#?}, typ {:#?}", name, typ );
-                    // sl_ast::VExpr::FuncApp(format!("global_var_{}", name), vec![], typ)
                     sl_ast::VExpr::Bv { value: global_addr, typ }
                 }
                 _ => panic!("Expected identifier."),
@@ -450,21 +447,21 @@ impl sl_ast::ASTRewriter<(&DwarfCtx, &str, &mut HashMap<String, sl_ast::VType>)>
     }
 
     /// Infer types for the operator applications of VExprs
+    /// and insert dereferences where necessary
     fn rewrite_vexpr_opapp(
         opapp: sl_ast::VExpr,
-        context: &RefCell<(&DwarfCtx, &str, &mut HashMap<String, sl_ast::VType>)>,
+        _context: &RefCell<(&DwarfCtx, &str, &mut HashMap<String, sl_ast::VType>)>,
     ) -> sl_ast::VExpr {
         match opapp {
             sl_ast::VExpr::OpApp(op, exprs, _) => {
-                let rw_op = Self::visit_vexpr_valueop(op, context);
-                let rw_exprs = Self::visit_vexprs(exprs, context);
-                let rw_typ = sl_ast::VType::infer_op_type(&rw_op, &rw_exprs);
-
-                match &rw_op {
+                // infer the type of the operand after rewriting the operands
+                let rw_typ = sl_ast::VType::infer_op_type(&op, &exprs);
+                // insert dereferences
+                match &op {
                     sl_ast::ValueOp::GetField => {
                         // Implicit dereference for field operator if the type is a primitive
-                        let struct_type = &rw_exprs[0].typ();
-                        let field_name = &rw_exprs[1].get_ident_name();
+                        let struct_type = &exprs[0].typ();
+                        let field_name = &exprs[1].get_ident_name();
                         let field_type = match struct_type {
                             sl_ast::VType::Struct {
                                 id: _,
@@ -474,16 +471,16 @@ impl sl_ast::ASTRewriter<(&DwarfCtx, &str, &mut HashMap<String, sl_ast::VType>)>
                                 .get(&field_name[..])
                                 .expect(&format!("Unable to find struct field {}.", field_name))
                                 .clone(),
-                            _ => panic!("Expected struct type for variable {:?}.", rw_exprs[0]),
+                            _ => panic!("Expected struct type for variable {:?}.", exprs[0]),
                         };
                         // This opapp has the field type infered
                         let field_ident = sl_ast::VExpr::Ident(
-                            rw_exprs[1].get_ident_name().to_string(),
+                            exprs[1].get_ident_name().to_string(),
                             field_type.clone(),
                         );
                         let select_opapp = sl_ast::VExpr::OpApp(
-                            rw_op,
-                            vec![rw_exprs[0].clone(), field_ident],
+                            op,
+                            vec![exprs[0].clone(), field_ident],
                             rw_typ,
                         );
                         match &field_type {
@@ -497,26 +494,26 @@ impl sl_ast::ASTRewriter<(&DwarfCtx, &str, &mut HashMap<String, sl_ast::VType>)>
                     }
                     sl_ast::ValueOp::ArrayIndex => {
                         // Implicit dereference for array index if the type is a primitive
-                        match &rw_exprs[0].typ().clone() {
+                        match &exprs[0].typ().clone() {
                             sl_ast::VType::Array {
                                 in_type: _,
                                 out_type,
                             } => match &**out_type {
                                 sl_ast::VType::Bv(_) => {
-                                    let rw_opapp = sl_ast::VExpr::OpApp(rw_op, rw_exprs, rw_typ);
+                                    let rw_opapp = sl_ast::VExpr::OpApp(op, exprs, rw_typ);
                                     sl_ast::VExpr::OpApp(
                                         sl_ast::ValueOp::Deref,
                                         vec![rw_opapp],
                                         *out_type.clone(),
                                     )
                                 }
-                                _ => sl_ast::VExpr::OpApp(rw_op, rw_exprs, rw_typ),
+                                _ => sl_ast::VExpr::OpApp(op, exprs, rw_typ),
                             },
-                            _ => panic!("Expected array type for variable {:?}", rw_exprs[0]),
+                            _ => panic!("Expected array type for variable {:?}", exprs[0]),
                         }
                     }
                     // Update the expressions and infer the type for everything else
-                    _ => sl_ast::VExpr::OpApp(rw_op, rw_exprs, rw_typ),
+                    _ => sl_ast::VExpr::OpApp(op, exprs, rw_typ),
                 }
             }
             _ => panic!("Implementation error; expected `VExpr::OpApp`."),
@@ -539,7 +536,7 @@ impl sl_ast::ASTRewriter<(&DwarfCtx, &str, &mut HashMap<String, sl_ast::VType>)>
     }
 }
 
-/// AST pass that 
+/// AST pass that constant folds expressions
 struct ConstantFolder;
 impl ConstantFolder {
     fn constant_fold(vexpr: sl_ast::VExpr, ctx: &RefCell<&DwarfCtx>) -> sl_ast::VExpr {

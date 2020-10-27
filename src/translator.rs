@@ -1219,6 +1219,9 @@ impl ASTRewriter<&mut HashMap<String, u64>> for ConstantPropagator {
                 // when the LHS is just a variable, constant propagate the RHS to the LHS variable
                 Expr::Var(var, _) => {
                     let rw_r = Self::constant_propagate(var.name.to_string(), r, ctx);
+                    if !rw_r.is_lit() {
+                        ctx.borrow_mut().remove(&var.name);
+                    }
                     (l, rw_r)
                 }
                 // when the LHS is an array access, fold both the RHS and LHS (no constant propagation)
