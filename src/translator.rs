@@ -116,7 +116,7 @@ where
     }
 
     /// Returns a map of labels / function names to entry addresses
-    fn create_label_to_addr_map(
+    pub fn create_label_to_addr_map(
         bbs: &HashMap<u64, Rc<cfg::BasicBlock<disassembler::AssemblyLine>>>,
     ) -> HashMap<String, u64> {
         let mut label_to_addr = HashMap::new();

@@ -246,10 +246,12 @@ impl AssemblyLine {
     pub fn is_label_entry(&self) -> bool {
         self.is_entry
     }
+    
     /// Returns the function the line is defined at
     pub fn function_name(&self) -> &str {
         &self.func[..]
     }
+    
     /// Returns the op code
     pub fn op(&self) -> &str {
         match &self.op_code[..] {
@@ -258,6 +260,17 @@ impl AssemblyLine {
             _ => &self.op_code[..],
         }
     }
+
+    // Returns the address of this line
+    pub fn addr(&self) -> &u64 {
+        &self.addr
+    }
+
+    /// Return the arguments of the assembly line
+    pub fn ops(&self) -> &Vec<InstOperand> {
+        &self.ops
+    }
+
     /// Returns the destination register
     pub fn rd(&self) -> Option<&InstOperand> {
         match &self.op_code[..] {
@@ -328,7 +341,7 @@ pub enum InstOperand {
 impl fmt::Display for InstOperand {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
-            InstOperand::Register(reg_id, _offset) => write!(f, "{}", reg_id),
+            InstOperand::Register(reg_id, offset) => write!(f, "{}{}", reg_id, offset.map_or(format!(""), |o| format!(", {}", o))),
             InstOperand::Immediate(imm) => write!(f, "{}", imm),
         }
     }

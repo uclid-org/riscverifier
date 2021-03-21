@@ -31,6 +31,9 @@ use datastructures::cfg::BasicBlock;
 pub mod spec_template_generator;
 use spec_template_generator::SpecTemplateGenerator;
 
+pub mod vectre_program_generator;
+use vectre_program_generator::VectreProgramGenerator;
+
 pub mod ir_interface;
 
 // pub mod utils;
@@ -74,6 +77,7 @@ pub fn process_commands() {
     let mut disassembler = Disassembler::new(None, Some("debug_log"));
     let als = disassembler.read_binaries(&binary_paths);
     let bbs = BasicBlock::split(&als);
+
     // Module name
     let module_name = matches.value_of("modname").unwrap_or("main");
     // Initialize DWARF reader
@@ -100,6 +104,43 @@ pub fn process_commands() {
         .map_or(vec![], |lst| lst.split(",").collect::<Vec<&str>>());
     // Flag for ignoring and inlining functions
     let ignore_specs = matches.is_present("ignore-specs");
+
+    // Print all the vectre programs
+    if let Some(vectre_output_file) = matches.value_of("vectre_programs") {
+        let name_to_addr_map = Translator::<Uclid5Interface>::create_label_to_addr_map(&bbs);
+        let programs_str = VectreProgramGenerator::get_vectre_programs_by_bb(&func_names.iter().cloned().collect::<HashSet<&str>>(), &bbs, &name_to_addr_map);
+        let res = File::create(vectre_output_file)
+            .ok()
+            .unwrap()
+            .write_all(programs_str.as_bytes());
+        match res {
+            Ok(_) => info!(
+                "Successfully wrote vectre programs to {}",
+                vectre_output_file,
+            ),
+            Err(_) => panic!("Unable to write vectre programs to {}", vectre_output_file),
+        }
+        return;
+    }
+
+    // Print all specification template
+    if let Some(output_file) = matches.value_of("spec_template") {
+        let funcs: HashSet<String> = dwarf_reader.ctx().func_sigs().keys().cloned().collect();
+        let spec_template_str = SpecTemplateGenerator::fun_templates(&funcs, dwarf_reader.ctx());
+        let res = File::create(output_file)
+            .ok()
+            .unwrap()
+            .write_all(spec_template_str.as_bytes());
+        match res {
+            Ok(_) => info!(
+                "Successfully wrote specification template to {}",
+                output_file
+            ),
+            Err(_) => panic!("Unable to write specificaiton template to {}", output_file),
+        }
+        return;
+    }
+
     // Translate and write to output file
     let mut translator: Translator<Uclid5Interface> = Translator::new(
         xlen,
@@ -126,23 +167,8 @@ pub fn process_commands() {
             Err(_) => panic!("Unable to write model to {}", output_file),
         }
     }
-    // Print all specification template
-    if let Some(output_file) = matches.value_of("spec_template") {
-        let funcs: HashSet<String> = dwarf_reader.ctx().func_sigs().keys().cloned().collect();
-        let spec_template_str = SpecTemplateGenerator::fun_templates(&funcs, dwarf_reader.ctx());
-        let res = File::create(output_file)
-            .ok()
-            .unwrap()
-            .write_all(spec_template_str.as_bytes());
-        match res {
-            Ok(_) => info!(
-                "Successfully wrote specification template to {}",
-                output_file
-            ),
-            Err(_) => panic!("Unable to write specificaiton template to {}", output_file),
-        }
-    }
     translator.clear();
+    return;
 }
 
 // ===========================================================================================
@@ -189,6 +215,12 @@ fn cl_options<'t, 's>() -> App<'t, 's> {
                 .help("Specify the specification template output file.")
                 .short("t")
                 .long("spec_template")
+                .takes_value(true),
+        )
+        .arg(
+            Arg::with_name("vectre_programs")
+                .help("Specify the vectre programs output file.")
+                .long("vectre_programs")
                 .takes_value(true),
         )
         .arg(

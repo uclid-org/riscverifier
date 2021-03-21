@@ -53,6 +53,7 @@ where
         cfg.create_cfg(entry_addr, &bbs);
         cfg
     }
+
     /// Recursively builds a CFG starting with the entry address
     fn create_cfg(&mut self, entry_addr: u64, bbs: &HashMap<u64, Rc<BasicBlock<T>>>) {
         if self.nodes.get(&entry_addr).is_some() {
@@ -71,14 +72,17 @@ where
             self.create_cfg(*succ, bbs);
         }
     }
+    
     /// Returns the entry address
     pub fn entry_addr(&self) -> &u64 {
         &self.entry_addr
     }
+
     /// Returns a map of address to CFG nodes
     pub fn nodes(&self) -> &HashMap<u64, Rc<CfgNode<T>>> {
         &self.nodes
     }
+
     /// Returns a cycle in the CFG
     pub fn find_cycle(
         &self,
@@ -144,7 +148,7 @@ where
         Rc::clone(&self.bb.exit())
     }
     /// Returns the list of instructions
-    fn insts(&self) -> &Vec<Rc<T>> {
+    pub fn insts(&self) -> &Vec<Rc<T>> {
         &self.bb.insts
     }
 }
@@ -199,6 +203,12 @@ where
     pub fn new(insts: Vec<Rc<T>>) -> BasicBlock<T> {
         BasicBlock { insts }
     }
+ 
+    /// Returns the list of instructions of the basic block
+    pub fn insts(&self) -> &Vec<Rc<T>> {
+        &self.insts
+    }
+
     /// Splits a set of instruction lines into basic blocks
     pub fn split(lines: &Vec<Rc<T>>) -> HashMap<u64, Rc<BasicBlock<T>>> {
         let mut entry_pts = HashSet::new();
