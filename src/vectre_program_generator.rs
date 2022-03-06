@@ -6,6 +6,8 @@ use std::{
     rc ::Rc,
 };
 
+use regex::Regex;
+
 use crate::{
     datastructures::cfg,
     disassembler::disassembler::AssemblyLine,
@@ -83,7 +85,12 @@ impl VectreProgramGenerator {
             } else {
                 panic!("[vectre] Could not find function {}.", func_name);
             }
-            res = format!("{}prog {} {{\n{}\n}}\n", res, func_name, prog_body);
+            
+            // remove all non alphanumeric with underscores
+            let re = Regex::new("[^[:alnum:]]").unwrap();
+            let func_name_renamed = re.replace_all(func_name, "_");
+
+            res = format!("{}prog {} {{\n{}\n}}\n", res, func_name_renamed, prog_body);
         }
 
         res
@@ -91,7 +98,9 @@ impl VectreProgramGenerator {
 
     /// Returns the body of the program as a string encoded in the vectre language
     fn line_to_vectre_str(al: &AssemblyLine) -> String {
+        let re = Regex::new("[^[:alnum:]]").unwrap();
         let args = al.ops().iter().map(|inst_op| format!("{}", inst_op)).collect::<Vec<String>>().join(", ");        
-        format!("{} {}", al.op(), args)
+        let renamed_op = re.replace_all(al.op(), "_");
+        format!("{} {}", renamed_op, args)
     }
 }

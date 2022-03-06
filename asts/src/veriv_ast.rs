@@ -666,7 +666,8 @@ impl FuncModel {
     ) -> Self {
         assert!(
             &body.is_blk(),
-            format!("Body of {} should be a block.", name)
+            "Body of {} should be a block.",
+            name
         );
         let mod_set = mod_set.unwrap_or(HashSet::new());
         let requires = requires.unwrap_or(vec![]);
@@ -708,7 +709,8 @@ impl FuncSig {
     ) -> Self {
         assert!(
             arg_decls.iter().all(|v| v.is_var()),
-            format!("An argument of {} is not a variable.", name)
+            "An argument of {} is not a variable.",
+            name
         );
         FuncSig {
             name: String::from(name),

@@ -72,7 +72,8 @@ impl<'a> Disassembler<'a> {
                         .expect(&format!("Invalid assembly line address {}.", addr_str));
                     assert!(
                         processed.get(&addr).is_none(),
-                        format!("Found two instructions at address {}", &addr)
+                        "Found two instructions at address {}",
+                        &addr
                     );
                     // Mark this address as processed
                     processed.insert(addr);

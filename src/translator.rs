@@ -947,7 +947,7 @@ where
             .expect(&format!("Unable to basic block at {}.", addr));
         assert!(
             &entry_bb.entry().is_label_entry(),
-            format!("{} is not an entry address to a function.", addr)
+            "{} is not an entry address to a function.", addr
         );
         let cfg = Rc::new(cfg::Cfg::new(addr, &self.bbs));
         self.cfg_memo.insert(addr, Rc::clone(&cfg));
