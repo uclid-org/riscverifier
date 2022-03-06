@@ -52,6 +52,26 @@ pub fn indent_text(s: String, indent: usize) -> String {
 pub fn global_var_ptr_name(name: &str) -> String {
     format!("global_var_{}", name)
 }
+
 pub fn global_func_addr_name(func_name: &str) -> String {
     format!("global_func_{}", func_name)
+}
+
+/// Replaced variable name
+pub fn abs_access_name(addr: &u64) -> String {
+    format!("mem_access_{}", addr)
+}
+
+// ===========================================================================
+/// # Other helpers
+
+/// Returns a mask with 1s from the l-th bit to the r-th bit
+pub fn mask(l: u64, r: u64) -> u64 {
+    let mut m = 0;
+    for i in 0..63 {
+        if r <= i && i <= l {
+            m |= 1 << i
+        }
+    }
+    m
 }

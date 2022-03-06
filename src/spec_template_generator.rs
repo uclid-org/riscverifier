@@ -2,7 +2,7 @@ use std::collections::HashSet;
 
 use dwarf_ctx::dwarfreader::{DwarfCtx, DwarfTypeDefn, DwarfVar};
 
-use rv_model::system_model::BYTE_SIZE;
+use utils::constants;
 
 /// Simple specification template generator
 pub struct SpecTemplateGenerator;
@@ -50,21 +50,21 @@ impl SpecTemplateGenerator {
     /// Used for comments in specification templates
     pub fn type_to_string(typ: &DwarfTypeDefn) -> String {
         match typ {
-            DwarfTypeDefn::Primitive { bytes } => format!("bv{}", bytes * BYTE_SIZE),
+            DwarfTypeDefn::Primitive { bytes } => format!("bv{}", bytes * constants::BYTE_SIZE),
             DwarfTypeDefn::Array {
                 in_typ: _,
                 out_typ: _,
                 bytes,
-            } => format!("bv{}", bytes * BYTE_SIZE),
+            } => format!("bv{}", bytes * constants::BYTE_SIZE),
             DwarfTypeDefn::Struct {
                 id: _,
                 fields: _,
                 bytes,
-            } => format!("bv{}", bytes * BYTE_SIZE),
+            } => format!("bv{}", bytes * constants::BYTE_SIZE),
             DwarfTypeDefn::Pointer {
                 value_typ: _,
                 bytes,
-            } => format!("bv{}", bytes * BYTE_SIZE),
+            } => format!("bv{}", bytes * constants::BYTE_SIZE),
         }
     }
 }

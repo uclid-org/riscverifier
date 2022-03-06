@@ -3,7 +3,7 @@ use std::{
     collections::{BTreeMap, HashSet},
     fmt,
     cell::RefCell,
-    hash::{Hash, Hasher},
+    hash::Hash,
 };
 
 use crate::spec_lang::sl_ast;
@@ -116,36 +116,12 @@ impl fmt::Display for Type {
 // =======================================================
 /// ## AST Expressions
 
-// TODO: Should we use refcell or &mut for the rewriter here?
-#[derive(PartialEq, Eq, Clone)]
+#[derive(Hash, PartialEq, Eq, Clone)]
 pub enum Expr {
-    Literal(RefCell<Literal>, Type),
-    Var(RefCell<Var>, Type),
-    OpApp(RefCell<OpApp>, Type),
-    FuncApp(RefCell<FuncApp>, Type),
-}
-
-impl std::hash::Hash for Expr {
-    fn hash<H: Hasher>(&self, state: &mut H) {
-        match self {
-            Self::Literal(c, t) => {
-                c.borrow().hash(state);
-                t.hash(state);
-            }
-            | Self::Var(c, t) => {
-                c.borrow().hash(state);
-                t.hash(state);
-            }
-            | Self::OpApp(c, t) => {
-                c.borrow().hash(state);
-                t.hash(state);                
-            }
-            | Self::FuncApp(c, t) => {
-                c.borrow().hash(state);
-                t.hash(state);
-            }
-        }
-    }
+    Literal(Literal, Type),
+    Var(Var, Type),
+    OpApp(OpApp, Type),
+    FuncApp(FuncApp, Type),
 }
 
 impl Expr {
@@ -159,7 +135,7 @@ impl Expr {
     /// Returns the variable name or panics if it's not a variable.
     pub fn get_var_name(&self) -> String {
         match self {
-            Expr::Var(v, _) => v.borrow().name.clone(),
+            Expr::Var(v, _) => v.name.clone(),
             _ => panic!("Not a variable/constant: {}.", self),
         }
     }
@@ -173,28 +149,81 @@ impl Expr {
         }
     }
 
+    /// Returns whether the expression is a literal
+    pub fn is_lit(&self) -> bool {
+        match self {
+            Self::Literal(_, _) => true, 
+            _ => false,
+        }
+    }
+
+    /// Returns the literal inside Expr::Literal
+    pub fn get_lit(&self) -> Option<&Literal> {
+        match self {
+            Self::Literal(lit, _) => Some(lit),
+            _ => None,
+        }
+    }
+
+    /// Returns the value of the literal
+    /// Boolean values are encoded as 0 (false) and 1 (true)
+    pub fn get_lit_value(&self) -> Option<u64> {
+        let lit_opt = Self::get_lit(self);
+        lit_opt.map(|lit| {
+            match lit {
+                Literal::Bv { val, width: _ } => *val,
+                Literal::Bool { val } => if *val { 1 } else { 0 },
+                Literal::Int { val } => *val,
+            }
+        })
+    }
+
+    /// Returns the bv width for bv literals
+    pub fn get_expect_bv_width(&self) -> u64 {
+        match self {
+            Expr::Literal(lit, _) => lit.get_expect_bv_width(),
+            _ => panic!("Expression is not bv type."),
+        }
+    }
+
+    /// Returns the array variable expression if it is an array access
+    pub fn get_array_expr(&self) -> Option<&Expr> {
+        match self {
+            Expr::OpApp(opapp, _) => opapp.get_array_expr(),
+            _ => None,
+        }
+    }
+
+    /// Returns the array index of the array access
+    pub fn get_array_index(&self) -> Option<&Expr> {
+        match self {
+            Expr::OpApp(opapp, _) => opapp.get_array_index(),
+            _ => None
+        }
+    }
+
     /// Returns a bitvector literal of value `val` and width `width`.
     pub fn bv_lit(val: u64, width: u64) -> Self {
-        Expr::Literal(RefCell::new(Literal::Bv { val, width }), Type::Bv { w: width })
+        Expr::Literal(Literal::Bv { val, width }, Type::Bv { w: width })
     }
 
     /// Returns a integer literal of value `val`.
     pub fn int_lit(val: u64) -> Self {
-        Expr::Literal(RefCell::new(Literal::Int { val }), Type::Int)
+        Expr::Literal(Literal::Int { val }, Type::Int)
     }
 
     /// Returns a boolean literal of value `val`.
     pub fn bool_lit(val: bool) -> Self {
-        Expr::Literal(RefCell::new(Literal::Bool { val }), Type::Bool)
+        Expr::Literal(Literal::Bool { val }, Type::Bool)
     }
 
     /// Creates a variable named `name` of type `typ`.
     pub fn var(name: &str, typ: Type) -> Self {
         Expr::Var(
-            RefCell::new(Var {
+            Var {
                 name: name.to_string(),
                 typ: typ.clone(),
-            }),
+            },
             typ.clone(),
         )
     }
@@ -220,16 +249,16 @@ impl Expr {
                 _ => panic!("Can only get field from struct type."),
             },
         };
-        Expr::OpApp(RefCell::new(OpApp { op, operands }), typ)
+        Expr::OpApp(OpApp { op, operands }, typ)
     }
 
     /// Creates a function application expression.
     pub fn func_app(func_name: String, operands: Vec<Self>, typ: Type) -> Self {
         Expr::FuncApp(
-            RefCell::new(FuncApp {
+            FuncApp {
                 func_name,
                 operands,
-            }),
+            },
             typ,
         )
     }
@@ -238,10 +267,10 @@ impl Expr {
 impl fmt::Display for Expr {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            Expr::Literal(l, _) => write!(f, "{}", l.borrow()),
-            Expr::Var(v, _) => write!(f, "{}", v.borrow()),
-            Expr::OpApp(op, _) => write!(f, "{}", op.borrow()),
-            Expr::FuncApp(fapp, _) => write!(f, "{}", fapp.borrow()),
+            Expr::Literal(l, _) => write!(f, "{}", l),
+            Expr::Var(v, _) => write!(f, "{}", v),
+            Expr::OpApp(op, _) => write!(f, "{}", op),
+            Expr::FuncApp(fapp, _) => write!(f, "{}", fapp),
         }
     }
 }
@@ -251,7 +280,16 @@ impl fmt::Display for Expr {
 pub enum Literal {
     Bv { val: u64, width: u64 },
     Bool { val: bool },
-    Int { val: u64 },
+    Int { val: u64 },   // TODO: Change this to i64
+}
+
+impl Literal {
+    fn get_expect_bv_width(&self) -> u64 {
+        match self {
+            Self::Bv { val: _, width } => *width,
+            _ => panic!("Tried to get bv width from non-bv literal.")
+        }
+    }
 }
 
 impl fmt::Display for Literal {
@@ -294,6 +332,24 @@ impl fmt::Display for Var {
 pub struct OpApp {
     pub op: Op,
     pub operands: Vec<Expr>,
+}
+
+impl OpApp {
+    /// Returns the array variable of the array access
+    pub fn get_array_expr(&self) -> Option<&Expr> {
+        match self.op {
+            Op::ArrayIndex => self.operands.get(0),
+            _ => None,
+        }
+    }
+
+    /// Returns the array index of the array access
+    pub fn get_array_index(&self) -> Option<&Expr> {
+        match self.op {
+            Op::ArrayIndex => self.operands.get(1),
+            _ => None,
+        }
+    }
 }
 
 impl fmt::Display for OpApp {
@@ -375,10 +431,169 @@ impl fmt::Display for FuncApp {
 }
 
 // =======================================================
-/// ## AST Expression Rewriter
+/// ## AST Expression Visitor
 
 pub trait ASTRewriter<C> {
-    // Expr
+    fn rewrite_stmt(stmt: Stmt, _ctx: &RefCell<C>) -> Stmt { stmt }
+    fn rewrite_stmt_assume(stmt: Stmt, _ctx: &RefCell<C>) -> Stmt { stmt }
+    fn rewrite_funccall(fc: FuncCall, _ctx: &RefCell<C>) -> FuncCall { fc }
+    fn rewrite_assign(a: Assign, _ctx: &RefCell<C>) -> Assign { a }
+    fn rewrite_ite(ite: IfThenElse, _ctx: &RefCell<C>) -> IfThenElse { ite }
+    fn rewrite_stmt_block(blk: Stmt, _ctx: &RefCell<C>) -> Stmt { blk }
+
+    fn rewrite_type(typ: Type, _ctx: &RefCell<C>) -> Type { typ }
+    
+    fn rewrite_expr(expr: Expr, _ctx: &RefCell<C>) -> Expr { expr }
+    fn rewrite_lit(lit: Literal, _ctx: &RefCell<C>) -> Literal { lit }
+    fn rewrite_var(var: Var, _ctx: &RefCell<C>) -> Var { var }
+    fn rewrite_opapp(opapp: OpApp, _ctx: &RefCell<C>) -> OpApp { opapp }
+    fn rewrite_op(op: Op, _ctx: &RefCell<C>) -> Op { op }
+    fn rewrite_funcapp(fapp: FuncApp, _ctx: &RefCell<C>) -> FuncApp { fapp }
+
+    // Statement rewriters
+    fn visit_stmt(stmt: Stmt, ctx: &RefCell<C>) -> Stmt {
+        let rw_stmt = match stmt {
+            Stmt::Assume(_) => Self::visit_stmt_assume(stmt, ctx),
+            Stmt::FuncCall(_) => Self::visit_stmt_funccall(stmt, ctx),
+            Stmt::Assign(_) => Self::visit_stmt_assign(stmt, ctx),
+            Stmt::IfThenElse(_) => Self::visit_stmt_ifthenelse(stmt, ctx),
+            Stmt::Block(_) => Self::visit_stmt_block(stmt, ctx),
+            Stmt::Comment(_) => stmt,
+        };
+        Self::rewrite_stmt(rw_stmt, ctx)
+    }
+    fn visit_stmt_assume(stmt: Stmt, ctx: &RefCell<C>) -> Stmt {
+        let rw_stmt = match stmt {
+            Stmt::Assume(e) => Stmt::Assume(Self::visit_expr(e, ctx)),
+            _ => panic!("Implementation error; Expected assume statement."),
+        };
+        Self::rewrite_stmt_assume(rw_stmt, ctx)
+    }
+    fn visit_expr(expr: Expr, ctx: &RefCell<C>) -> Expr {
+        let rw_expr = match expr {
+            Expr::Literal(_, _) => Self::visit_expr_lit(expr, ctx),
+            Expr::Var(_, _) => Self::visit_expr_var(expr, ctx),
+            Expr::OpApp(_, _) => Self::visit_expr_opapp(expr, ctx),
+            Expr::FuncApp(_, _) => Self::visit_expr_funcapp(expr, ctx),
+        };
+        Self::rewrite_expr(rw_expr, ctx)
+    }
+    fn visit_type(typ: Type, ctx: &RefCell<C>) -> Type {
+        Self::rewrite_type(typ, ctx)
+    }
+    fn visit_expr_lit(expr: Expr, ctx: &RefCell<C>) -> Expr {
+        match expr {
+            Expr::Literal(lit, typ) => {
+                let rw_lit = Self::visit_lit(lit, ctx);
+                let rw_typ = Self::visit_type(typ, ctx);
+                Expr::Literal(rw_lit, rw_typ)
+            }
+            _ => panic!("Implementation error; Expected literal."),
+        }
+    }
+    fn visit_lit(lit: Literal, ctx: &RefCell<C>) -> Literal {
+        Self::rewrite_lit(lit, ctx)
+    }
+    fn visit_expr_var(expr: Expr, ctx: &RefCell<C>) -> Expr {
+        match expr {
+            Expr::Var(var, typ) => {
+                let rw_var = Self::visit_var(var, ctx);
+                let rw_typ = Self::visit_type(typ, ctx);
+                Expr::Var(rw_var, rw_typ)
+            }
+            _ => panic!("Implementation error; Expected var."),
+        }
+
+    }
+    fn visit_var(var: Var, ctx: &RefCell<C>) -> Var {
+        Self::rewrite_var(var, ctx)
+    }
+    fn visit_expr_opapp(expr: Expr, ctx: &RefCell<C>) -> Expr {
+        match expr {
+            Expr::OpApp(opapp, typ) => {
+                let rw_opapp = Self::visit_opapp(opapp, ctx);
+                let rw_typ = Self::visit_type(typ, ctx);
+                Expr::OpApp(rw_opapp, rw_typ)
+            },
+            _ => panic!("Implementation error; Expected opapp expr."),
+        }
+    }
+    fn visit_opapp(opapp: OpApp, ctx: &RefCell<C>) -> OpApp {
+        let OpApp { op, operands } = opapp;
+        let rw_op = Self::visit_op(op, ctx);
+        let rw_operands = operands.into_iter().map(|operand| Self::visit_expr(operand, ctx)).collect::<Vec<_>>();
+        let rw_opapp = OpApp { op: rw_op, operands: rw_operands };
+        Self::rewrite_opapp(rw_opapp, ctx)
+    }
+    fn visit_op(op: Op, ctx: &RefCell<C>) -> Op {
+        Self::rewrite_op(op, ctx)
+    }
+    fn visit_expr_funcapp(expr: Expr, ctx: &RefCell<C>) -> Expr {
+        match expr {
+            Expr::FuncApp(fapp, typ) => {
+                let rw_fapp = Self::visit_fapp(fapp, ctx);
+                let rw_typ = Self::visit_type(typ, ctx);
+                Expr::FuncApp(rw_fapp, rw_typ)
+            }
+            _ => panic!("Implementation error; Funcapp expected."),
+        }
+    }
+    fn visit_fapp(fapp: FuncApp, ctx: &RefCell<C>) -> FuncApp {
+        let FuncApp { func_name, operands } = fapp;
+        let rw_operands = operands.into_iter().map(|operand| Self::visit_expr(operand, ctx)).collect::<Vec<_>>();
+        let rw_fapp = FuncApp { func_name: func_name.clone(), operands: rw_operands };
+        Self::rewrite_funcapp(rw_fapp, ctx)
+    }
+    fn visit_stmt_funccall(stmt: Stmt, ctx: &RefCell<C>) -> Stmt {
+        match stmt {
+            Stmt::FuncCall(fc) => Stmt::FuncCall(Self::visit_funccall(fc, ctx)),
+            _ => panic!("Implementation error; Expected FuncCall."),
+        }
+    }
+    fn visit_funccall(fc: FuncCall, ctx: &RefCell<C>) -> FuncCall {
+        let FuncCall { func_name, lhs, operands } = fc;
+        let rw_lhs = lhs.into_iter().map(|e| Self::visit_expr(e, ctx)).collect::<Vec<_>>();
+        let rw_operands = operands.into_iter().map(|e| Self::visit_expr(e, ctx)).collect::<Vec<_>>();
+        let rw_funccall = FuncCall { func_name: func_name.clone(), lhs: rw_lhs, operands: rw_operands };
+        Self::rewrite_funccall(rw_funccall, ctx)
+    }
+    fn visit_stmt_assign(stmt: Stmt, ctx: &RefCell<C>) -> Stmt {
+        match stmt {
+            Stmt::Assign(a) => Stmt::Assign(Self::visit_assign(a, ctx)),
+            _ => panic!("Implementation error; Expected assign."),
+        }
+    }
+    fn visit_assign(a: Assign, ctx: &RefCell<C>) -> Assign {
+        let Assign { lhs, rhs } = a;
+        let rw_lhs = lhs.into_iter().map(|e| Self::visit_expr(e, ctx)).collect::<Vec<_>>();
+        let rw_rhs = rhs.into_iter().map(|e| Self::visit_expr(e, ctx)).collect::<Vec<_>>();
+        let rw_assign = Assign { lhs: rw_lhs, rhs: rw_rhs };
+        Self::rewrite_assign(rw_assign, ctx)
+    }
+    fn visit_stmt_ifthenelse(stmt: Stmt, ctx: &RefCell<C>) -> Stmt {
+        match stmt {
+            Stmt::IfThenElse(ite) => Stmt::IfThenElse(Self::visit_ite(ite, ctx)),
+            _ => panic!("Implementation error; Expected ITE."),
+        }
+    }
+    fn visit_ite(ite: IfThenElse, ctx: &RefCell<C>) -> IfThenElse {
+        let IfThenElse { cond, then_stmt, else_stmt } = ite;
+        let rw_cond = Self::visit_expr(cond, ctx);
+        let rw_thn = Box::new(Self::visit_stmt(*then_stmt, ctx));
+        let rw_els = else_stmt.map(|stmt| Box::new(Self::visit_stmt(*stmt, ctx)));
+        let rw_ite = IfThenElse { cond: rw_cond, then_stmt: rw_thn , else_stmt: rw_els };
+        Self::rewrite_ite(rw_ite, ctx)
+    }
+    fn visit_stmt_block(stmt: Stmt, ctx: &RefCell<C>) -> Stmt {
+        let rw_stmt = match stmt {
+            Stmt::Block(stmts) => {
+                let rw_stmts = stmts.into_iter().map(|box_stmt| Box::new(Self::visit_stmt(*box_stmt, ctx))).collect::<Vec<_>>();
+                Stmt::Block(rw_stmts)
+            },
+            _ => panic!("Implementation error; Expected block."),
+        };
+        Self::rewrite_stmt_block(rw_stmt, ctx)
+    }
 }
 
 // =======================================================
@@ -476,7 +691,8 @@ impl FuncModel {
     ) -> Self {
         assert!(
             &body.is_blk(),
-            format!("Body of {} should be a block.", name)
+            "Body of {} should be a block.",
+            name
         );
         let mod_set = mod_set.unwrap_or(HashSet::new());
         let requires = requires.unwrap_or(vec![]);
@@ -518,7 +734,8 @@ impl FuncSig {
     ) -> Self {
         assert!(
             arg_decls.iter().all(|v| v.is_var()),
-            format!("An argument of {} is not a variable.", name)
+            "An argument of {} is not a variable.",
+            name
         );
         FuncSig {
             name: String::from(name),

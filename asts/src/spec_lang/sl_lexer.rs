@@ -163,7 +163,7 @@ impl<'input> Iterator for Lexer<'input> {
             // Invalid token
             // TODO: Return more informative error message
             Some(error(ErrorCode::UnrecognizedToken, start))
-        };
+        }
         loop {
             match self.chars.next() {
                 Some((_, ' ')) | Some((_, '\n')) | Some((_, '\t')) => continue,
