@@ -99,9 +99,6 @@ For references, here is an informal grammar description:
 Mar 4 2022
 * For RISC-V architectures, use the following options for debugging information and the base instruction set: `-g -gdwarf -fno-jump-tables -march=rv64imafd -mabi=lp64d`
 
-Jun 6 2020
-* VERY OUT OF DATE, DO NOT REFER TO THESE NOTES
-
 Feb 25 2020
 * [ ] Verify pmp\_set in the security monitor
 
