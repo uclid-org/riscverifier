@@ -14,73 +14,41 @@ use crate::{
 };
 
 
-/// Simple specification template generator
+/// Vectre IR disassembler
 pub struct VectreProgramGenerator;
 
 impl VectreProgramGenerator {
     /// Returns a vectre program as a string
-    pub fn get_vectre_programs(func_names: &HashSet<&str>, als: &Vec<Rc<AssemblyLine>>) -> String {
-        if als.is_empty() {
-            return "".to_string();
-        }
-
-        // Result string of vectre programs to return
-        let mut res = format!("");
-
-        let mut curr_func_name = &als[0].function_name()[..];
-        let mut body = "".to_string();
-
-        for al in als {
-            let al_func_name = &al.function_name()[..];
-            
-            // skip function if it's not listed
-            if !func_names.contains(al_func_name) {
-                continue;
-            }
-
-            // new function seen, add the previous one to the result string
-            if al_func_name != curr_func_name {
-                // add previous function
-                if body.len() != 0 {
-                    res = format!("{}prog {} {{\n{}}}\n\n", res, curr_func_name, body);
-                    body = "".to_string();
-                }
-
-                // set this as a new function
-                curr_func_name = al_func_name;
-            }
-
-            // add the current instruction to the program
-            body = format!("{}    {}: {};\n", body, al.addr(), Self::line_to_vectre_str(&*al));
-        }
-
-        // add the last function
-        if body.len() != 0 && func_names.contains(curr_func_name) {
-            res = format!("{}prog {} {{\n{}}}\n\n", res, curr_func_name, body);
-        }
-
-        res
-    }
-
-    /// Returns a vectre program as a string
     pub fn get_vectre_programs_by_bb(func_names: &HashSet<&str>, bbs: &HashMap<u64, Rc<cfg::BasicBlock<AssemblyLine>>>, name_to_addr_map: &HashMap<String, u64>) -> String {
         let mut res = format!("");
 
-        // Iterate over the programs to print
+        // iterate over the functions and add them to the vectre IR string
         for func_name in func_names {
-            // Find the function
+            // initialize empty string 
             let mut prog_body = format!("");
+
+            // find the function
             if let Some(addr) = name_to_addr_map.get(func_name.to_owned()) {
                 // create a new cfg for this function
                 let func_cfg = cfg::Cfg::new(*addr, bbs);
 
-                // iterate over the cfg nodes and add them to program body
+                // iterate over the cfg nodes (atomic blocks) and add them to program body
                 for (node_addr, node) in func_cfg.nodes() {
-                    prog_body = format!("{}{}:\n", prog_body, format!("ENTRY_{}", node_addr));
-                    // print the instructions
-                    for inst in node.insts() {
-                        prog_body = format!("{}    {}: {};\n", prog_body, inst.addr(), Self::line_to_vectre_str(inst));
-                    }
+                    prog_body = format!("{}    {} {{\n", prog_body, format!("atomic_block_{}({})", node_addr, node_addr));
+
+                    // print the assembly instructions
+                    let body = node.insts()
+                                .iter()
+                                .map(|inst| format!("        {}: {};", inst.addr(), Self::line_to_vectre_str(inst)))
+                                .collect::<Vec<String>>()
+                                .join("\n");
+                    // for inst in node.insts() {
+                    //     prog_body = format!("{}        {}: {};\n", prog_body, inst.addr(), Self::line_to_vectre_str(inst));
+                    // }
+                    prog_body = format!("{}{}", prog_body, body);
+
+                    // add closing brace
+                    prog_body = format!("{}\n    }}\n", prog_body);
                 }
             } else {
                 panic!("[vectre] Could not find function {}.", func_name);
@@ -90,7 +58,7 @@ impl VectreProgramGenerator {
             let re = Regex::new("[^[:alnum:]]").unwrap();
             let func_name_renamed = re.replace_all(func_name, "_");
 
-            res = format!("{}prog {} {{\n{}\n}}\n", res, func_name_renamed, prog_body);
+            res = format!("{}program {} {{\n{}}}\n", res, func_name_renamed, prog_body);
         }
 
         res
