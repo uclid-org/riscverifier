@@ -10,7 +10,10 @@ use regex::Regex;
 
 use crate::{
     datastructures::cfg,
-    disassembler::disassembler::AssemblyLine,
+    disassembler::disassembler::{
+        AssemblyLine,
+        Inst
+    },
 };
 
 
@@ -34,7 +37,14 @@ impl VectreProgramGenerator {
 
                 // iterate over the cfg nodes (atomic blocks) and add them to program body
                 for (node_addr, node) in func_cfg.nodes() {
-                    prog_body = format!("{}    {} {{\n", prog_body, format!("atomic_block_{}({})", node_addr, node_addr));
+                    let succs_addrs_str = node
+                        .exit()
+                        .successors()
+                        .iter()
+                        .map(|s| s.to_string())
+                        .collect::<Vec<String>>()
+                        .join(", ");
+                    prog_body = format!("{}    {} {{\n", prog_body, format!("atomic_block_{}({}, [{}])", node_addr, node_addr, succs_addrs_str));
 
                     // print the assembly instructions
                     let body = node.insts()
