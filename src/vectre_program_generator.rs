@@ -44,7 +44,7 @@ impl VectreProgramGenerator {
                         .map(|s| s.to_string())
                         .collect::<Vec<String>>()
                         .join(", ");
-                    prog_body = format!("{}    {} {{\n", prog_body, format!("atomic_block_{}({}, [{}])", node_addr, node_addr, succs_addrs_str));
+                    prog_body = format!("{}    {} {{\n", prog_body, format!("atomic_block({}, [{}])", node_addr, succs_addrs_str));
 
                     // print the assembly instructions
                     let body = node.insts()
@@ -62,13 +62,17 @@ impl VectreProgramGenerator {
                 }
             } else {
                 panic!("[vectre] Could not find function {}.", func_name);
-            }
-            
-            // remove all non alphanumeric with underscores
-            let re = Regex::new("[^[:alnum:]]").unwrap();
-            let func_name_renamed = re.replace_all(func_name, "_");
+            }            
 
-            res = format!("{}program {} {{\n{}}}\n", res, func_name_renamed, prog_body);
+            if let Some(addr) = name_to_addr_map.get(func_name.to_owned()) {
+                // remove all non alphanumeric with underscores
+                let re = Regex::new("[^[:alnum:]]").unwrap();
+                let func_name_renamed = re.replace_all(func_name, "_");
+
+                res = format!("{}program {}({}) {{\n{}}}\n", res, func_name_renamed, addr, prog_body);
+            } else {
+                panic!("[vectre] Could not find function {}.", func_name);
+            }
         }
 
         res
