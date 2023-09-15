@@ -16,6 +16,7 @@ use crate::{
     },
 };
 
+use itertools::Itertools;
 
 /// Vectre IR disassembler
 pub struct VectreProgramGenerator;
@@ -36,7 +37,7 @@ impl VectreProgramGenerator {
                 let func_cfg = cfg::Cfg::new(*addr, bbs);
 
                 // iterate over the cfg nodes (atomic blocks) and add them to program body
-                for (node_addr, node) in func_cfg.nodes() {
+                for (node_addr, node) in func_cfg.nodes().iter().sorted_by_key(|x| x.0) {
                     let succs_addrs_str = node
                         .exit()
                         .successors()
